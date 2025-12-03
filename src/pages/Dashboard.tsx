@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, LogOut, Target, ChevronRight, ChevronLeft, Minus, Plus, History } from "lucide-react";
+import { Check, LogOut, Target, ChevronRight, ChevronLeft, Minus, Plus, History, Star, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,24 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
 
 /**
  * Dashboard Page - Weekly commitments checklist
- * Shows this week's habits with their goal lineage
+ * Shows focused visions and weekly habits with their goal lineage
  * Uses weekly_checkins to track per-week progress
  */
 
 interface LineageItem {
   id: string;
   title: string;
+}
+
+interface FocusedVision {
+  id: string;
+  title: string;
+  pillar_name: string;
+  focused_goals: {
+    id: string;
+    title: string;
+    goal_type: string;
+  }[];
 }
 
 interface CommitmentWithCheckin {
@@ -58,6 +69,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [commitments, setCommitments] = useState<CommitmentWithCheckin[]>([]);
+  const [focusedVisions, setFocusedVisions] = useState<FocusedVision[]>([]);
+  const [showOnlyFocused, setShowOnlyFocused] = useState(true);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(new Date()));
@@ -67,6 +80,43 @@ const Dashboard = () => {
   const weekStartFormatted = format(currentWeekStart, "MMM d");
   const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d, yyyy");
   const isCurrentWeek = format(currentWeekStart, "yyyy-MM-dd") === format(getWeekStart(new Date()), "yyyy-MM-dd");
+
+  // Fetch focused visions with their focused goals
+  const fetchFocusedVisions = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      // Get focused visions
+      const { data: visions } = await supabase
+        .from("life_visions")
+        .select("*, pillars(name)")
+        .eq("user_id", user.id)
+        .eq("is_focus", true);
+
+      // For each focused vision, get focused goals
+      const enrichedVisions: FocusedVision[] = await Promise.all(
+        (visions || []).map(async (vision) => {
+          const { data: focusedGoals } = await supabase
+            .from("goals")
+            .select("id, title, goal_type")
+            .eq("life_vision_id", vision.id)
+            .eq("is_focus", true)
+            .eq("user_id", user.id);
+
+          return {
+            id: vision.id,
+            title: vision.title,
+            pillar_name: (vision.pillars as any)?.name || "",
+            focused_goals: focusedGoals || []
+          };
+        })
+      );
+
+      setFocusedVisions(enrichedVisions);
+    } catch (error) {
+      console.error("Error fetching focused visions:", error);
+    }
+  }, [user]);
 
   // Fetch or create weekly checkin for a commitment
   const ensureCheckin = useCallback(async (
@@ -237,7 +287,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchCommitments();
-  }, [fetchCommitments]);
+    fetchFocusedVisions();
+  }, [fetchCommitments, fetchFocusedVisions]);
 
   // Update actual count for a checkin
   const updateActualCount = async (commitmentId: string, checkinId: string, delta: number) => {
@@ -329,6 +380,88 @@ const Dashboard = () => {
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-8 max-w-2xl">
+        {/* Focused Visions Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Star className="h-5 w-5 text-primary fill-primary" />
+              Focused Visions
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowOnlyFocused(!showOnlyFocused)}
+                className={showOnlyFocused ? "border-primary text-primary" : ""}
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                {showOnlyFocused ? "Focused" : "All"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/visions")}
+              >
+                Manage
+              </Button>
+            </div>
+          </div>
+
+          {focusedVisions.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center">
+                <Star className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-muted-foreground text-sm">No focused visions</p>
+                <Button 
+                  variant="link" 
+                  size="sm"
+                  onClick={() => navigate("/visions")}
+                >
+                  Set your focus
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {focusedVisions.map((vision) => (
+                <Card key={vision.id} className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div 
+                        className="cursor-pointer flex-1"
+                        onClick={() => navigate(`/vision/${vision.id}`)}
+                      >
+                        <span className="text-xs text-primary font-medium">{vision.pillar_name}</span>
+                        <h3 className="font-medium text-foreground">{vision.title}</h3>
+                        {vision.focused_goals.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {vision.focused_goals.map((goal) => (
+                              <button
+                                key={goal.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/goal/${goal.id}`);
+                                }}
+                                className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full hover:bg-primary/20 transition-calm"
+                              >
+                                {goal.goal_type === "three_year" ? "3Y" : goal.goal_type === "one_year" ? "1Y" : "90D"}: {goal.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight 
+                        className="h-5 w-5 text-muted-foreground flex-shrink-0 cursor-pointer"
+                        onClick={() => navigate(`/vision/${vision.id}`)}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Week navigation */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">

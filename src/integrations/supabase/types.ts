@@ -52,6 +52,7 @@ export type Database = {
           description: string | null
           goal_type: Database["public"]["Enums"]["goal_type"]
           id: string
+          is_focus: boolean
           life_vision_id: string | null
           parent_goal_id: string | null
           pillar_id: string
@@ -67,6 +68,7 @@ export type Database = {
           description?: string | null
           goal_type: Database["public"]["Enums"]["goal_type"]
           id?: string
+          is_focus?: boolean
           life_vision_id?: string | null
           parent_goal_id?: string | null
           pillar_id: string
@@ -82,6 +84,7 @@ export type Database = {
           description?: string | null
           goal_type?: Database["public"]["Enums"]["goal_type"]
           id?: string
+          is_focus?: boolean
           life_vision_id?: string | null
           parent_goal_id?: string | null
           pillar_id?: string
@@ -121,6 +124,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           id: string
+          is_focus: boolean
           pillar_id: string
           title: string
           updated_at: string | null
@@ -130,6 +134,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           id?: string
+          is_focus?: boolean
           pillar_id: string
           title: string
           updated_at?: string | null
@@ -139,6 +144,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           id?: string
+          is_focus?: boolean
           pillar_id?: string
           title?: string
           updated_at?: string | null
