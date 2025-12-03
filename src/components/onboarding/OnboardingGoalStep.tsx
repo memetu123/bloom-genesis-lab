@@ -23,22 +23,45 @@ const GOAL_CONFIG = {
   three_year: {
     title: "Set your 3-year direction",
     subtitle: "Where do you want to be in 3 years? Think big.",
-    placeholder: "e.g., Be conversationally fluent in Spanish",
     helpText: "A major milestone that moves you toward your vision"
   },
   one_year: {
     title: "Set your 1-year milestone",
     subtitle: "What concrete progress can you make in one year?",
-    placeholder: "e.g., Complete intermediate Spanish course",
     helpText: "A measurable checkpoint toward your 3-year direction"
   },
   ninety_day: {
     title: "Set your 90-day plan",
     subtitle: "What can you achieve in the next 90 days?",
-    placeholder: "e.g., Complete Spanish basics module",
     helpText: "A focused, achievable goal for the next quarter"
   }
 };
+
+// Generate contextual placeholder based on parent goal
+function getContextualPlaceholder(goalType: string, parentGoalTitle?: string): string {
+  if (!parentGoalTitle) {
+    // Default placeholders when no parent context
+    const defaults: Record<string, string> = {
+      three_year: "e.g., Be conversationally fluent in Spanish",
+      one_year: "e.g., Complete intermediate Spanish course",
+      ninety_day: "e.g., Complete Spanish basics module"
+    };
+    return defaults[goalType] || "";
+  }
+
+  // Create contextual placeholder based on parent goal
+  const parentLower = parentGoalTitle.toLowerCase();
+  
+  if (goalType === "one_year") {
+    return `e.g., Make significant progress toward: "${parentGoalTitle}"`;
+  }
+  
+  if (goalType === "ninety_day") {
+    return `e.g., First steps toward: "${parentGoalTitle}"`;
+  }
+  
+  return "";
+}
 
 export function OnboardingGoalStep({
   step,
@@ -96,7 +119,7 @@ export function OnboardingGoalStep({
             </label>
             <Input
               id="goalTitle"
-              placeholder={config.placeholder}
+              placeholder={getContextualPlaceholder(goalType, parentGoalTitle)}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
