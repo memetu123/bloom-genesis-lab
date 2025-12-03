@@ -6,6 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
 import FocusFilter from "@/components/FocusFilter";
@@ -51,6 +54,11 @@ const getWeekEnd = (date: Date): Date => {
   return endOfWeek(date, { weekStartsOn: 1 });
 };
 
+interface GoalOption {
+  id: string;
+  title: string;
+}
+
 const Weekly = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -60,6 +68,14 @@ const Weekly = () => {
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(new Date()));
   const [historyData, setHistoryData] = useState<Record<string, WeeklyHistory[]>>({});
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
+  const [goals, setGoals] = useState<GoalOption[]>([]);
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [selectedGoalId, setSelectedGoalId] = useState("");
+  const [timesPerWeek, setTimesPerWeek] = useState("3");
+  const [saving, setSaving] = useState(false);
 
   const weekStartFormatted = format(currentWeekStart, "MMM d");
   const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d, yyyy");
@@ -203,6 +219,54 @@ const Weekly = () => {
     fetchCommitments();
   }, [fetchCommitments]);
 
+  // Fetch goals for dropdown
+  useEffect(() => {
+    if (!user) return;
+    const fetchGoals = async () => {
+      const { data } = await supabase
+        .from("goals")
+        .select("id, title")
+        .eq("user_id", user.id)
+        .eq("goal_type", "ninety_day");
+      setGoals(data || []);
+    };
+    fetchGoals();
+  }, [user]);
+
+  const handleAddCommitment = async () => {
+    if (!user || !newTitle.trim()) return;
+    setSaving(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("weekly_commitments")
+        .insert({
+          user_id: user.id,
+          title: newTitle.trim(),
+          goal_id: selectedGoalId || null,
+          frequency_json: { times_per_week: parseInt(timesPerWeek) || 3 },
+          commitment_type: "habit",
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setNewTitle("");
+      setSelectedGoalId("");
+      setTimesPerWeek("3");
+      setDialogOpen(false);
+      toast.success("Commitment created");
+      fetchCommitments(); // Refresh the list
+    } catch (error: any) {
+      console.error("Error adding commitment:", error);
+      toast.error("Failed to add commitment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const updateActualCount = async (commitmentId: string, checkinId: string, delta: number) => {
     if (!user || updating) return;
     setUpdating(commitmentId);
@@ -277,9 +341,68 @@ const Weekly = () => {
             showFocusedOnly={showFocusedOnly}
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
-          <Button onClick={() => navigate("/goals")} size="sm">
-            + Add Commitment
-          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Commitment
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Weekly Commitment</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label htmlFor="title">What will you commit to?</Label>
+                  <Input
+                    id="title"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="e.g., Exercise, Read, Meditate"
+                  />
+                </div>
+                <div>
+                  <Label>Times per week</Label>
+                  <Select value={timesPerWeek} onValueChange={setTimesPerWeek}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                        <SelectItem key={n} value={n.toString()}>
+                          {n}x per week
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Link to goal (optional)</Label>
+                  <Select value={selectedGoalId} onValueChange={setSelectedGoalId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="No goal linked" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No goal linked</SelectItem>
+                      {goals.map(goal => (
+                        <SelectItem key={goal.id} value={goal.id}>
+                          {goal.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  onClick={handleAddCommitment} 
+                  disabled={saving || !newTitle.trim()}
+                  className="w-full"
+                >
+                  {saving ? "Saving..." : "Add Commitment"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
