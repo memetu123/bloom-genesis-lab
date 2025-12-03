@@ -487,7 +487,7 @@ const Dashboard = () => {
                                 <ChevronRight className="h-3 w-3" />
                                 <button
                                   onClick={() => navigate(`/vision/${commitment.lineage.vision!.id}`)}
-                                  className="hover:text-primary hover:underline transition-calm"
+                                  className="text-primary underline hover:text-primary/80 transition-calm"
                                 >
                                   {commitment.lineage.vision.title}
                                 </button>
@@ -498,7 +498,7 @@ const Dashboard = () => {
                                 <ChevronRight className="h-3 w-3" />
                                 <button
                                   onClick={() => navigate(`/goal/${commitment.lineage.ninety_day!.id}`)}
-                                  className="hover:text-primary hover:underline transition-calm"
+                                  className="text-primary underline hover:text-primary/80 transition-calm"
                                 >
                                   90d: {commitment.lineage.ninety_day.title}
                                 </button>
