@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Target } from "lucide-react";
+import { Star, ChevronRight, Target, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
 import FocusFilter from "@/components/FocusFilter";
@@ -22,11 +27,13 @@ interface Goal {
   is_focus: boolean;
   life_vision_id: string | null;
   parent_goal_id: string | null;
+  pillar_id: string;
 }
 
 interface Vision {
   id: string;
   title: string;
+  pillar_id: string;
 }
 
 interface GoalWithRelations extends Goal {
@@ -44,9 +51,18 @@ const Goals = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [goals, setGoals] = useState<GoalWithRelations[]>([]);
+  const [visions, setVisions] = useState<Vision[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [selectedVisionId, setSelectedVisionId] = useState("");
+  const [selectedGoalType, setSelectedGoalType] = useState<GoalType>("three_year");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -62,11 +78,13 @@ const Goals = () => {
 
         if (goalsError) throw goalsError;
 
-        // Fetch visions for labels
+        // Fetch visions for labels and dropdown
         const { data: visionsData } = await supabase
           .from("life_visions")
-          .select("id, title")
+          .select("id, title, pillar_id")
           .eq("user_id", user.id);
+
+        setVisions(visionsData || []);
 
         const visionsMap: Record<string, string> = {};
         (visionsData || []).forEach(v => {
@@ -122,6 +140,45 @@ const Goals = () => {
     }
   };
 
+  const handleAddGoal = async () => {
+    if (!user || !newTitle.trim() || !selectedVisionId) return;
+    setSaving(true);
+
+    try {
+      const vision = visions.find(v => v.id === selectedVisionId);
+      if (!vision) throw new Error("Vision not found");
+
+      const { data, error } = await supabase
+        .from("goals")
+        .insert({
+          user_id: user.id,
+          pillar_id: vision.pillar_id,
+          life_vision_id: selectedVisionId,
+          goal_type: selectedGoalType,
+          title: newTitle.trim(),
+          description: newDescription.trim() || null,
+          status: "not_started"
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setGoals(prev => [...prev, { ...data, vision_title: vision.title }]);
+      setNewTitle("");
+      setNewDescription("");
+      setSelectedVisionId("");
+      setSelectedGoalType("three_year");
+      setDialogOpen(false);
+      toast.success("Goal created");
+    } catch (error: any) {
+      console.error("Error adding goal:", error);
+      toast.error("Failed to add goal");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Filter goals based on focus toggle
   const filteredGoals = showFocusedOnly 
     ? goals.filter(g => g.is_focus) 
@@ -163,9 +220,75 @@ const Goals = () => {
             showFocusedOnly={showFocusedOnly}
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
-          <Button onClick={() => navigate("/visions")} size="sm">
-            + Add Goal
-          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Goal
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Goal</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label>Vision</Label>
+                  <Select value={selectedVisionId} onValueChange={setSelectedVisionId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a vision" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {visions.map(vision => (
+                        <SelectItem key={vision.id} value={vision.id}>
+                          {vision.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Goal Type</Label>
+                  <Select value={selectedGoalType} onValueChange={(v) => setSelectedGoalType(v as GoalType)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="three_year">3-Year Goal</SelectItem>
+                      <SelectItem value="one_year">1-Year Goal</SelectItem>
+                      <SelectItem value="ninety_day">90-Day Plan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="What do you want to achieve?"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description (optional)</Label>
+                  <Textarea
+                    id="description"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                    placeholder="Add more details..."
+                    rows={3}
+                  />
+                </div>
+                <Button 
+                  onClick={handleAddGoal} 
+                  disabled={saving || !newTitle.trim() || !selectedVisionId}
+                  className="w-full"
+                >
+                  {saving ? "Saving..." : "Add Goal"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -179,7 +302,7 @@ const Goals = () => {
             <p className="text-sm text-muted-foreground">
               {showFocusedOnly 
                 ? "Star goals to add them to your focus." 
-                : "Create goals through the onboarding or vision detail pages."}
+                : "Create goals using the Add Goal button above."}
             </p>
           </CardContent>
         </Card>

@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight } from "lucide-react";
+import { Star, ChevronRight, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import FocusFilter from "@/components/FocusFilter";
 
@@ -31,9 +36,17 @@ const Visions = () => {
   const { user } = useAuth();
   const [visions, setVisions] = useState<Vision[]>([]);
   const [pillars, setPillars] = useState<Record<string, Pillar>>({});
+  const [pillarsList, setPillarsList] = useState<Pillar[]>([]);
   const [loading, setLoading] = useState(true);
   const [showOnlyFocused, setShowOnlyFocused] = useState(false);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
+  
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [selectedPillarId, setSelectedPillarId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -54,13 +67,15 @@ const Visions = () => {
         const { data: pillarsData } = await supabase
           .from("pillars")
           .select("*")
-          .eq("user_id", user.id);
+          .eq("user_id", user.id)
+          .order("sort_order", { ascending: true });
 
         const pillarsMap: Record<string, Pillar> = {};
         (pillarsData || []).forEach(p => {
           pillarsMap[p.id] = p;
         });
         setPillars(pillarsMap);
+        setPillarsList(pillarsData || []);
       } catch (error: any) {
         console.error("Error fetching visions:", error);
         toast.error("Failed to load visions");
@@ -96,6 +111,38 @@ const Visions = () => {
     }
   };
 
+  const handleAddVision = async () => {
+    if (!user || !newTitle.trim() || !selectedPillarId) return;
+    setSaving(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("life_visions")
+        .insert({
+          user_id: user.id,
+          pillar_id: selectedPillarId,
+          title: newTitle.trim(),
+          description: newDescription.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setVisions(prev => [...prev, data]);
+      setNewTitle("");
+      setNewDescription("");
+      setSelectedPillarId("");
+      setDialogOpen(false);
+      toast.success("Vision created");
+    } catch (error: any) {
+      console.error("Error adding vision:", error);
+      toast.error("Failed to add vision");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const filteredVisions = showOnlyFocused 
     ? visions.filter(v => v.is_focus) 
     : visions;
@@ -118,9 +165,62 @@ const Visions = () => {
             showFocusedOnly={showOnlyFocused}
             onToggle={() => setShowOnlyFocused(!showOnlyFocused)}
           />
-          <Button onClick={() => navigate("/onboarding")} size="sm">
-            + Add Vision
-          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Vision
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Vision</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label htmlFor="pillar">Pillar</Label>
+                  <Select value={selectedPillarId} onValueChange={setSelectedPillarId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a pillar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pillarsList.map(pillar => (
+                        <SelectItem key={pillar.id} value={pillar.id}>
+                          {pillar.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="Who do you want to become?"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description (optional)</Label>
+                  <Textarea
+                    id="description"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                    placeholder="Describe your vision..."
+                    rows={3}
+                  />
+                </div>
+                <Button 
+                  onClick={handleAddVision} 
+                  disabled={saving || !newTitle.trim() || !selectedPillarId}
+                  className="w-full"
+                >
+                  {saving ? "Saving..." : "Add Vision"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
