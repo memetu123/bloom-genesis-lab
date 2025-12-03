@@ -14,7 +14,244 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      commitment_completions: {
+        Row: {
+          commitment_id: string
+          completed_date: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          commitment_id: string
+          completed_date?: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          commitment_id?: string
+          completed_date?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commitment_completions_commitment_id_fkey"
+            columns: ["commitment_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_commitments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goals: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          goal_type: Database["public"]["Enums"]["goal_type"]
+          id: string
+          life_vision_id: string | null
+          parent_goal_id: string | null
+          pillar_id: string
+          start_date: string | null
+          status: Database["public"]["Enums"]["goal_status"] | null
+          target_date: string | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          goal_type: Database["public"]["Enums"]["goal_type"]
+          id?: string
+          life_vision_id?: string | null
+          parent_goal_id?: string | null
+          pillar_id: string
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["goal_status"] | null
+          target_date?: string | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          goal_type?: Database["public"]["Enums"]["goal_type"]
+          id?: string
+          life_vision_id?: string | null
+          parent_goal_id?: string | null
+          pillar_id?: string
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["goal_status"] | null
+          target_date?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goals_life_vision_id_fkey"
+            columns: ["life_vision_id"]
+            isOneToOne: false
+            referencedRelation: "life_visions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goals_parent_goal_id_fkey"
+            columns: ["parent_goal_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goals_pillar_id_fkey"
+            columns: ["pillar_id"]
+            isOneToOne: false
+            referencedRelation: "pillars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      life_visions: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          pillar_id: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          pillar_id: string
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          pillar_id?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "life_visions_pillar_id_fkey"
+            columns: ["pillar_id"]
+            isOneToOne: false
+            referencedRelation: "pillars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pillars: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          sort_order: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          sort_order?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          id: string
+          onboarding_completed: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          id: string
+          onboarding_completed?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          onboarding_completed?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      weekly_commitments: {
+        Row: {
+          commitment_type: Database["public"]["Enums"]["commitment_type"]
+          created_at: string | null
+          frequency_json: Json | null
+          goal_id: string | null
+          id: string
+          is_active: boolean | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          commitment_type?: Database["public"]["Enums"]["commitment_type"]
+          created_at?: string | null
+          frequency_json?: Json | null
+          goal_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          commitment_type?: Database["public"]["Enums"]["commitment_type"]
+          created_at?: string | null
+          frequency_json?: Json | null
+          goal_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_commitments_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +260,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      commitment_type: "habit" | "task"
+      goal_status: "not_started" | "in_progress" | "completed" | "paused"
+      goal_type: "three_year" | "one_year" | "ninety_day"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +389,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      commitment_type: ["habit", "task"],
+      goal_status: ["not_started", "in_progress", "completed", "paused"],
+      goal_type: ["three_year", "one_year", "ninety_day"],
+    },
   },
 } as const
