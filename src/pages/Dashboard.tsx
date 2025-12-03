@@ -15,6 +15,11 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
  * Uses weekly_checkins to track per-week progress
  */
 
+interface LineageItem {
+  id: string;
+  title: string;
+}
+
 interface CommitmentWithCheckin {
   id: string;
   title: string;
@@ -25,11 +30,11 @@ interface CommitmentWithCheckin {
     actual_count: number;
   } | null;
   lineage: {
-    ninety_day: string | null;
-    one_year: string | null;
-    three_year: string | null;
-    vision: string | null;
-    pillar: string | null;
+    ninety_day: LineageItem | null;
+    one_year: LineageItem | null;
+    three_year: LineageItem | null;
+    vision: LineageItem | null;
+    pillar: LineageItem | null;
   };
 }
 
@@ -140,12 +145,12 @@ const Dashboard = () => {
             weekEnd
           );
           
-          let lineage = {
-            ninety_day: null as string | null,
-            one_year: null as string | null,
-            three_year: null as string | null,
-            vision: null as string | null,
-            pillar: null as string | null
+          let lineage: CommitmentWithCheckin['lineage'] = {
+            ninety_day: null,
+            one_year: null,
+            three_year: null,
+            vision: null,
+            pillar: null
           };
 
           // If commitment is linked to a goal, fetch the lineage
@@ -157,7 +162,7 @@ const Dashboard = () => {
               .maybeSingle();
 
             if (ninetyDay) {
-              lineage.ninety_day = ninetyDay.title;
+              lineage.ninety_day = { id: ninetyDay.id, title: ninetyDay.title };
 
               if (ninetyDay.parent_goal_id) {
                 const { data: oneYear } = await supabase
@@ -167,7 +172,7 @@ const Dashboard = () => {
                   .maybeSingle();
 
                 if (oneYear) {
-                  lineage.one_year = oneYear.title;
+                  lineage.one_year = { id: oneYear.id, title: oneYear.title };
 
                   if (oneYear.parent_goal_id) {
                     const { data: threeYear } = await supabase
@@ -177,7 +182,7 @@ const Dashboard = () => {
                       .maybeSingle();
 
                     if (threeYear) {
-                      lineage.three_year = threeYear.title;
+                      lineage.three_year = { id: threeYear.id, title: threeYear.title };
                     }
                   }
                 }
@@ -191,7 +196,7 @@ const Dashboard = () => {
                   .maybeSingle();
 
                 if (vision) {
-                  lineage.vision = vision.title;
+                  lineage.vision = { id: vision.id, title: vision.title };
                 }
               }
 
@@ -202,7 +207,7 @@ const Dashboard = () => {
                 .maybeSingle();
 
               if (pillar) {
-                lineage.pillar = pillar.name;
+                lineage.pillar = { id: pillar.id, title: pillar.name };
               }
             }
           }
@@ -473,20 +478,30 @@ const Dashboard = () => {
                           />
                         </div>
 
-                        {/* Lineage */}
+                        {/* Lineage - clickable links */}
                         {commitment.lineage.pillar && (
                           <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-1">
-                            <span className="text-primary font-medium">{commitment.lineage.pillar}</span>
+                            <span className="text-primary font-medium">{commitment.lineage.pillar.title}</span>
                             {commitment.lineage.vision && (
                               <>
                                 <ChevronRight className="h-3 w-3" />
-                                <span>{commitment.lineage.vision}</span>
+                                <button
+                                  onClick={() => navigate(`/vision/${commitment.lineage.vision!.id}`)}
+                                  className="hover:text-primary hover:underline transition-calm"
+                                >
+                                  {commitment.lineage.vision.title}
+                                </button>
                               </>
                             )}
                             {commitment.lineage.ninety_day && (
                               <>
                                 <ChevronRight className="h-3 w-3" />
-                                <span>90d: {commitment.lineage.ninety_day}</span>
+                                <button
+                                  onClick={() => navigate(`/goal/${commitment.lineage.ninety_day!.id}`)}
+                                  className="hover:text-primary hover:underline transition-calm"
+                                >
+                                  90d: {commitment.lineage.ninety_day.title}
+                                </button>
                               </>
                             )}
                           </div>
