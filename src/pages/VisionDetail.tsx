@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, Target, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, Target, ChevronRight, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ interface Vision {
   title: string;
   description: string | null;
   pillar_id: string;
+  is_focus: boolean;
 }
 
 interface Goal {
@@ -28,6 +29,7 @@ interface Goal {
   title: string;
   description: string | null;
   status: string;
+  is_focus: boolean;
 }
 
 interface Pillar {
@@ -47,6 +49,7 @@ const VisionDetail = () => {
   const [newGoalTitle, setNewGoalTitle] = useState("");
   const [newGoalDescription, setNewGoalDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -100,6 +103,52 @@ const VisionDetail = () => {
 
     fetchData();
   }, [user, id, navigate]);
+
+  const toggleVisionFocus = async () => {
+    if (!vision || updatingFocus) return;
+    setUpdatingFocus(vision.id);
+
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ is_focus: !vision.is_focus })
+        .eq("id", vision.id);
+
+      if (error) throw error;
+
+      setVision(prev => prev ? { ...prev, is_focus: !prev.is_focus } : prev);
+      toast.success(vision.is_focus ? "Removed from focus" : "Added to focus");
+    } catch (error: any) {
+      console.error("Error toggling focus:", error);
+      toast.error("Failed to update focus");
+    } finally {
+      setUpdatingFocus(null);
+    }
+  };
+
+  const toggleGoalFocus = async (goalId: string, currentFocus: boolean) => {
+    if (updatingFocus) return;
+    setUpdatingFocus(goalId);
+
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ is_focus: !currentFocus })
+        .eq("id", goalId);
+
+      if (error) throw error;
+
+      setThreeYearGoals(prev =>
+        prev.map(g => g.id === goalId ? { ...g, is_focus: !currentFocus } : g)
+      );
+      toast.success(currentFocus ? "Removed from focus" : "Added to focus");
+    } catch (error: any) {
+      console.error("Error toggling focus:", error);
+      toast.error("Failed to update focus");
+    } finally {
+      setUpdatingFocus(null);
+    }
+  };
 
   const handleAddGoal = async () => {
     if (!user || !vision || !newGoalTitle.trim()) return;
@@ -169,7 +218,23 @@ const VisionDetail = () => {
 
         {/* Vision info */}
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-foreground mb-2">{vision.title}</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-2xl font-semibold text-foreground">{vision.title}</h1>
+            <button
+              onClick={toggleVisionFocus}
+              disabled={updatingFocus === vision.id}
+              className="p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
+              title={vision.is_focus ? "Remove from focus" : "Add to focus"}
+            >
+              <Star
+                className={`h-5 w-5 transition-calm ${
+                  vision.is_focus 
+                    ? "fill-primary text-primary" 
+                    : "text-muted-foreground"
+                }`}
+              />
+            </button>
+          </div>
           {vision.description && (
             <p className="text-muted-foreground">{vision.description}</p>
           )}
@@ -232,20 +297,42 @@ const VisionDetail = () => {
         ) : (
           <div className="space-y-3">
             {threeYearGoals.map((goal) => (
-              <Card 
-                key={goal.id} 
-                className="cursor-pointer hover:border-primary/50 transition-calm"
-                onClick={() => navigate(`/goal/${goal.id}`)}
-              >
+              <Card key={goal.id} className="transition-calm">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center gap-3">
+                    {/* Focus toggle */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleGoalFocus(goal.id, goal.is_focus);
+                      }}
+                      disabled={updatingFocus === goal.id}
+                      className="flex-shrink-0 p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
+                      title={goal.is_focus ? "Remove from focus" : "Add to focus"}
+                    >
+                      <Star
+                        className={`h-5 w-5 transition-calm ${
+                          goal.is_focus 
+                            ? "fill-primary text-primary" 
+                            : "text-muted-foreground"
+                        }`}
+                      />
+                    </button>
+                    
+                    {/* Goal content - clickable */}
+                    <div 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => navigate(`/goal/${goal.id}`)}
+                    >
                       <h3 className="font-medium text-foreground">{goal.title}</h3>
                       {goal.description && (
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{goal.description}</p>
                       )}
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    <ChevronRight 
+                      className="h-5 w-5 text-muted-foreground flex-shrink-0 cursor-pointer"
+                      onClick={() => navigate(`/goal/${goal.id}`)}
+                    />
                   </div>
                 </CardContent>
               </Card>
