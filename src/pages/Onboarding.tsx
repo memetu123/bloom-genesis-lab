@@ -178,6 +178,7 @@ const Onboarding = () => {
           step={3}
           goalType="three_year"
           pillarName={data.selectedPillarForVision || ""}
+          visionTitle={data.vision?.title}
           goal={data.threeYearGoal}
           onSetGoal={(goal) => setData({ ...data, threeYearGoal: goal })}
           onNext={() => setStep(4)}
@@ -190,6 +191,7 @@ const Onboarding = () => {
           step={4}
           goalType="one_year"
           pillarName={data.selectedPillarForVision || ""}
+          visionTitle={data.vision?.title}
           parentGoalTitle={data.threeYearGoal?.title}
           goal={data.oneYearGoal}
           onSetGoal={(goal) => setData({ ...data, oneYearGoal: goal })}
@@ -203,6 +205,7 @@ const Onboarding = () => {
           step={5}
           goalType="ninety_day"
           pillarName={data.selectedPillarForVision || ""}
+          visionTitle={data.vision?.title}
           parentGoalTitle={data.oneYearGoal?.title}
           goal={data.ninetyDayGoal}
           onSetGoal={(goal) => setData({ ...data, ninetyDayGoal: goal })}
