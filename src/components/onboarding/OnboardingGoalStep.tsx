@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OnboardingLayout } from "./OnboardingLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
 /**
  * OnboardingGoalStep - Steps 3, 4, 5: Set goals at different time horizons
@@ -12,6 +14,7 @@ interface Props {
   step: number;
   goalType: "three_year" | "one_year" | "ninety_day";
   pillarName: string;
+  visionTitle?: string;
   parentGoalTitle?: string;
   goal: { title: string; description: string } | null;
   onSetGoal: (goal: { title: string; description: string }) => void;
@@ -37,36 +40,18 @@ const GOAL_CONFIG = {
   }
 };
 
-// Generate contextual placeholder based on parent goal
-function getContextualPlaceholder(goalType: string, parentGoalTitle?: string): string {
-  if (!parentGoalTitle) {
-    // Default placeholders when no parent context
-    const defaults: Record<string, string> = {
-      three_year: "e.g., Be conversationally fluent in Spanish",
-      one_year: "e.g., Complete intermediate Spanish course",
-      ninety_day: "e.g., Complete Spanish basics module"
-    };
-    return defaults[goalType] || "";
-  }
-
-  // Create contextual placeholder based on parent goal
-  const parentLower = parentGoalTitle.toLowerCase();
-  
-  if (goalType === "one_year") {
-    return `e.g., Make significant progress toward: "${parentGoalTitle}"`;
-  }
-  
-  if (goalType === "ninety_day") {
-    return `e.g., First steps toward: "${parentGoalTitle}"`;
-  }
-  
-  return "";
-}
+// Default placeholders as fallback
+const DEFAULT_PLACEHOLDERS: Record<string, string> = {
+  three_year: "e.g., Be conversationally fluent in Spanish",
+  one_year: "e.g., Complete intermediate Spanish course",
+  ninety_day: "e.g., Complete Spanish basics module"
+};
 
 export function OnboardingGoalStep({
   step,
   goalType,
   pillarName,
+  visionTitle,
   parentGoalTitle,
   goal,
   onSetGoal,
@@ -75,6 +60,8 @@ export function OnboardingGoalStep({
 }: Props) {
   const [title, setTitle] = useState(goal?.title || "");
   const [description, setDescription] = useState(goal?.description || "");
+  const [aiExample, setAiExample] = useState<string | null>(null);
+  const [isLoadingExample, setIsLoadingExample] = useState(false);
   const config = GOAL_CONFIG[goalType];
 
   // Reset form when goalType changes
@@ -83,12 +70,50 @@ export function OnboardingGoalStep({
     setDescription(goal?.description || "");
   }, [goalType, goal]);
 
+  // Fetch AI-generated example when component mounts or context changes
+  useEffect(() => {
+    const fetchExample = async () => {
+      setIsLoadingExample(true);
+      setAiExample(null);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-goal-example", {
+          body: {
+            goalType,
+            pillarName,
+            visionTitle,
+            parentGoalTitle
+          }
+        });
+
+        if (error) {
+          console.error("Error fetching AI example:", error);
+          return;
+        }
+
+        if (data?.example) {
+          setAiExample(data.example);
+        }
+      } catch (err) {
+        console.error("Failed to fetch AI example:", err);
+      } finally {
+        setIsLoadingExample(false);
+      }
+    };
+
+    fetchExample();
+  }, [goalType, pillarName, visionTitle, parentGoalTitle]);
+
   const handleNext = () => {
     if (title.trim()) {
       onSetGoal({ title: title.trim(), description: description.trim() });
       onNext();
     }
   };
+
+  const placeholder = aiExample 
+    ? `e.g., ${aiExample}` 
+    : DEFAULT_PLACEHOLDERS[goalType] || "";
 
   return (
     <OnboardingLayout
@@ -117,12 +142,19 @@ export function OnboardingGoalStep({
             <label htmlFor="goalTitle" className="text-sm font-medium text-foreground">
               Your {goalType === "three_year" ? "3-year" : goalType === "one_year" ? "1-year" : "90-day"} goal
             </label>
-            <Input
-              id="goalTitle"
-              placeholder={getContextualPlaceholder(goalType, parentGoalTitle)}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="goalTitle"
+                placeholder={isLoadingExample ? "Generating example..." : placeholder}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              {isLoadingExample && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{config.helpText}</p>
           </div>
 
