@@ -1,22 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, LogOut, Target, ChevronRight } from "lucide-react";
+import { Check, LogOut, Target, ChevronRight, ChevronLeft, Minus, Plus, History } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
 
 /**
  * Dashboard Page - Weekly commitments checklist
  * Shows this week's habits with their goal lineage
+ * Uses weekly_checkins to track per-week progress
  */
 
-interface CommitmentWithLineage {
+interface CommitmentWithCheckin {
   id: string;
   title: string;
   frequency_json: { times_per_week: number };
-  completions_this_week: number;
+  checkin: {
+    id: string;
+    planned_count: number;
+    actual_count: number;
+  } | null;
   lineage: {
     ninety_day: string | null;
     one_year: string | null;
@@ -26,192 +33,267 @@ interface CommitmentWithLineage {
   };
 }
 
+interface WeeklyHistory {
+  period_start_date: string;
+  planned_count: number;
+  actual_count: number;
+}
+
+// Get Monday of the week for a given date (Europe/Istanbul timezone)
+const getWeekStart = (date: Date): Date => {
+  return startOfWeek(date, { weekStartsOn: 1 }); // Monday
+};
+
+// Get Sunday of the week for a given date
+const getWeekEnd = (date: Date): Date => {
+  return endOfWeek(date, { weekStartsOn: 1 }); // Sunday
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [commitments, setCommitments] = useState<CommitmentWithLineage[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentWithCheckin[]>([]);
   const [loading, setLoading] = useState(true);
-  const [completing, setCompleting] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(new Date()));
+  const [historyData, setHistoryData] = useState<Record<string, WeeklyHistory[]>>({});
 
-  // Fetch commitments with their goal lineage
-  useEffect(() => {
+  // Format dates for display
+  const weekStartFormatted = format(currentWeekStart, "MMM d");
+  const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d, yyyy");
+  const isCurrentWeek = format(currentWeekStart, "yyyy-MM-dd") === format(getWeekStart(new Date()), "yyyy-MM-dd");
+
+  // Fetch or create weekly checkin for a commitment
+  const ensureCheckin = useCallback(async (
+    commitmentId: string, 
+    plannedCount: number, 
+    weekStart: Date, 
+    weekEnd: Date
+  ) => {
+    if (!user) return null;
+
+    const startDate = format(weekStart, "yyyy-MM-dd");
+    const endDate = format(weekEnd, "yyyy-MM-dd");
+
+    // Check if checkin exists
+    const { data: existing } = await supabase
+      .from("weekly_checkins")
+      .select("*")
+      .eq("weekly_commitment_id", commitmentId)
+      .eq("period_start_date", startDate)
+      .maybeSingle();
+
+    if (existing) {
+      return existing;
+    }
+
+    // Create new checkin
+    const { data: newCheckin, error } = await supabase
+      .from("weekly_checkins")
+      .insert({
+        user_id: user.id,
+        weekly_commitment_id: commitmentId,
+        period_start_date: startDate,
+        period_end_date: endDate,
+        planned_count: plannedCount,
+        actual_count: 0
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating checkin:", error);
+      return null;
+    }
+
+    return newCheckin;
+  }, [user]);
+
+  // Fetch commitments with their goal lineage and checkins
+  const fetchCommitments = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
 
-    const fetchCommitments = async () => {
-      try {
-        // Get weekly commitments
-        const { data: rawCommitments, error: commitError } = await supabase
-          .from("weekly_commitments")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("is_active", true);
+    try {
+      const weekStart = currentWeekStart;
+      const weekEnd = getWeekEnd(weekStart);
 
-        if (commitError) throw commitError;
+      // Get weekly commitments
+      const { data: rawCommitments, error: commitError } = await supabase
+        .from("weekly_commitments")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
 
-        // Get completions for this week
-        const startOfWeek = new Date();
-        startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-        startOfWeek.setHours(0, 0, 0, 0);
+      if (commitError) throw commitError;
 
-        const { data: completions, error: compError } = await supabase
-          .from("commitment_completions")
-          .select("*")
-          .eq("user_id", user.id)
-          .gte("completed_date", startOfWeek.toISOString().split("T")[0]);
+      // Build lineage and checkins for each commitment
+      const enrichedCommitments: CommitmentWithCheckin[] = await Promise.all(
+        (rawCommitments || []).map(async (commitment) => {
+          const frequency = commitment.frequency_json as { times_per_week: number };
+          
+          // Get or create checkin for this week
+          const checkin = await ensureCheckin(
+            commitment.id, 
+            frequency.times_per_week, 
+            weekStart, 
+            weekEnd
+          );
+          
+          let lineage = {
+            ninety_day: null as string | null,
+            one_year: null as string | null,
+            three_year: null as string | null,
+            vision: null as string | null,
+            pillar: null as string | null
+          };
 
-        if (compError) throw compError;
+          // If commitment is linked to a goal, fetch the lineage
+          if (commitment.goal_id) {
+            const { data: ninetyDay } = await supabase
+              .from("goals")
+              .select("*")
+              .eq("id", commitment.goal_id)
+              .maybeSingle();
 
-        // Build lineage for each commitment
-        const enrichedCommitments: CommitmentWithLineage[] = await Promise.all(
-          (rawCommitments || []).map(async (commitment) => {
-            const weekCompletions = completions?.filter(c => c.commitment_id === commitment.id).length || 0;
-            
-            let lineage = {
-              ninety_day: null as string | null,
-              one_year: null as string | null,
-              three_year: null as string | null,
-              vision: null as string | null,
-              pillar: null as string | null
-            };
+            if (ninetyDay) {
+              lineage.ninety_day = ninetyDay.title;
 
-            // If commitment is linked to a goal, fetch the lineage
-            if (commitment.goal_id) {
-              // Get 90-day goal
-              const { data: ninetyDay } = await supabase
-                .from("goals")
-                .select("*")
-                .eq("id", commitment.goal_id)
-                .maybeSingle();
+              if (ninetyDay.parent_goal_id) {
+                const { data: oneYear } = await supabase
+                  .from("goals")
+                  .select("*")
+                  .eq("id", ninetyDay.parent_goal_id)
+                  .maybeSingle();
 
-              if (ninetyDay) {
-                lineage.ninety_day = ninetyDay.title;
+                if (oneYear) {
+                  lineage.one_year = oneYear.title;
 
-                // Get 1-year goal
-                if (ninetyDay.parent_goal_id) {
-                  const { data: oneYear } = await supabase
-                    .from("goals")
-                    .select("*")
-                    .eq("id", ninetyDay.parent_goal_id)
-                    .maybeSingle();
+                  if (oneYear.parent_goal_id) {
+                    const { data: threeYear } = await supabase
+                      .from("goals")
+                      .select("*")
+                      .eq("id", oneYear.parent_goal_id)
+                      .maybeSingle();
 
-                  if (oneYear) {
-                    lineage.one_year = oneYear.title;
-
-                    // Get 3-year goal
-                    if (oneYear.parent_goal_id) {
-                      const { data: threeYear } = await supabase
-                        .from("goals")
-                        .select("*")
-                        .eq("id", oneYear.parent_goal_id)
-                        .maybeSingle();
-
-                      if (threeYear) {
-                        lineage.three_year = threeYear.title;
-                      }
+                    if (threeYear) {
+                      lineage.three_year = threeYear.title;
                     }
                   }
                 }
+              }
 
-                // Get vision
-                if (ninetyDay.life_vision_id) {
-                  const { data: vision } = await supabase
-                    .from("life_visions")
-                    .select("*")
-                    .eq("id", ninetyDay.life_vision_id)
-                    .maybeSingle();
-
-                  if (vision) {
-                    lineage.vision = vision.title;
-                  }
-                }
-
-                // Get pillar
-                const { data: pillar } = await supabase
-                  .from("pillars")
+              if (ninetyDay.life_vision_id) {
+                const { data: vision } = await supabase
+                  .from("life_visions")
                   .select("*")
-                  .eq("id", ninetyDay.pillar_id)
+                  .eq("id", ninetyDay.life_vision_id)
                   .maybeSingle();
 
-                if (pillar) {
-                  lineage.pillar = pillar.name;
+                if (vision) {
+                  lineage.vision = vision.title;
                 }
               }
+
+              const { data: pillar } = await supabase
+                .from("pillars")
+                .select("*")
+                .eq("id", ninetyDay.pillar_id)
+                .maybeSingle();
+
+              if (pillar) {
+                lineage.pillar = pillar.name;
+              }
             }
+          }
 
-            return {
-              id: commitment.id,
-              title: commitment.title,
-              frequency_json: commitment.frequency_json as { times_per_week: number },
-              completions_this_week: weekCompletions,
-              lineage
-            };
-          })
-        );
+          return {
+            id: commitment.id,
+            title: commitment.title,
+            frequency_json: frequency,
+            checkin: checkin ? {
+              id: checkin.id,
+              planned_count: checkin.planned_count,
+              actual_count: checkin.actual_count
+            } : null,
+            lineage
+          };
+        })
+      );
 
-        setCommitments(enrichedCommitments);
-      } catch (error: any) {
-        console.error("Error fetching commitments:", error);
-        toast.error("Failed to load commitments");
-      } finally {
-        setLoading(false);
-      }
-    };
+      setCommitments(enrichedCommitments);
+    } catch (error: any) {
+      console.error("Error fetching commitments:", error);
+      toast.error("Failed to load commitments");
+    } finally {
+      setLoading(false);
+    }
+  }, [user, currentWeekStart, ensureCheckin]);
 
+  useEffect(() => {
     fetchCommitments();
-  }, [user]);
+  }, [fetchCommitments]);
 
-  // Toggle completion for today
-  const toggleCompletion = async (commitmentId: string) => {
-    if (!user || completing) return;
-    setCompleting(commitmentId);
+  // Update actual count for a checkin
+  const updateActualCount = async (commitmentId: string, checkinId: string, delta: number) => {
+    if (!user || updating) return;
+    setUpdating(commitmentId);
 
-    const today = new Date().toISOString().split("T")[0];
+    const commitment = commitments.find(c => c.id === commitmentId);
+    if (!commitment?.checkin) return;
+
+    const newCount = Math.max(0, commitment.checkin.actual_count + delta);
 
     try {
-      // Check if already completed today
-      const { data: existing } = await supabase
-        .from("commitment_completions")
-        .select("*")
-        .eq("commitment_id", commitmentId)
-        .eq("completed_date", today)
-        .maybeSingle();
+      const { error } = await supabase
+        .from("weekly_checkins")
+        .update({ actual_count: newCount })
+        .eq("id", checkinId);
 
-      if (existing) {
-        // Remove completion
-        await supabase
-          .from("commitment_completions")
-          .delete()
-          .eq("id", existing.id);
+      if (error) throw error;
 
-        setCommitments(prev =>
-          prev.map(c =>
-            c.id === commitmentId
-              ? { ...c, completions_this_week: c.completions_this_week - 1 }
-              : c
-          )
-        );
-      } else {
-        // Add completion
-        await supabase.from("commitment_completions").insert({
-          commitment_id: commitmentId,
-          user_id: user.id,
-          completed_date: today
-        });
-
-        setCommitments(prev =>
-          prev.map(c =>
-            c.id === commitmentId
-              ? { ...c, completions_this_week: c.completions_this_week + 1 }
-              : c
-          )
-        );
-      }
+      setCommitments(prev =>
+        prev.map(c =>
+          c.id === commitmentId && c.checkin
+            ? { ...c, checkin: { ...c.checkin, actual_count: newCount } }
+            : c
+        )
+      );
     } catch (error: any) {
-      console.error("Error toggling completion:", error);
+      console.error("Error updating count:", error);
       toast.error("Failed to update");
     } finally {
-      setCompleting(null);
+      setUpdating(null);
     }
+  };
+
+  // Fetch history for a commitment
+  const fetchHistory = async (commitmentId: string) => {
+    if (historyData[commitmentId]) return; // Already fetched
+
+    const { data, error } = await supabase
+      .from("weekly_checkins")
+      .select("period_start_date, planned_count, actual_count")
+      .eq("weekly_commitment_id", commitmentId)
+      .order("period_start_date", { ascending: false })
+      .limit(8);
+
+    if (!error && data) {
+      setHistoryData(prev => ({ ...prev, [commitmentId]: data }));
+    }
+  };
+
+  // Navigate between weeks
+  const goToPreviousWeek = () => {
+    setCurrentWeekStart(prev => subWeeks(prev, 1));
+  };
+
+  const goToNextWeek = () => {
+    setCurrentWeekStart(prev => addWeeks(prev, 1));
+  };
+
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(getWeekStart(new Date()));
   };
 
   const handleSignOut = async () => {
@@ -242,9 +324,32 @@ const Dashboard = () => {
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-8 max-w-2xl">
+        {/* Week navigation */}
         <div className="mb-8">
-          <h2 className="text-2xl font-semibold text-foreground mb-2">This Week</h2>
-          <p className="text-muted-foreground">
+          <div className="flex items-center justify-between mb-2">
+            <Button variant="ghost" size="sm" onClick={goToPreviousWeek}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-foreground">
+                {weekStartFormatted} – {weekEndFormatted}
+              </h2>
+              {!isCurrentWeek && (
+                <button 
+                  onClick={goToCurrentWeek}
+                  className="text-sm text-primary hover:underline"
+                >
+                  Go to current week
+                </button>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={goToNextWeek}>
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-center text-sm">
             Track your weekly commitments and stay connected to your bigger goals.
           </p>
         </div>
@@ -262,36 +367,102 @@ const Dashboard = () => {
         ) : (
           <div className="space-y-4">
             {commitments.map((commitment) => {
-              const progress = Math.min(
-                commitment.completions_this_week / commitment.frequency_json.times_per_week,
-                1
-              );
-              const isComplete = commitment.completions_this_week >= commitment.frequency_json.times_per_week;
+              const planned = commitment.checkin?.planned_count || commitment.frequency_json.times_per_week;
+              const actual = commitment.checkin?.actual_count || 0;
+              const progress = Math.min(actual / planned, 1);
+              const isComplete = actual >= planned;
 
               return (
                 <Card key={commitment.id} className="animate-fade-in">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
-                      {/* Check button */}
-                      <button
-                        onClick={() => toggleCompletion(commitment.id)}
-                        disabled={completing === commitment.id}
+                      {/* Completion indicator */}
+                      <div
                         className={`mt-1 w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-calm ${
                           isComplete
                             ? "border-primary bg-primary text-primary-foreground"
-                            : "border-muted-foreground/30 hover:border-primary/50"
+                            : "border-muted-foreground/30"
                         }`}
                       >
                         {isComplete && <Check className="h-3.5 w-3.5" />}
-                      </button>
+                      </div>
 
                       <div className="flex-1 min-w-0">
-                        {/* Title and progress */}
+                        {/* Title and controls */}
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <h3 className="font-medium text-foreground">{commitment.title}</h3>
-                          <span className="text-sm text-muted-foreground whitespace-nowrap">
-                            {commitment.completions_this_week}/{commitment.frequency_json.times_per_week}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {/* Plus/Minus controls */}
+                            {commitment.checkin && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => updateActualCount(commitment.id, commitment.checkin!.id, -1)}
+                                  disabled={updating === commitment.id || actual === 0}
+                                  className="w-7 h-7 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-calm"
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                                <span className="text-sm font-medium text-foreground min-w-[3rem] text-center">
+                                  {actual}/{planned}
+                                </span>
+                                <button
+                                  onClick={() => updateActualCount(commitment.id, commitment.checkin!.id, 1)}
+                                  disabled={updating === commitment.id}
+                                  className="w-7 h-7 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-calm"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                            
+                            {/* History button */}
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <button
+                                  onClick={() => fetchHistory(commitment.id)}
+                                  className="w-7 h-7 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-calm"
+                                  title="View history"
+                                >
+                                  <History className="h-3.5 w-3.5" />
+                                </button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>{commitment.title} - History</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-2 mt-4">
+                                  {historyData[commitment.id]?.length ? (
+                                    historyData[commitment.id].map((week) => {
+                                      const weekDate = new Date(week.period_start_date);
+                                      const weekProgress = week.planned_count > 0 
+                                        ? Math.min(week.actual_count / week.planned_count, 1) 
+                                        : 0;
+                                      return (
+                                        <div key={week.period_start_date} className="flex items-center gap-3">
+                                          <span className="text-sm text-muted-foreground w-24">
+                                            {format(weekDate, "MMM d")}
+                                          </span>
+                                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full transition-all ${
+                                                weekProgress >= 1 ? "bg-primary" : "bg-primary/50"
+                                              }`}
+                                              style={{ width: `${weekProgress * 100}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-sm font-medium w-12 text-right">
+                                            {week.actual_count}/{week.planned_count}
+                                          </span>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <p className="text-muted-foreground text-sm">No history yet</p>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
                         </div>
 
                         {/* Progress bar */}

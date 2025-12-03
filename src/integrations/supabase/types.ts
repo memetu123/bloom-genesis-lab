@@ -208,6 +208,53 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_checkins: {
+        Row: {
+          actual_count: number
+          created_at: string
+          id: string
+          notes: string | null
+          period_end_date: string
+          period_start_date: string
+          planned_count: number
+          updated_at: string
+          user_id: string
+          weekly_commitment_id: string
+        }
+        Insert: {
+          actual_count?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_end_date: string
+          period_start_date: string
+          planned_count?: number
+          updated_at?: string
+          user_id: string
+          weekly_commitment_id: string
+        }
+        Update: {
+          actual_count?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_end_date?: string
+          period_start_date?: string
+          planned_count?: number
+          updated_at?: string
+          user_id?: string
+          weekly_commitment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_checkins_weekly_commitment_id_fkey"
+            columns: ["weekly_commitment_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_commitments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weekly_commitments: {
         Row: {
           commitment_type: Database["public"]["Enums"]["commitment_type"]

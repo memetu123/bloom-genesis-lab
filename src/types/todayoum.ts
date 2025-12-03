@@ -63,6 +63,19 @@ export interface CommitmentCompletion {
   created_at: string;
 }
 
+export interface WeeklyCheckin {
+  id: string;
+  user_id: string;
+  weekly_commitment_id: string;
+  period_start_date: string;
+  period_end_date: string;
+  planned_count: number;
+  actual_count: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Onboarding state
 export interface OnboardingData {
   selectedPillars: { name: string; description: string }[];
