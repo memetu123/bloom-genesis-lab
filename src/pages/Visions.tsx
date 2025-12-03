@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Eye } from "lucide-react";
+import { Star, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
+import FocusFilter from "@/components/FocusFilter";
 
 /**
  * Visions List Page
@@ -112,15 +113,10 @@ const Visions = () => {
       {/* Title and filter */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">My Visions</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowOnlyFocused(!showOnlyFocused)}
-          className={showOnlyFocused ? "border-primary text-primary" : ""}
-        >
-          <Eye className="h-4 w-4 mr-2" />
-          {showOnlyFocused ? "Show all" : "Show focused only"}
-        </Button>
+        <FocusFilter
+          showFocusedOnly={showOnlyFocused}
+          onToggle={() => setShowOnlyFocused(!showOnlyFocused)}
+        />
       </div>
 
       <p className="text-muted-foreground mb-6">
