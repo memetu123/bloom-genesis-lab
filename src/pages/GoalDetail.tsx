@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, Target, ChevronRight, Star } from "lucide-react";
+import { Plus, Target, ChevronRight, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -297,8 +297,8 @@ const GoalDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <p className="text-muted-foreground text-center">Loading...</p>
       </div>
     );
   }
@@ -309,70 +309,59 @@ const GoalDetail = () => {
   const isNinetyDay = goal.goal_type === "ninety_day";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-        </div>
-      </header>
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* Breadcrumb */}
+      <div className="text-sm text-muted-foreground mb-4 flex items-center flex-wrap gap-1">
+        {breadcrumb.pillar && (
+          <>
+            <span className="text-primary font-medium">{breadcrumb.pillar}</span>
+            <ChevronRight className="h-3 w-3" />
+          </>
+        )}
+        {breadcrumb.vision && (
+          <>
+            <span>{breadcrumb.vision}</span>
+            <ChevronRight className="h-3 w-3" />
+          </>
+        )}
+        {breadcrumb.threeYear && (
+          <>
+            <span>{breadcrumb.threeYear}</span>
+            <ChevronRight className="h-3 w-3" />
+          </>
+        )}
+        {breadcrumb.oneYear && (
+          <>
+            <span>{breadcrumb.oneYear}</span>
+            <ChevronRight className="h-3 w-3" />
+          </>
+        )}
+        <span>{GOAL_TYPE_LABELS[goal.goal_type]}</span>
+      </div>
 
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Breadcrumb */}
-        <div className="text-sm text-muted-foreground mb-4 flex items-center flex-wrap gap-1">
-          {breadcrumb.pillar && (
-            <>
-              <span className="text-primary font-medium">{breadcrumb.pillar}</span>
-              <ChevronRight className="h-3 w-3" />
-            </>
-          )}
-          {breadcrumb.vision && (
-            <>
-              <span>{breadcrumb.vision}</span>
-              <ChevronRight className="h-3 w-3" />
-            </>
-          )}
-          {breadcrumb.threeYear && (
-            <>
-              <span>{breadcrumb.threeYear}</span>
-              <ChevronRight className="h-3 w-3" />
-            </>
-          )}
-          {breadcrumb.oneYear && (
-            <>
-              <span>{breadcrumb.oneYear}</span>
-              <ChevronRight className="h-3 w-3" />
-            </>
-          )}
-          <span>{GOAL_TYPE_LABELS[goal.goal_type]}</span>
+      {/* Goal info */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-2xl font-semibold text-foreground">{goal.title}</h1>
+          <button
+            onClick={toggleGoalFocus}
+            disabled={updatingFocus === goal.id}
+            className="p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
+            title={goal.is_focus ? "Remove from focus" : "Add to focus"}
+          >
+            <Star
+              className={`h-5 w-5 transition-calm ${
+                goal.is_focus 
+                  ? "fill-primary text-primary" 
+                  : "text-muted-foreground"
+              }`}
+            />
+          </button>
         </div>
-
-        {/* Goal info */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-semibold text-foreground">{goal.title}</h1>
-            <button
-              onClick={toggleGoalFocus}
-              disabled={updatingFocus === goal.id}
-              className="p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
-              title={goal.is_focus ? "Remove from focus" : "Add to focus"}
-            >
-              <Star
-                className={`h-5 w-5 transition-calm ${
-                  goal.is_focus 
-                    ? "fill-primary text-primary" 
-                    : "text-muted-foreground"
-                }`}
-              />
-            </button>
-          </div>
-          {goal.description && (
-            <p className="text-muted-foreground">{goal.description}</p>
-          )}
-        </div>
+        {goal.description && (
+          <p className="text-muted-foreground">{goal.description}</p>
+        )}
+      </div>
 
         {/* Children section */}
         <div className="mb-6 flex items-center justify-between">
@@ -528,7 +517,6 @@ const GoalDetail = () => {
             </div>
           )
         )}
-      </main>
     </div>
   );
 };

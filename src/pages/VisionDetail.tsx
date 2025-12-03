@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, Target, ChevronRight, Star } from "lucide-react";
+import { Plus, Target, ChevronRight, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -186,8 +186,8 @@ const VisionDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <p className="text-muted-foreground text-center">Loading...</p>
       </div>
     );
   }
@@ -195,50 +195,39 @@ const VisionDetail = () => {
   if (!vision) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Button>
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* Breadcrumb */}
+      {pillar && (
+        <div className="text-sm text-muted-foreground mb-4 flex items-center gap-1">
+          <span className="text-primary font-medium">{pillar.name}</span>
+          <ChevronRight className="h-3 w-3" />
+          <span>Vision</span>
         </div>
-      </header>
+      )}
 
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Breadcrumb */}
-        {pillar && (
-          <div className="text-sm text-muted-foreground mb-4 flex items-center gap-1">
-            <span className="text-primary font-medium">{pillar.name}</span>
-            <ChevronRight className="h-3 w-3" />
-            <span>Vision</span>
-          </div>
+      {/* Vision info */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-2xl font-semibold text-foreground">{vision.title}</h1>
+          <button
+            onClick={toggleVisionFocus}
+            disabled={updatingFocus === vision.id}
+            className="p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
+            title={vision.is_focus ? "Remove from focus" : "Add to focus"}
+          >
+            <Star
+              className={`h-5 w-5 transition-calm ${
+                vision.is_focus 
+                  ? "fill-primary text-primary" 
+                  : "text-muted-foreground"
+              }`}
+            />
+          </button>
+        </div>
+        {vision.description && (
+          <p className="text-muted-foreground">{vision.description}</p>
         )}
-
-        {/* Vision info */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-semibold text-foreground">{vision.title}</h1>
-            <button
-              onClick={toggleVisionFocus}
-              disabled={updatingFocus === vision.id}
-              className="p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
-              title={vision.is_focus ? "Remove from focus" : "Add to focus"}
-            >
-              <Star
-                className={`h-5 w-5 transition-calm ${
-                  vision.is_focus 
-                    ? "fill-primary text-primary" 
-                    : "text-muted-foreground"
-                }`}
-              />
-            </button>
-          </div>
-          {vision.description && (
-            <p className="text-muted-foreground">{vision.description}</p>
-          )}
-        </div>
+      </div>
 
         {/* 3-Year Goals section */}
         <div className="mb-6 flex items-center justify-between">
@@ -339,7 +328,6 @@ const VisionDetail = () => {
             ))}
           </div>
         )}
-      </main>
     </div>
   );
 };

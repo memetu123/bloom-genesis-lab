@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, ChevronRight, Eye } from "lucide-react";
+import { Star, ChevronRight, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -108,35 +108,24 @@ const Visions = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Button>
-        </div>
-      </header>
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* Title and filter */}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-foreground">My Visions</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowOnlyFocused(!showOnlyFocused)}
+          className={showOnlyFocused ? "border-primary text-primary" : ""}
+        >
+          <Eye className="h-4 w-4 mr-2" />
+          {showOnlyFocused ? "Show all" : "Show focused only"}
+        </Button>
+      </div>
 
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Title and filter */}
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-foreground">My Visions</h1>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowOnlyFocused(!showOnlyFocused)}
-            className={showOnlyFocused ? "border-primary text-primary" : ""}
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            {showOnlyFocused ? "Show all" : "Show focused only"}
-          </Button>
-        </div>
-
-        <p className="text-muted-foreground mb-6">
-          Click the star to mark visions you want to focus on. Focused visions appear on your dashboard.
-        </p>
+      <p className="text-muted-foreground mb-6">
+        Click the star to mark visions you want to focus on. Focused visions appear on your dashboard.
+      </p>
 
         {filteredVisions.length === 0 ? (
           <Card>
@@ -211,7 +200,6 @@ const Visions = () => {
             ))}
           </div>
         )}
-      </main>
     </div>
   );
 };
