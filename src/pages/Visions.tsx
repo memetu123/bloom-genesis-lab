@@ -113,10 +113,15 @@ const Visions = () => {
       {/* Title and filter */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">My Visions</h1>
-        <FocusFilter
-          showFocusedOnly={showOnlyFocused}
-          onToggle={() => setShowOnlyFocused(!showOnlyFocused)}
-        />
+        <div className="flex items-center gap-2">
+          <FocusFilter
+            showFocusedOnly={showOnlyFocused}
+            onToggle={() => setShowOnlyFocused(!showOnlyFocused)}
+          />
+          <Button onClick={() => navigate("/onboarding")} size="sm">
+            + Add Vision
+          </Button>
+        </div>
       </div>
 
       <p className="text-muted-foreground mb-6">
