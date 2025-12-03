@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
+import VisionDetail from "./pages/VisionDetail";
+import GoalDetail from "./pages/GoalDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +30,8 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/vision/:id" element={<VisionDetail />} />
+            <Route path="/goal/:id" element={<GoalDetail />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
