@@ -45,7 +45,8 @@ const Dashboard = () => {
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const currentWeekStart = getWeekStart(new Date());
+  // Memoize to prevent infinite re-renders
+  const currentWeekStart = useState(() => getWeekStart(new Date()))[0];
   const weekStartFormatted = format(currentWeekStart, "MMM d");
   const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d");
 
