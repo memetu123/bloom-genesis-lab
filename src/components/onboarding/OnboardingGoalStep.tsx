@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OnboardingLayout } from "./OnboardingLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 
 /**
  * OnboardingGoalStep - Steps 3, 4, 5: Set goals at different time horizons
@@ -70,39 +70,40 @@ export function OnboardingGoalStep({
     setDescription(goal?.description || "");
   }, [goalType, goal]);
 
-  // Fetch AI-generated example when component mounts or context changes
-  useEffect(() => {
-    const fetchExample = async () => {
-      setIsLoadingExample(true);
-      setAiExample(null);
-      
-      try {
-        const { data, error } = await supabase.functions.invoke("generate-goal-example", {
-          body: {
-            goalType,
-            pillarName,
-            visionTitle,
-            parentGoalTitle
-          }
-        });
-
-        if (error) {
-          console.error("Error fetching AI example:", error);
-          return;
+  // Function to fetch AI-generated example
+  const fetchExample = useCallback(async () => {
+    setIsLoadingExample(true);
+    setAiExample(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-goal-example", {
+        body: {
+          goalType,
+          pillarName,
+          visionTitle,
+          parentGoalTitle
         }
+      });
 
-        if (data?.example) {
-          setAiExample(data.example);
-        }
-      } catch (err) {
-        console.error("Failed to fetch AI example:", err);
-      } finally {
-        setIsLoadingExample(false);
+      if (error) {
+        console.error("Error fetching AI example:", error);
+        return;
       }
-    };
 
-    fetchExample();
+      if (data?.example) {
+        setAiExample(data.example);
+      }
+    } catch (err) {
+      console.error("Failed to fetch AI example:", err);
+    } finally {
+      setIsLoadingExample(false);
+    }
   }, [goalType, pillarName, visionTitle, parentGoalTitle]);
+
+  // Fetch example on mount or when context changes
+  useEffect(() => {
+    fetchExample();
+  }, [fetchExample]);
 
   const handleNext = () => {
     if (title.trim()) {
@@ -139,22 +140,32 @@ export function OnboardingGoalStep({
         {/* Goal form */}
         <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="goalTitle" className="text-sm font-medium text-foreground">
-              Your {goalType === "three_year" ? "3-year" : goalType === "one_year" ? "1-year" : "90-day"} goal
-            </label>
-            <div className="relative">
-              <Input
-                id="goalTitle"
-                placeholder={isLoadingExample ? "Generating example..." : placeholder}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-              {isLoadingExample && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              )}
+            <div className="flex items-center justify-between">
+              <label htmlFor="goalTitle" className="text-sm font-medium text-foreground">
+                Your {goalType === "three_year" ? "3-year" : goalType === "one_year" ? "1-year" : "90-day"} goal
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={fetchExample}
+                disabled={isLoadingExample}
+                className="h-7 text-xs text-muted-foreground hover:text-foreground"
+              >
+                {isLoadingExample ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                )}
+                New example
+              </Button>
             </div>
+            <Input
+              id="goalTitle"
+              placeholder={isLoadingExample ? "Generating example..." : placeholder}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
             <p className="text-xs text-muted-foreground">{config.helpText}</p>
           </div>
 
