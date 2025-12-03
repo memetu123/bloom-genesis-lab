@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
+import FocusFilter from "@/components/FocusFilter";
 
 /**
  * Weekly Page - Weekly commitments checklist
@@ -28,6 +29,7 @@ interface CommitmentWithCheckin {
     planned_count: number;
     actual_count: number;
   } | null;
+  goal_is_focus: boolean | null; // Track if parent goal is focused
   lineage: {
     ninety_day: LineageItem | null;
     vision: LineageItem | null;
@@ -57,6 +59,7 @@ const Weekly = () => {
   const [updating, setUpdating] = useState<string | null>(null);
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(new Date()));
   const [historyData, setHistoryData] = useState<Record<string, WeeklyHistory[]>>({});
+  const [showFocusedOnly, setShowFocusedOnly] = useState(false);
 
   const weekStartFormatted = format(currentWeekStart, "MMM d");
   const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d, yyyy");
@@ -135,6 +138,7 @@ const Weekly = () => {
             vision: null,
             pillar: null
           };
+          let goal_is_focus: boolean | null = null;
 
           if (commitment.goal_id) {
             const { data: ninetyDay } = await supabase
@@ -145,6 +149,7 @@ const Weekly = () => {
 
             if (ninetyDay) {
               lineage.ninety_day = { id: ninetyDay.id, title: ninetyDay.title };
+              goal_is_focus = ninetyDay.is_focus;
 
               if (ninetyDay.life_vision_id) {
                 const { data: vision } = await supabase
@@ -179,6 +184,7 @@ const Weekly = () => {
               planned_count: checkin.planned_count,
               actual_count: checkin.actual_count
             } : null,
+            goal_is_focus,
             lineage
           };
         })
@@ -248,6 +254,11 @@ const Weekly = () => {
   const goToNextWeek = () => setCurrentWeekStart(prev => addWeeks(prev, 1));
   const goToCurrentWeek = () => setCurrentWeekStart(getWeekStart(new Date()));
 
+  // Filter commitments based on focus toggle
+  const filteredCommitments = showFocusedOnly
+    ? commitments.filter(c => c.goal_is_focus === true)
+    : commitments;
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -258,6 +269,15 @@ const Weekly = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* Header with filter */}
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-foreground">Weekly</h1>
+        <FocusFilter
+          showFocusedOnly={showFocusedOnly}
+          onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
+        />
+      </div>
+
       {/* Week navigation */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
@@ -288,19 +308,23 @@ const Weekly = () => {
         </p>
       </div>
 
-      {commitments.length === 0 ? (
+      {filteredCommitments.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground mb-4">No weekly commitments yet</p>
-            <Button onClick={() => navigate("/onboarding")}>
-              Set up your plan
-            </Button>
+            <p className="text-muted-foreground mb-4">
+              {showFocusedOnly ? "No commitments linked to focused goals" : "No weekly commitments yet"}
+            </p>
+            {!showFocusedOnly && (
+              <Button onClick={() => navigate("/onboarding")}>
+                Set up your plan
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {commitments.map((commitment) => {
+          {filteredCommitments.map((commitment) => {
             const planned = commitment.checkin?.planned_count || commitment.frequency_json.times_per_week;
             const actual = commitment.checkin?.actual_count || 0;
             const progress = Math.min(actual / planned, 1);
