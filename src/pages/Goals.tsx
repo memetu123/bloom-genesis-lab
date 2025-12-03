@@ -4,6 +4,7 @@ import { Star, ChevronRight, Target } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
 import FocusFilter from "@/components/FocusFilter";
@@ -157,10 +158,15 @@ const Goals = () => {
             View and focus on goals at every level of your plan.
           </p>
         </div>
-        <FocusFilter
-          showFocusedOnly={showFocusedOnly}
-          onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-        />
+        <div className="flex items-center gap-2">
+          <FocusFilter
+            showFocusedOnly={showFocusedOnly}
+            onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
+          />
+          <Button onClick={() => navigate("/visions")} size="sm">
+            + Add Goal
+          </Button>
+        </div>
       </div>
 
       {filteredGoals.length === 0 ? (

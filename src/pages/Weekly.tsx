@@ -272,10 +272,15 @@ const Weekly = () => {
       {/* Header with filter */}
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Weekly</h1>
-        <FocusFilter
-          showFocusedOnly={showFocusedOnly}
-          onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-        />
+        <div className="flex items-center gap-2">
+          <FocusFilter
+            showFocusedOnly={showFocusedOnly}
+            onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
+          />
+          <Button onClick={() => navigate("/goals")} size="sm">
+            + Add Commitment
+          </Button>
+        </div>
       </div>
 
       {/* Week navigation */}
