@@ -400,12 +400,12 @@ const Weekly = () => {
                 </div>
                 <div>
                   <Label>Link to goal (optional)</Label>
-                  <Select value={selectedGoalId} onValueChange={setSelectedGoalId}>
+                  <Select value={selectedGoalId || "none"} onValueChange={(val) => setSelectedGoalId(val === "none" ? "" : val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="No goal linked" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No goal linked</SelectItem>
+                      <SelectItem value="none">No goal linked</SelectItem>
                       {goals.map(goal => (
                         <SelectItem key={goal.id} value={goal.id}>
                           {goal.title}
