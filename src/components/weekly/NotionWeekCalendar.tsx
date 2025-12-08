@@ -146,26 +146,31 @@ const NotionWeekCalendar = ({
                       className={`
                         w-full text-left text-xs py-0.5 px-1 
                         hover:bg-muted transition-calm
-                        flex items-start gap-1
                         ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
                       `}
                     >
-                      <span className={`flex-shrink-0 ${task.isCompleted ? "text-primary" : ""}`}>
-                        {task.isCompleted ? "●" : "○"}
-                      </span>
-                      <span className={`break-words ${task.isCompleted ? "line-through" : ""}`}>
-                        {task.title}{instanceLabel}
-                      </span>
-                      {timeDisplay && (
-                        <span className="text-muted-foreground ml-auto">
-                          ({timeDisplay})
+                      <div className="flex items-start gap-1">
+                        <span className={`flex-shrink-0 ${task.isCompleted ? "text-primary" : ""}`}>
+                          {task.isCompleted ? "●" : "○"}
                         </span>
-                      )}
-                      {task.taskType === "independent" && !task.isDetached && (
-                        <span className="text-[9px] bg-muted px-1 rounded ml-1">1x</span>
-                      )}
-                      {task.isDetached && (
-                        <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1">detached</span>
+                        <span className={`break-words ${task.isCompleted ? "line-through" : ""}`}>
+                          {task.title}{instanceLabel}
+                        </span>
+                      </div>
+                      {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
+                        <div className="flex items-center gap-1 pl-4 mt-0.5">
+                          {timeDisplay && (
+                            <span className="text-muted-foreground">
+                              {timeDisplay}
+                            </span>
+                          )}
+                          {task.taskType === "independent" && !task.isDetached && (
+                            <span className="text-[9px] bg-muted px-1 rounded">1x</span>
+                          )}
+                          {task.isDetached && (
+                            <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">detached</span>
+                          )}
+                        </div>
                       )}
                     </button>
                   );
