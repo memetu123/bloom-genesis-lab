@@ -13,6 +13,7 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "dat
 import FocusFilter from "@/components/FocusFilter";
 import NotionWeekCalendar from "@/components/weekly/NotionWeekCalendar";
 import WeeklyTotals from "@/components/weekly/WeeklyTotals";
+import TaskDetailModal from "@/components/TaskDetailModal";
 
 /**
  * Weekly Page - Notion-style weekly view with calendar grid
@@ -65,12 +66,17 @@ const Weekly = () => {
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [goals, setGoals] = useState<GoalOption[]>([]);
 
-  // Dialog state
+  // Dialog state for adding commitment
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [timesPerWeek, setTimesPerWeek] = useState("3");
   const [saving, setSaving] = useState(false);
+
+  // Task detail modal state
+  const [selectedTask, setSelectedTask] = useState<DayTask | null>(null);
+  const [selectedTaskDate, setSelectedTaskDate] = useState<Date>(new Date());
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const weekStartFormatted = format(currentWeekStart, "MMM d");
   const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d, yyyy");
@@ -277,52 +283,11 @@ const Weekly = () => {
     }
   };
 
-  const handleTaskClick = async (task: DayTask, date: Date) => {
-    if (!user) return;
-    const dateKey = format(date, "yyyy-MM-dd");
-
-    try {
-      // Find the commitment to get checkin info
-      const commitment = commitments.find(c => c.id === task.commitmentId);
-      
-      if (task.isCompleted) {
-        // Remove completion
-        await supabase
-          .from("commitment_completions")
-          .delete()
-          .eq("commitment_id", task.commitmentId)
-          .eq("completed_date", dateKey);
-
-        // Decrement actual_count
-        if (commitment?.checkin) {
-          await supabase
-            .from("weekly_checkins")
-            .update({ actual_count: Math.max(0, commitment.checkin.actual_count - 1) })
-            .eq("id", commitment.checkin.id);
-        }
-      } else {
-        // Add completion
-        await supabase.from("commitment_completions").insert({
-          user_id: user.id,
-          commitment_id: task.commitmentId,
-          completed_date: dateKey,
-        });
-
-        // Increment actual_count
-        if (commitment?.checkin) {
-          await supabase
-            .from("weekly_checkins")
-            .update({ actual_count: commitment.checkin.actual_count + 1 })
-            .eq("id", commitment.checkin.id);
-        }
-      }
-
-      // Refresh data
-      fetchCommitments();
-    } catch (error: any) {
-      console.error("Error toggling task:", error);
-      toast.error("Failed to update task");
-    }
+  const handleTaskClick = (task: DayTask, date: Date) => {
+    // Open task detail modal instead of toggling completion directly
+    setSelectedTask(task);
+    setSelectedTaskDate(date);
+    setTaskModalOpen(true);
   };
 
   const goToPreviousWeek = () => setCurrentWeekStart(prev => subWeeks(prev, 1));
@@ -493,6 +458,15 @@ const Weekly = () => {
           />
         </>
       )}
+
+      {/* Task detail modal */}
+      <TaskDetailModal
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        task={selectedTask}
+        date={selectedTaskDate}
+        onUpdate={fetchCommitments}
+      />
     </div>
   );
 };

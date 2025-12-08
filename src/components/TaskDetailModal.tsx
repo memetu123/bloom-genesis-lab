@@ -62,7 +62,17 @@ const TaskDetailModal = ({
     setSaving(true);
 
     try {
-      // Check if completion record exists
+      // Update default times on the weekly commitment
+      await supabase
+        .from("weekly_commitments")
+        .update({
+          default_time_start: timeStart || null,
+          default_time_end: timeEnd || null,
+          flexible_time: !timeStart,
+        })
+        .eq("id", task.commitmentId);
+
+      // Handle completion status separately
       const { data: existingCompletion } = await supabase
         .from("commitment_completions")
         .select("*")
@@ -71,7 +81,7 @@ const TaskDetailModal = ({
         .maybeSingle();
 
       if (isCompleted && !existingCompletion) {
-        // Create completion with time data
+        // Create completion record
         await supabase.from("commitment_completions").insert({
           user_id: user.id,
           commitment_id: task.commitmentId,
@@ -80,14 +90,52 @@ const TaskDetailModal = ({
           time_end: timeEnd || null,
           is_flexible_time: !timeStart,
         });
+
+        // Update weekly checkin actual_count
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay() + 1);
+        const weekStartStr = format(weekStart, "yyyy-MM-dd");
+        
+        const { data: checkin } = await supabase
+          .from("weekly_checkins")
+          .select("id, actual_count")
+          .eq("weekly_commitment_id", task.commitmentId)
+          .eq("period_start_date", weekStartStr)
+          .maybeSingle();
+
+        if (checkin) {
+          await supabase
+            .from("weekly_checkins")
+            .update({ actual_count: checkin.actual_count + 1 })
+            .eq("id", checkin.id);
+        }
       } else if (!isCompleted && existingCompletion) {
-        // Remove completion
+        // Remove completion record
         await supabase
           .from("commitment_completions")
           .delete()
           .eq("id", existingCompletion.id);
+
+        // Update weekly checkin actual_count
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay() + 1);
+        const weekStartStr = format(weekStart, "yyyy-MM-dd");
+        
+        const { data: checkin } = await supabase
+          .from("weekly_checkins")
+          .select("id, actual_count")
+          .eq("weekly_commitment_id", task.commitmentId)
+          .eq("period_start_date", weekStartStr)
+          .maybeSingle();
+
+        if (checkin) {
+          await supabase
+            .from("weekly_checkins")
+            .update({ actual_count: Math.max(0, checkin.actual_count - 1) })
+            .eq("id", checkin.id);
+        }
       } else if (existingCompletion) {
-        // Update existing completion with time data
+        // Just update time on existing completion
         await supabase
           .from("commitment_completions")
           .update({
@@ -96,16 +144,6 @@ const TaskDetailModal = ({
             is_flexible_time: !timeStart,
           })
           .eq("id", existingCompletion.id);
-      } else if (timeStart || timeEnd) {
-        // Create completion record just for time tracking (not marked complete)
-        await supabase.from("commitment_completions").insert({
-          user_id: user.id,
-          commitment_id: task.commitmentId,
-          completed_date: dateKey,
-          time_start: timeStart || null,
-          time_end: timeEnd || null,
-          is_flexible_time: !timeStart,
-        });
       }
 
       toast.success("Task updated");
