@@ -43,6 +43,7 @@ interface TaskDetailModalProps {
     taskType?: TaskType;
     instanceNumber?: number;
     totalInstances?: number;
+    isDetached?: boolean;
   } | null;
   date: Date;
   onUpdate: () => void;
@@ -66,7 +67,7 @@ const TaskDetailModal = ({
   onUpdate,
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
-  const { convertToRecurring, convertToIndependent, updateRepetitionRules } =
+  const { convertToRecurring, convertToIndependent, detachInstance, updateInstanceTime, updateRepetitionRules } =
     useTaskScheduling();
 
   const [title, setTitle] = useState("");
@@ -236,17 +237,41 @@ const TaskDetailModal = ({
     }
   };
 
+  /**
+   * Handle detaching this instance from recurring series (only affects this day)
+   */
+  const handleDetachInstance = async () => {
+    if (!user || !task || !task.commitmentId) return;
+    setSaving(true);
+
+    try {
+      await detachInstance(task.commitmentId, dateKey);
+      toast.success("This day is now independent from the recurring series");
+      onUpdate();
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error("Error detaching instance:", error);
+      toast.error("Failed to detach instance");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * Handle converting task type (full conversion - deactivates series)
+   */
   const handleConvertTaskType = async () => {
     if (!user || !task) return;
     setSaving(true);
 
     try {
-      const isCurrentlyRecurring = task.commitmentId !== null;
+      const isCurrentlyRecurring = task.commitmentId !== null && !task.isDetached;
       
       if (isCurrentlyRecurring && task.commitmentId) {
-        // Convert recurring to independent
-        await convertToIndependent(task.commitmentId, dateKey);
-        toast.success("Converted to one-time task");
+        // For recurring tasks in daily view, use detachInstance instead
+        // This only affects this day, not the entire series
+        await detachInstance(task.commitmentId, dateKey);
+        toast.success("This day is now independent");
       } else {
         // Convert independent to recurring - need repetition rules first
         if (!showRepetitionEditor) {
@@ -289,7 +314,8 @@ const TaskDetailModal = ({
 
   if (!task) return null;
 
-  const isRecurring = task.commitmentId !== null;
+  const isRecurring = task.commitmentId !== null && !task.isDetached;
+  const isDetached = task.isDetached || false;
   const instanceLabel =
     task.instanceNumber && task.totalInstances && task.totalInstances > 1
       ? ` (${task.instanceNumber}/${task.totalInstances})`
@@ -331,30 +357,54 @@ const TaskDetailModal = ({
             </div>
           )}
 
-          {/* Task type indicator and conversion */}
+          {/* Task type indicator and actions */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs">
               <span
                 className={`px-2 py-0.5 rounded ${
                   isRecurring
                     ? "bg-primary/10 text-primary"
+                    : isDetached
+                    ? "bg-amber-100 text-amber-700"
                     : "bg-muted text-muted-foreground"
                 }`}
               >
-                {isRecurring ? "Recurring" : "One-time"}
+                {isRecurring ? "Recurring" : isDetached ? "Detached" : "One-time"}
               </span>
             </div>
             
-            {/* Convert button - direct action */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleConvertTaskType}
-              disabled={saving}
-              className="w-full text-xs"
-            >
-              {saving ? "Converting..." : `Convert to ${isRecurring ? "one-time" : "recurring"}`}
-            </Button>
+            {/* Detach button for recurring tasks (only affects this day) */}
+            {isRecurring && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDetachInstance}
+                disabled={saving}
+                className="w-full text-xs"
+              >
+                {saving ? "Detaching..." : "Detach this day from series"}
+              </Button>
+            )}
+
+            {/* Convert to recurring for independent tasks */}
+            {!isRecurring && !isDetached && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleConvertTaskType}
+                disabled={saving}
+                className="w-full text-xs"
+              >
+                {saving ? "Converting..." : "Convert to recurring"}
+              </Button>
+            )}
+
+            {/* Info for detached tasks */}
+            {isDetached && (
+              <p className="text-xs text-muted-foreground">
+                This day was detached from a recurring series. Changes only affect this day.
+              </p>
+            )}
           </div>
 
           {/* Completion toggle */}

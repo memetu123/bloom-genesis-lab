@@ -28,6 +28,7 @@ interface DayTask {
   taskType: TaskType;
   instanceNumber?: number;
   totalInstances?: number;
+  isDetached?: boolean;
 }
 
 interface CommitmentData {
@@ -206,10 +207,15 @@ const Weekly = () => {
         for (const commitment of enrichedCommitments) {
           const { data: completion } = await supabase
             .from("commitment_completions")
-            .select("*, time_start, time_end, instance_number")
+            .select("*, time_start, time_end, instance_number, is_detached")
             .eq("commitment_id", commitment.id)
             .eq("completed_date", dateKey)
             .maybeSingle();
+
+          // Skip if this instance is detached (it will be fetched separately)
+          if (completion?.is_detached) {
+            continue;
+          }
 
           const defaults = defaultTimesMap[commitment.id] || { start: null, end: null, timesPerPeriod: 1 };
           
@@ -226,14 +232,13 @@ const Weekly = () => {
           });
         }
 
-        // Fetch independent tasks for this date
+        // Fetch independent tasks for this date (including detached instances)
         const { data: independentTasks } = await supabase
           .from("commitment_completions")
-          .select("*")
+          .select("*, is_detached")
           .eq("user_id", user.id)
           .eq("completed_date", dateKey)
-          .eq("task_type", "independent")
-          .is("commitment_id", null);
+          .or("task_type.eq.independent,is_detached.eq.true");
 
         for (const task of independentTasks || []) {
           // Check if there's a daily_task_instance for completion status
@@ -245,12 +250,13 @@ const Weekly = () => {
 
           tasksMap[dateKey].push({
             id: task.id,
-            commitmentId: null,
+            commitmentId: task.is_detached ? task.commitment_id : null,
             title: task.title || "Untitled Task",
-            isCompleted: taskInstance?.is_completed ?? false, // Use actual completion status
+            isCompleted: taskInstance?.is_completed ?? false,
             timeStart: task.time_start,
             timeEnd: task.time_end,
             taskType: "independent",
+            isDetached: task.is_detached ?? false,
           });
         }
       }
