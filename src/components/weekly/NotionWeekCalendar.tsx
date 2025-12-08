@@ -11,6 +11,8 @@ interface DayTask {
   commitmentId: string;
   title: string;
   isCompleted: boolean;
+  timeStart?: string | null;
+  timeEnd?: string | null;
 }
 
 interface WeekDay {
@@ -107,27 +109,40 @@ const NotionWeekCalendar = ({
                 )}
               </div>
 
-              {/* Tasks */}
+                {/* Tasks */}
               <div className="space-y-1">
-                {tasks.slice(0, 5).map((task) => (
-                  <button
-                    key={task.id}
-                    onClick={(e) => handleTaskClick(e, task, date)}
-                    className={`
-                      w-full text-left text-xs py-0.5 px-1 
-                      hover:bg-muted transition-calm truncate
-                      flex items-center gap-1
-                      ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                    `}
-                  >
-                    <span className="flex-shrink-0">
-                      {task.isCompleted ? "●" : "○"}
-                    </span>
-                    <span className={task.isCompleted ? "line-through" : ""}>
-                      {task.title}
-                    </span>
-                  </button>
-                ))}
+                {tasks.slice(0, 5).map((task) => {
+                  const formatTime = (time: string | null | undefined) => {
+                    if (!time) return null;
+                    return time.substring(0, 5);
+                  };
+                  const timeDisplay = formatTime(task.timeStart);
+                  
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={(e) => handleTaskClick(e, task, date)}
+                      className={`
+                        w-full text-left text-xs py-0.5 px-1 
+                        hover:bg-muted transition-calm truncate
+                        flex items-center gap-1
+                        ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
+                      `}
+                    >
+                      <span className={`flex-shrink-0 ${task.isCompleted ? "text-primary" : ""}`}>
+                        {task.isCompleted ? "●" : "○"}
+                      </span>
+                      <span className={task.isCompleted ? "line-through" : ""}>
+                        {task.title}
+                      </span>
+                      {timeDisplay && (
+                        <span className="text-muted-foreground ml-auto">
+                          ({timeDisplay})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
                 {tasks.length > 5 && (
                   <span className="text-[10px] text-muted-foreground pl-1">
                     +{tasks.length - 5} more
