@@ -6,17 +6,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import FocusFilter from "@/components/FocusFilter";
+import TaskDetailModal from "@/components/TaskDetailModal";
 
 /**
  * Daily Page - Notion-style daily view with time slots
- * Shows tasks in a timeline format
+ * Shows tasks in a timeline format with time scheduling
  */
 
 interface DailyTask {
   id: string;
   commitmentId: string;
   title: string;
-  scheduledTime: string | null;
+  timeStart: string | null;
+  timeEnd: string | null;
   isCompleted: boolean;
   checkinId: string;
   goalIsFocus: boolean | null;
@@ -29,6 +31,8 @@ const Daily = () => {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   // Get date from URL or use today
   const dateParam = searchParams.get("date");
@@ -56,10 +60,10 @@ const Daily = () => {
       const weekStartStr = format(weekStart, "yyyy-MM-dd");
       const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
-      // Fetch all active commitments
+      // Fetch all active commitments with their default times
       const { data: commitments, error: commitError } = await supabase
         .from("weekly_commitments")
-        .select("*")
+        .select("*, default_time_start, default_time_end, flexible_time")
         .eq("user_id", user.id)
         .eq("is_active", true);
 
@@ -95,10 +99,10 @@ const Daily = () => {
           checkinData = newCheckin;
         }
 
-        // Check completion for this specific date
+        // Check completion for this specific date (includes time data)
         const { data: completion } = await supabase
           .from("commitment_completions")
-          .select("*")
+          .select("*, time_start, time_end, is_flexible_time")
           .eq("commitment_id", commitment.id)
           .eq("completed_date", dateKey)
           .maybeSingle();
@@ -114,11 +118,16 @@ const Daily = () => {
           goalIsFocus = goal?.is_focus ?? null;
         }
 
+        // Use completion time if exists, otherwise use default time from commitment
+        const timeStart = completion?.time_start || commitment.default_time_start || null;
+        const timeEnd = completion?.time_end || commitment.default_time_end || null;
+
         dailyTasks.push({
           id: `${commitment.id}-${dateKey}`,
           commitmentId: commitment.id,
           title: commitment.title,
-          scheduledTime: null, // Can be enhanced later with scheduled times
+          timeStart,
+          timeEnd,
           isCompleted: !!completion,
           checkinId: checkinData?.id || "",
           goalIsFocus,
@@ -138,68 +147,9 @@ const Daily = () => {
     fetchTasks();
   }, [fetchTasks]);
 
-  const toggleTaskCompletion = async (task: DailyTask) => {
-    if (!user) return;
-
-    try {
-      if (task.isCompleted) {
-        // Remove completion
-        await supabase
-          .from("commitment_completions")
-          .delete()
-          .eq("commitment_id", task.commitmentId)
-          .eq("completed_date", dateKey);
-
-        // Decrement actual_count
-        if (task.checkinId) {
-          const { data: checkin } = await supabase
-            .from("weekly_checkins")
-            .select("actual_count")
-            .eq("id", task.checkinId)
-            .single();
-
-          if (checkin) {
-            await supabase
-              .from("weekly_checkins")
-              .update({ actual_count: Math.max(0, checkin.actual_count - 1) })
-              .eq("id", task.checkinId);
-          }
-        }
-      } else {
-        // Add completion
-        await supabase.from("commitment_completions").insert({
-          user_id: user.id,
-          commitment_id: task.commitmentId,
-          completed_date: dateKey,
-        });
-
-        // Increment actual_count
-        if (task.checkinId) {
-          const { data: checkin } = await supabase
-            .from("weekly_checkins")
-            .select("actual_count")
-            .eq("id", task.checkinId)
-            .single();
-
-          if (checkin) {
-            await supabase
-              .from("weekly_checkins")
-              .update({ actual_count: checkin.actual_count + 1 })
-              .eq("id", task.checkinId);
-          }
-        }
-      }
-
-      // Update local state
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === task.id ? { ...t, isCompleted: !t.isCompleted } : t
-        )
-      );
-    } catch (error: any) {
-      console.error("Error toggling completion:", error);
-      toast.error("Failed to update task");
-    }
+  const handleTaskClick = (task: DailyTask) => {
+    setSelectedTask(task);
+    setModalOpen(true);
   };
 
   const goToPreviousDay = () => {
@@ -227,8 +177,33 @@ const Daily = () => {
     ? tasks.filter((t) => t.goalIsFocus === true)
     : tasks;
 
-  // Group tasks by time (for now, all unscheduled)
-  const timeSlots = ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+  // Separate tasks with scheduled time from unscheduled
+  const scheduledTasks = filteredTasks
+    .filter((t) => t.timeStart)
+    .sort((a, b) => (a.timeStart || "").localeCompare(b.timeStart || ""));
+  
+  const unscheduledTasks = filteredTasks.filter((t) => !t.timeStart);
+
+  // Generate time slots for the timeline
+  const timeSlots = [
+    "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
+    "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"
+  ];
+
+  // Group scheduled tasks by hour
+  const getTasksForSlot = (slot: string) => {
+    const slotHour = slot.split(":")[0];
+    return scheduledTasks.filter((t) => {
+      if (!t.timeStart) return false;
+      const taskHour = t.timeStart.split(":")[0];
+      return taskHour === slotHour;
+    });
+  };
+
+  const formatTime = (time: string | null) => {
+    if (!time) return "";
+    return time.substring(0, 5);
+  };
 
   if (loading) {
     return (
@@ -280,7 +255,6 @@ const Daily = () => {
         </button>
       </div>
 
-      {/* Tasks list (Notion-style) */}
       {filteredTasks.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground text-sm">
@@ -290,35 +264,92 @@ const Daily = () => {
           </p>
         </div>
       ) : (
-        <div className="border border-border">
-          {/* All tasks section */}
-          <div className="border-b border-border px-4 py-2 bg-muted/30">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Tasks
-            </span>
-          </div>
-          <div className="divide-y divide-border">
-            {filteredTasks.map((task) => (
-              <button
-                key={task.id}
-                onClick={() => toggleTaskCompletion(task)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-calm"
-              >
-                <span className="text-base">
-                  {task.isCompleted ? "●" : "○"}
+        <div className="space-y-6">
+          {/* Scheduled tasks - Timeline view */}
+          {scheduledTasks.length > 0 && (
+            <div className="border border-border">
+              <div className="border-b border-border px-4 py-2 bg-muted/30">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Scheduled
                 </span>
-                <span
-                  className={`text-sm ${
-                    task.isCompleted
-                      ? "text-muted-foreground line-through"
-                      : "text-foreground"
-                  }`}
-                >
-                  {task.title}
+              </div>
+              <div className="divide-y divide-border">
+                {timeSlots.map((slot) => {
+                  const slotTasks = getTasksForSlot(slot);
+                  if (slotTasks.length === 0) return null;
+                  
+                  return (
+                    <div key={slot} className="flex">
+                      {/* Time column */}
+                      <div className="w-16 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground border-r border-border bg-muted/10">
+                        {slot}
+                      </div>
+                      {/* Tasks column */}
+                      <div className="flex-1 py-1">
+                        {slotTasks.map((task) => (
+                          <button
+                            key={task.id}
+                            onClick={() => handleTaskClick(task)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 transition-calm"
+                          >
+                            <span className={`text-sm ${task.isCompleted ? "text-primary" : "text-muted-foreground"}`}>
+                              {task.isCompleted ? "●" : "○"}
+                            </span>
+                            <span
+                              className={`text-sm flex-1 ${
+                                task.isCompleted
+                                  ? "text-muted-foreground line-through"
+                                  : "text-foreground"
+                              }`}
+                            >
+                              {task.title}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatTime(task.timeStart)}
+                              {task.timeEnd && ` – ${formatTime(task.timeEnd)}`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Unscheduled tasks */}
+          {unscheduledTasks.length > 0 && (
+            <div className="border border-border">
+              <div className="border-b border-border px-4 py-2 bg-muted/30">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  No Time Assigned
                 </span>
-              </button>
-            ))}
-          </div>
+              </div>
+              <div className="divide-y divide-border">
+                {unscheduledTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => handleTaskClick(task)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-calm"
+                  >
+                    <span className={`text-base ${task.isCompleted ? "text-primary" : "text-muted-foreground"}`}>
+                      {task.isCompleted ? "●" : "○"}
+                    </span>
+                    <span
+                      className={`text-sm ${
+                        task.isCompleted
+                          ? "text-muted-foreground line-through"
+                          : "text-foreground"
+                      }`}
+                    >
+                      {task.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -331,6 +362,15 @@ const Daily = () => {
           ← Back to Weekly View
         </button>
       </div>
+
+      {/* Task detail modal */}
+      <TaskDetailModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        task={selectedTask}
+        date={selectedDate}
+        onUpdate={fetchTasks}
+      />
     </div>
   );
 };

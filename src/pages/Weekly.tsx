@@ -24,6 +24,8 @@ interface DayTask {
   commitmentId: string;
   title: string;
   isCompleted: boolean;
+  timeStart: string | null;
+  timeEnd: string | null;
 }
 
 interface CommitmentData {
@@ -171,8 +173,22 @@ const Weekly = () => {
 
       setCommitments(enrichedCommitments);
 
-      // Fetch completions for each day of the week
+      // Fetch completions for each day of the week with time data
       const tasksMap: Record<string, DayTask[]> = {};
+      
+      // Also fetch default times from commitments
+      const { data: commitmentsWithTimes } = await supabase
+        .from("weekly_commitments")
+        .select("id, default_time_start, default_time_end")
+        .eq("user_id", user.id);
+      
+      const defaultTimesMap: Record<string, { start: string | null; end: string | null }> = {};
+      (commitmentsWithTimes || []).forEach((c: any) => {
+        defaultTimesMap[c.id] = {
+          start: c.default_time_start,
+          end: c.default_time_end,
+        };
+      });
       
       for (let i = 0; i < 7; i++) {
         const date = addDays(weekStart, i);
@@ -182,16 +198,20 @@ const Weekly = () => {
         for (const commitment of enrichedCommitments) {
           const { data: completion } = await supabase
             .from("commitment_completions")
-            .select("*")
+            .select("*, time_start, time_end")
             .eq("commitment_id", commitment.id)
             .eq("completed_date", dateKey)
             .maybeSingle();
 
+          const defaults = defaultTimesMap[commitment.id] || { start: null, end: null };
+          
           tasksMap[dateKey].push({
             id: `${commitment.id}-${dateKey}`,
             commitmentId: commitment.id,
             title: commitment.title,
             isCompleted: !!completion,
+            timeStart: completion?.time_start || defaults.start,
+            timeEnd: completion?.time_end || defaults.end,
           });
         }
       }

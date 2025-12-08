@@ -20,6 +20,9 @@ export type Database = {
           completed_date: string
           created_at: string | null
           id: string
+          is_flexible_time: boolean | null
+          time_end: string | null
+          time_start: string | null
           user_id: string
         }
         Insert: {
@@ -27,6 +30,9 @@ export type Database = {
           completed_date?: string
           created_at?: string | null
           id?: string
+          is_flexible_time?: boolean | null
+          time_end?: string | null
+          time_start?: string | null
           user_id: string
         }
         Update: {
@@ -34,6 +40,9 @@ export type Database = {
           completed_date?: string
           created_at?: string | null
           id?: string
+          is_flexible_time?: boolean | null
+          time_end?: string | null
+          time_start?: string | null
           user_id?: string
         }
         Relationships: [
@@ -42,6 +51,44 @@ export type Database = {
             columns: ["commitment_id"]
             isOneToOne: false
             referencedRelation: "weekly_commitments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_task_instances: {
+        Row: {
+          completion_id: string
+          created_at: string
+          id: string
+          is_completed: boolean | null
+          time_end: string | null
+          time_start: string | null
+          user_id: string
+        }
+        Insert: {
+          completion_id: string
+          created_at?: string
+          id?: string
+          is_completed?: boolean | null
+          time_end?: string | null
+          time_start?: string | null
+          user_id: string
+        }
+        Update: {
+          completion_id?: string
+          created_at?: string
+          id?: string
+          is_completed?: boolean | null
+          time_end?: string | null
+          time_start?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_task_instances_completion_id_fkey"
+            columns: ["completion_id"]
+            isOneToOne: false
+            referencedRelation: "commitment_completions"
             referencedColumns: ["id"]
           },
         ]
@@ -265,6 +312,9 @@ export type Database = {
         Row: {
           commitment_type: Database["public"]["Enums"]["commitment_type"]
           created_at: string | null
+          default_time_end: string | null
+          default_time_start: string | null
+          flexible_time: boolean | null
           frequency_json: Json | null
           goal_id: string | null
           id: string
@@ -276,6 +326,9 @@ export type Database = {
         Insert: {
           commitment_type?: Database["public"]["Enums"]["commitment_type"]
           created_at?: string | null
+          default_time_end?: string | null
+          default_time_start?: string | null
+          flexible_time?: boolean | null
           frequency_json?: Json | null
           goal_id?: string | null
           id?: string
@@ -287,6 +340,9 @@ export type Database = {
         Update: {
           commitment_type?: Database["public"]["Enums"]["commitment_type"]
           created_at?: string | null
+          default_time_end?: string | null
+          default_time_start?: string | null
+          flexible_time?: boolean | null
           frequency_json?: Json | null
           goal_id?: string | null
           id?: string
