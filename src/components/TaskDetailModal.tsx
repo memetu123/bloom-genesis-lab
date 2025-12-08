@@ -241,12 +241,22 @@ const TaskDetailModal = ({
     setSaving(true);
 
     try {
-      if (taskType === "recurring" && task.commitmentId) {
+      const isCurrentlyRecurring = task.commitmentId !== null;
+      
+      if (isCurrentlyRecurring && task.commitmentId) {
         // Convert recurring to independent
         await convertToIndependent(task.commitmentId, dateKey);
         toast.success("Converted to one-time task");
-      } else if (taskType === "independent") {
-        // Convert independent to recurring
+      } else {
+        // Convert independent to recurring - need repetition rules first
+        if (!showRepetitionEditor) {
+          // Show the repetition editor first so user can configure rules
+          setShowRepetitionEditor(true);
+          setSaving(false);
+          return;
+        }
+        
+        // Now actually convert with the configured rules
         const taskIdParts = task.id.split("-");
         const actualId = taskIdParts[0];
         
@@ -321,26 +331,30 @@ const TaskDetailModal = ({
             </div>
           )}
 
-          {/* Task type indicator */}
-          <div className="flex items-center gap-2 text-xs">
-            <span
-              className={`px-2 py-0.5 rounded ${
-                isRecurring
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted text-muted-foreground"
-              }`}
+          {/* Task type indicator and conversion */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-xs">
+              <span
+                className={`px-2 py-0.5 rounded ${
+                  isRecurring
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {isRecurring ? "Recurring" : "One-time"}
+              </span>
+            </div>
+            
+            {/* Convert button - direct action */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleConvertTaskType}
+              disabled={saving}
+              className="w-full text-xs"
             >
-              {isRecurring ? "Recurring" : "One-time"}
-            </span>
-            <button
-              onClick={() => {
-                setTaskType(isRecurring ? "independent" : "recurring");
-                setShowRepetitionEditor(true);
-              }}
-              className="text-primary hover:underline"
-            >
-              Convert to {isRecurring ? "one-time" : "recurring"}
-            </button>
+              {saving ? "Converting..." : `Convert to ${isRecurring ? "one-time" : "recurring"}`}
+            </Button>
           </div>
 
           {/* Completion toggle */}
