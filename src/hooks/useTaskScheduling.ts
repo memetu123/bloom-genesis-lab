@@ -203,7 +203,127 @@ export const useTaskScheduling = () => {
   );
 
   /**
-   * Convert a recurring task to independent (keep only today's instance)
+   * Detach a single day's instance from recurring series (does NOT affect other days)
+   * The weekly commitment remains active for other days
+   */
+  const detachInstance = useCallback(
+    async (commitmentId: string, detachDate: string) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Get the commitment details
+      const { data: commitment, error: fetchError } = await supabase
+        .from("weekly_commitments")
+        .select("*")
+        .eq("id", commitmentId)
+        .single();
+
+      if (fetchError || !commitment) throw fetchError;
+
+      // Check if there's an existing completion for this date
+      const { data: existingCompletion } = await supabase
+        .from("commitment_completions")
+        .select("*")
+        .eq("commitment_id", commitmentId)
+        .eq("completed_date", detachDate)
+        .maybeSingle();
+
+      if (existingCompletion) {
+        // Update existing completion to be detached (but keep commitment_id for reference)
+        await supabase
+          .from("commitment_completions")
+          .update({
+            is_detached: true,
+            task_type: "independent",
+          })
+          .eq("id", existingCompletion.id);
+      } else {
+        // Create new detached completion for this day
+        const { data: newCompletion } = await supabase
+          .from("commitment_completions")
+          .insert({
+            user_id: user.id,
+            commitment_id: commitmentId, // Keep reference to original
+            completed_date: detachDate,
+            task_type: "independent",
+            is_detached: true,
+            title: commitment.title,
+            time_start: commitment.default_time_start,
+            time_end: commitment.default_time_end,
+            is_flexible_time: commitment.flexible_time,
+          })
+          .select()
+          .single();
+
+        // Create a daily_task_instance with is_completed = false
+        if (newCompletion) {
+          await supabase.from("daily_task_instances").insert({
+            user_id: user.id,
+            completion_id: newCompletion.id,
+            is_completed: false,
+            time_start: commitment.default_time_start,
+            time_end: commitment.default_time_end,
+          });
+        }
+      }
+
+      // NO deletion of other days
+      // NO deactivation of weekly commitment
+    },
+    [user]
+  );
+
+  /**
+   * Update time for a single day's instance (without detaching)
+   */
+  const updateInstanceTime = useCallback(
+    async (
+      commitmentId: string,
+      instanceDate: string,
+      timeStart: string | null,
+      timeEnd: string | null
+    ) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Check if there's an existing completion for this date
+      const { data: existingCompletion } = await supabase
+        .from("commitment_completions")
+        .select("*")
+        .eq("commitment_id", commitmentId)
+        .eq("completed_date", instanceDate)
+        .maybeSingle();
+
+      if (existingCompletion) {
+        // Update the time on existing completion
+        await supabase
+          .from("commitment_completions")
+          .update({
+            time_start: timeStart,
+            time_end: timeEnd,
+            is_flexible_time: !timeStart,
+          })
+          .eq("id", existingCompletion.id);
+      } else {
+        // Create a placeholder completion with the time override
+        await supabase
+          .from("commitment_completions")
+          .insert({
+            user_id: user.id,
+            commitment_id: commitmentId,
+            completed_date: instanceDate,
+            task_type: "recurring",
+            is_detached: false,
+            time_start: timeStart,
+            time_end: timeEnd,
+            is_flexible_time: !timeStart,
+          });
+      }
+    },
+    [user]
+  );
+
+  /**
+   * Convert a recurring task to fully independent (legacy - deactivates the series)
+   * Use detachInstance for single-day detachment instead
    */
   const convertToIndependent = useCallback(
     async (commitmentId: string, keepDate: string) => {
@@ -233,6 +353,7 @@ export const useTaskScheduling = () => {
           .update({
             commitment_id: null,
             task_type: "independent",
+            is_detached: true,
             title: commitment.title,
           })
           .eq("id", existingCompletion.id);
@@ -245,6 +366,7 @@ export const useTaskScheduling = () => {
             commitment_id: null,
             completed_date: keepDate,
             task_type: "independent",
+            is_detached: true,
             title: commitment.title,
             time_start: commitment.default_time_start,
             time_end: commitment.default_time_end,
@@ -265,14 +387,7 @@ export const useTaskScheduling = () => {
         }
       }
 
-      // Delete future completions for this commitment
-      await supabase
-        .from("commitment_completions")
-        .delete()
-        .eq("commitment_id", commitmentId)
-        .gt("completed_date", keepDate);
-
-      // Deactivate the weekly commitment
+      // Deactivate the weekly commitment (full conversion only)
       await supabase
         .from("weekly_commitments")
         .update({ is_active: false })
@@ -309,6 +424,8 @@ export const useTaskScheduling = () => {
     generateCheckins,
     convertToRecurring,
     convertToIndependent,
+    detachInstance,
+    updateInstanceTime,
     updateRepetitionRules,
   };
 };

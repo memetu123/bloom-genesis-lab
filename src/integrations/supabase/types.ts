@@ -21,6 +21,7 @@ export type Database = {
           created_at: string | null
           id: string
           instance_number: number | null
+          is_detached: boolean | null
           is_flexible_time: boolean | null
           task_type: string | null
           time_end: string | null
@@ -34,6 +35,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           instance_number?: number | null
+          is_detached?: boolean | null
           is_flexible_time?: boolean | null
           task_type?: string | null
           time_end?: string | null
@@ -47,6 +49,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           instance_number?: number | null
+          is_detached?: boolean | null
           is_flexible_time?: boolean | null
           task_type?: string | null
           time_end?: string | null

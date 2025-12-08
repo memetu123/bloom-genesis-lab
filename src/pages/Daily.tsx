@@ -27,6 +27,7 @@ interface DailyTask {
   instanceNumber?: number;
   totalInstances?: number;
   goalIsFocus: boolean | null;
+  isDetached?: boolean;
 }
 
 const Daily = () => {
@@ -106,13 +107,18 @@ const Daily = () => {
           checkinData = newCheckin;
         }
 
-        // Check completion for this specific date
+        // Check completion for this specific date (including detached instances)
         const { data: completion } = await supabase
           .from("commitment_completions")
-          .select("*, time_start, time_end, is_flexible_time, instance_number")
+          .select("*, time_start, time_end, is_flexible_time, instance_number, is_detached")
           .eq("commitment_id", commitment.id)
           .eq("completed_date", dateKey)
           .maybeSingle();
+
+        // Skip if this instance is detached (it will be fetched separately)
+        if (completion?.is_detached) {
+          continue;
+        }
 
         // Get goal focus status
         let goalIsFocus: boolean | null = null;
@@ -144,14 +150,13 @@ const Daily = () => {
         });
       }
 
-      // Fetch independent tasks for this date
+      // Fetch independent tasks for this date (including detached instances)
       const { data: independentTasks } = await supabase
         .from("commitment_completions")
-        .select("*")
+        .select("*, is_detached")
         .eq("user_id", user.id)
         .eq("completed_date", dateKey)
-        .eq("task_type", "independent")
-        .is("commitment_id", null);
+        .or("task_type.eq.independent,is_detached.eq.true");
 
       for (const task of independentTasks || []) {
         // Check if there's a daily_task_instance for completion status
@@ -163,13 +168,14 @@ const Daily = () => {
 
         dailyTasks.push({
           id: task.id,
-          commitmentId: null,
+          commitmentId: task.is_detached ? task.commitment_id : null,
           title: task.title || "Untitled Task",
           timeStart: task.time_start,
           timeEnd: task.time_end,
-          isCompleted: taskInstance?.is_completed ?? false, // Use actual completion status
+          isCompleted: taskInstance?.is_completed ?? false,
           taskType: "independent",
           goalIsFocus: null,
+          isDetached: task.is_detached ?? false,
         });
       }
 

@@ -16,6 +16,7 @@ interface DayTask {
   taskType?: 'recurring' | 'independent';
   instanceNumber?: number;
   totalInstances?: number;
+  isDetached?: boolean;
 }
 
 interface WeekDay {
@@ -160,8 +161,11 @@ const NotionWeekCalendar = ({
                           ({timeDisplay})
                         </span>
                       )}
-                      {task.taskType === "independent" && (
+                      {task.taskType === "independent" && !task.isDetached && (
                         <span className="text-[9px] bg-muted px-1 rounded ml-1">1x</span>
+                      )}
+                      {task.isDetached && (
+                        <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1">detached</span>
                       )}
                     </button>
                   );
