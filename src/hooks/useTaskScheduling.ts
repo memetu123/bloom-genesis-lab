@@ -237,17 +237,32 @@ export const useTaskScheduling = () => {
           })
           .eq("id", existingCompletion.id);
       } else {
-        // Create new independent completion
-        await supabase.from("commitment_completions").insert({
-          user_id: user.id,
-          commitment_id: null,
-          completed_date: keepDate,
-          task_type: "independent",
-          title: commitment.title,
-          time_start: commitment.default_time_start,
-          time_end: commitment.default_time_end,
-          is_flexible_time: commitment.flexible_time,
-        });
+        // Create new independent completion (not completed yet)
+        const { data: newCompletion } = await supabase
+          .from("commitment_completions")
+          .insert({
+            user_id: user.id,
+            commitment_id: null,
+            completed_date: keepDate,
+            task_type: "independent",
+            title: commitment.title,
+            time_start: commitment.default_time_start,
+            time_end: commitment.default_time_end,
+            is_flexible_time: commitment.flexible_time,
+          })
+          .select()
+          .single();
+
+        // Create a daily_task_instance with is_completed = false
+        if (newCompletion) {
+          await supabase.from("daily_task_instances").insert({
+            user_id: user.id,
+            completion_id: newCompletion.id,
+            is_completed: false,
+            time_start: commitment.default_time_start,
+            time_end: commitment.default_time_end,
+          });
+        }
       }
 
       // Delete future completions for this commitment
