@@ -145,15 +145,15 @@ const NotionWeekCalendar = ({
                       onClick={(e) => handleTaskClick(e, task, date)}
                       className={`
                         w-full text-left text-xs py-0.5 px-1 
-                        hover:bg-muted transition-calm truncate
-                        flex items-center gap-1
+                        hover:bg-muted transition-calm
+                        flex items-start gap-1
                         ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
                       `}
                     >
                       <span className={`flex-shrink-0 ${task.isCompleted ? "text-primary" : ""}`}>
                         {task.isCompleted ? "●" : "○"}
                       </span>
-                      <span className={task.isCompleted ? "line-through" : ""}>
+                      <span className={`break-words ${task.isCompleted ? "line-through" : ""}`}>
                         {task.title}{instanceLabel}
                       </span>
                       {timeDisplay && (
