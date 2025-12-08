@@ -154,13 +154,20 @@ const Daily = () => {
         .is("commitment_id", null);
 
       for (const task of independentTasks || []) {
+        // Check if there's a daily_task_instance for completion status
+        const { data: taskInstance } = await supabase
+          .from("daily_task_instances")
+          .select("is_completed")
+          .eq("completion_id", task.id)
+          .maybeSingle();
+
         dailyTasks.push({
           id: task.id,
           commitmentId: null,
           title: task.title || "Untitled Task",
           timeStart: task.time_start,
           timeEnd: task.time_end,
-          isCompleted: true, // Independent tasks are stored as completions
+          isCompleted: taskInstance?.is_completed ?? false, // Use actual completion status
           taskType: "independent",
           goalIsFocus: null,
         });
