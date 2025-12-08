@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import FocusFilter from "@/components/FocusFilter";
 import TaskDetailModal from "@/components/TaskDetailModal";
+import TaskCreateModal from "@/components/TaskCreateModal";
+import type { TaskType } from "@/types/scheduling";
 
 /**
  * Daily Page - Notion-style daily view with time slots
@@ -15,12 +18,14 @@ import TaskDetailModal from "@/components/TaskDetailModal";
 
 interface DailyTask {
   id: string;
-  commitmentId: string;
+  commitmentId: string | null;
   title: string;
   timeStart: string | null;
   timeEnd: string | null;
   isCompleted: boolean;
-  checkinId: string;
+  taskType: TaskType;
+  instanceNumber?: number;
+  totalInstances?: number;
   goalIsFocus: boolean | null;
 }
 
@@ -29,10 +34,12 @@ const Daily = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [tasks, setTasks] = useState<DailyTask[]>([]);
+  const [goals, setGoals] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Get date from URL or use today
   const dateParam = searchParams.get("date");
@@ -60,10 +67,10 @@ const Daily = () => {
       const weekStartStr = format(weekStart, "yyyy-MM-dd");
       const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
-      // Fetch all active commitments with their default times
+      // Fetch all active recurring commitments with their default times
       const { data: commitments, error: commitError } = await supabase
         .from("weekly_commitments")
-        .select("*, default_time_start, default_time_end, flexible_time")
+        .select("*, default_time_start, default_time_end, flexible_time, repeat_times_per_period")
         .eq("user_id", user.id)
         .eq("is_active", true);
 
@@ -99,10 +106,10 @@ const Daily = () => {
           checkinData = newCheckin;
         }
 
-        // Check completion for this specific date (includes time data)
+        // Check completion for this specific date
         const { data: completion } = await supabase
           .from("commitment_completions")
-          .select("*, time_start, time_end, is_flexible_time")
+          .select("*, time_start, time_end, is_flexible_time, instance_number")
           .eq("commitment_id", commitment.id)
           .eq("completed_date", dateKey)
           .maybeSingle();
@@ -121,6 +128,7 @@ const Daily = () => {
         // Use completion time if exists, otherwise use default time from commitment
         const timeStart = completion?.time_start || commitment.default_time_start || null;
         const timeEnd = completion?.time_end || commitment.default_time_end || null;
+        const timesPerPeriod = commitment.repeat_times_per_period || 1;
 
         dailyTasks.push({
           id: `${commitment.id}-${dateKey}`,
@@ -129,8 +137,32 @@ const Daily = () => {
           timeStart,
           timeEnd,
           isCompleted: !!completion,
-          checkinId: checkinData?.id || "",
+          taskType: "recurring",
+          instanceNumber: completion?.instance_number || 1,
+          totalInstances: timesPerPeriod,
           goalIsFocus,
+        });
+      }
+
+      // Fetch independent tasks for this date
+      const { data: independentTasks } = await supabase
+        .from("commitment_completions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("completed_date", dateKey)
+        .eq("task_type", "independent")
+        .is("commitment_id", null);
+
+      for (const task of independentTasks || []) {
+        dailyTasks.push({
+          id: task.id,
+          commitmentId: null,
+          title: task.title || "Untitled Task",
+          timeStart: task.time_start,
+          timeEnd: task.time_end,
+          isCompleted: true, // Independent tasks are stored as completions
+          taskType: "independent",
+          goalIsFocus: null,
         });
       }
 
@@ -146,6 +178,20 @@ const Daily = () => {
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Fetch goals for create modal
+  useEffect(() => {
+    if (!user) return;
+    const fetchGoals = async () => {
+      const { data } = await supabase
+        .from("goals")
+        .select("id, title")
+        .eq("user_id", user.id)
+        .eq("goal_type", "ninety_day");
+      setGoals(data || []);
+    };
+    fetchGoals();
+  }, [user]);
 
   const handleTaskClick = (task: DailyTask) => {
     setSelectedTask(task);
@@ -174,7 +220,7 @@ const Daily = () => {
 
   // Filter tasks based on focus toggle
   const filteredTasks = showFocusedOnly
-    ? tasks.filter((t) => t.goalIsFocus === true)
+    ? tasks.filter((t) => t.taskType === "independent" || t.goalIsFocus === true)
     : tasks;
 
   // Separate tasks with scheduled time from unscheduled
@@ -205,6 +251,13 @@ const Daily = () => {
     return time.substring(0, 5);
   };
 
+  const getInstanceLabel = (task: DailyTask) => {
+    if (task.totalInstances && task.totalInstances > 1) {
+      return ` #${task.instanceNumber || 1}`;
+    }
+    return "";
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-3xl">
@@ -218,10 +271,21 @@ const Daily = () => {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-medium text-foreground">Daily View</h1>
-        <FocusFilter
-          showFocusedOnly={showFocusedOnly}
-          onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-        />
+        <div className="flex items-center gap-2">
+          <FocusFilter
+            showFocusedOnly={showFocusedOnly}
+            onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
+          />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8"
+            onClick={() => setCreateModalOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add
+          </Button>
+        </div>
       </div>
 
       {/* Date navigation */}
@@ -257,11 +321,14 @@ const Daily = () => {
 
       {filteredTasks.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm mb-4">
             {showFocusedOnly
               ? "No focused tasks for this day"
               : "No tasks for this day"}
           </p>
+          <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(true)}>
+            Add a task
+          </Button>
         </div>
       ) : (
         <div className="space-y-6">
@@ -303,11 +370,17 @@ const Daily = () => {
                               }`}
                             >
                               {task.title}
+                              {getInstanceLabel(task)}
                             </span>
                             <span className="text-xs text-muted-foreground">
                               {formatTime(task.timeStart)}
                               {task.timeEnd && ` – ${formatTime(task.timeEnd)}`}
                             </span>
+                            {task.taskType === "independent" && (
+                              <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                1x
+                              </span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -337,14 +410,20 @@ const Daily = () => {
                       {task.isCompleted ? "●" : "○"}
                     </span>
                     <span
-                      className={`text-sm ${
+                      className={`text-sm flex-1 ${
                         task.isCompleted
                           ? "text-muted-foreground line-through"
                           : "text-foreground"
                       }`}
                     >
                       {task.title}
+                      {getInstanceLabel(task)}
                     </span>
+                    {task.taskType === "independent" && (
+                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                        1x
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -362,6 +441,16 @@ const Daily = () => {
           ← Back to Weekly View
         </button>
       </div>
+
+      {/* Task create modal */}
+      <TaskCreateModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        defaultDate={selectedDate}
+        defaultTaskType="independent"
+        goals={goals}
+        onSuccess={fetchTasks}
+      />
 
       {/* Task detail modal */}
       <TaskDetailModal

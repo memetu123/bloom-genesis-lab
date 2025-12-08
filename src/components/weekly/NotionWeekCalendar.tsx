@@ -8,11 +8,14 @@ import { useNavigate } from "react-router-dom";
 
 interface DayTask {
   id: string;
-  commitmentId: string;
+  commitmentId: string | null;
   title: string;
   isCompleted: boolean;
   timeStart?: string | null;
   timeEnd?: string | null;
+  taskType?: 'recurring' | 'independent';
+  instanceNumber?: number;
+  totalInstances?: number;
 }
 
 interface WeekDay {
@@ -117,6 +120,9 @@ const NotionWeekCalendar = ({
                     return time.substring(0, 5);
                   };
                   const timeDisplay = formatTime(task.timeStart);
+                  const instanceLabel = task.totalInstances && task.totalInstances > 1
+                    ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
+                    : "";
                   
                   return (
                     <button
@@ -133,12 +139,15 @@ const NotionWeekCalendar = ({
                         {task.isCompleted ? "●" : "○"}
                       </span>
                       <span className={task.isCompleted ? "line-through" : ""}>
-                        {task.title}
+                        {task.title}{instanceLabel}
                       </span>
                       {timeDisplay && (
                         <span className="text-muted-foreground ml-auto">
                           ({timeDisplay})
                         </span>
+                      )}
+                      {task.taskType === "independent" && (
+                        <span className="text-[9px] bg-muted px-1 rounded ml-1">1x</span>
                       )}
                     </button>
                   );

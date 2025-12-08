@@ -16,33 +16,42 @@ export type Database = {
     Tables: {
       commitment_completions: {
         Row: {
-          commitment_id: string
+          commitment_id: string | null
           completed_date: string
           created_at: string | null
           id: string
+          instance_number: number | null
           is_flexible_time: boolean | null
+          task_type: string | null
           time_end: string | null
           time_start: string | null
+          title: string | null
           user_id: string
         }
         Insert: {
-          commitment_id: string
+          commitment_id?: string | null
           completed_date?: string
           created_at?: string | null
           id?: string
+          instance_number?: number | null
           is_flexible_time?: boolean | null
+          task_type?: string | null
           time_end?: string | null
           time_start?: string | null
+          title?: string | null
           user_id: string
         }
         Update: {
-          commitment_id?: string
+          commitment_id?: string | null
           completed_date?: string
           created_at?: string | null
           id?: string
+          instance_number?: number | null
           is_flexible_time?: boolean | null
+          task_type?: string | null
           time_end?: string | null
           time_start?: string | null
+          title?: string | null
           user_id?: string
         }
         Relationships: [
@@ -319,6 +328,10 @@ export type Database = {
           goal_id: string | null
           id: string
           is_active: boolean | null
+          repeat_days_of_week: string[] | null
+          repeat_frequency: string | null
+          repeat_times_per_period: number | null
+          task_type: string | null
           title: string
           updated_at: string | null
           user_id: string
@@ -333,6 +346,10 @@ export type Database = {
           goal_id?: string | null
           id?: string
           is_active?: boolean | null
+          repeat_days_of_week?: string[] | null
+          repeat_frequency?: string | null
+          repeat_times_per_period?: number | null
+          task_type?: string | null
           title: string
           updated_at?: string | null
           user_id: string
@@ -347,6 +364,10 @@ export type Database = {
           goal_id?: string | null
           id?: string
           is_active?: boolean | null
+          repeat_days_of_week?: string[] | null
+          repeat_frequency?: string | null
+          repeat_times_per_period?: number | null
+          task_type?: string | null
           title?: string
           updated_at?: string | null
           user_id?: string

@@ -4,29 +4,30 @@ import { ChevronRight, ChevronLeft, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "date-fns";
 import FocusFilter from "@/components/FocusFilter";
 import NotionWeekCalendar from "@/components/weekly/NotionWeekCalendar";
 import WeeklyTotals from "@/components/weekly/WeeklyTotals";
 import TaskDetailModal from "@/components/TaskDetailModal";
+import TaskCreateModal from "@/components/TaskCreateModal";
+import type { TaskType } from "@/types/scheduling";
 
 /**
  * Weekly Page - Notion-style weekly view with calendar grid
- * Tasks appear inside each day cell
+ * Tasks appear inside each day cell (both recurring and independent)
  */
 
 interface DayTask {
   id: string;
-  commitmentId: string;
+  commitmentId: string | null;
   title: string;
   isCompleted: boolean;
   timeStart: string | null;
   timeEnd: string | null;
+  taskType: TaskType;
+  instanceNumber?: number;
+  totalInstances?: number;
 }
 
 interface CommitmentData {
@@ -66,12 +67,8 @@ const Weekly = () => {
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [goals, setGoals] = useState<GoalOption[]>([]);
 
-  // Dialog state for adding commitment
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [selectedGoalId, setSelectedGoalId] = useState("");
-  const [timesPerWeek, setTimesPerWeek] = useState("3");
-  const [saving, setSaving] = useState(false);
+  // Task create modal state
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Task detail modal state
   const [selectedTask, setSelectedTask] = useState<DayTask | null>(null);
@@ -130,7 +127,10 @@ const Weekly = () => {
     try {
       const weekStart = currentWeekStart;
       const weekEnd = getWeekEnd(weekStart);
+      const weekStartStr = format(weekStart, "yyyy-MM-dd");
+      const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
+      // Fetch all active recurring commitments
       const { data: rawCommitments, error: commitError } = await supabase
         .from("weekly_commitments")
         .select("*")
@@ -179,37 +179,39 @@ const Weekly = () => {
 
       setCommitments(enrichedCommitments);
 
-      // Fetch completions for each day of the week with time data
-      const tasksMap: Record<string, DayTask[]> = {};
-      
-      // Also fetch default times from commitments
+      // Build default times map
       const { data: commitmentsWithTimes } = await supabase
         .from("weekly_commitments")
-        .select("id, default_time_start, default_time_end")
+        .select("id, default_time_start, default_time_end, repeat_frequency, repeat_times_per_period")
         .eq("user_id", user.id);
       
-      const defaultTimesMap: Record<string, { start: string | null; end: string | null }> = {};
+      const defaultTimesMap: Record<string, { start: string | null; end: string | null; timesPerPeriod: number }> = {};
       (commitmentsWithTimes || []).forEach((c: any) => {
         defaultTimesMap[c.id] = {
           start: c.default_time_start,
           end: c.default_time_end,
+          timesPerPeriod: c.repeat_times_per_period || 1,
         };
       });
+
+      // Build tasks for each day
+      const tasksMap: Record<string, DayTask[]> = {};
       
       for (let i = 0; i < 7; i++) {
         const date = addDays(weekStart, i);
         const dateKey = format(date, "yyyy-MM-dd");
         tasksMap[dateKey] = [];
 
+        // Add recurring tasks
         for (const commitment of enrichedCommitments) {
           const { data: completion } = await supabase
             .from("commitment_completions")
-            .select("*, time_start, time_end")
+            .select("*, time_start, time_end, instance_number")
             .eq("commitment_id", commitment.id)
             .eq("completed_date", dateKey)
             .maybeSingle();
 
-          const defaults = defaultTimesMap[commitment.id] || { start: null, end: null };
+          const defaults = defaultTimesMap[commitment.id] || { start: null, end: null, timesPerPeriod: 1 };
           
           tasksMap[dateKey].push({
             id: `${commitment.id}-${dateKey}`,
@@ -218,6 +220,30 @@ const Weekly = () => {
             isCompleted: !!completion,
             timeStart: completion?.time_start || defaults.start,
             timeEnd: completion?.time_end || defaults.end,
+            taskType: "recurring",
+            instanceNumber: completion?.instance_number || 1,
+            totalInstances: defaults.timesPerPeriod,
+          });
+        }
+
+        // Fetch independent tasks for this date
+        const { data: independentTasks } = await supabase
+          .from("commitment_completions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("completed_date", dateKey)
+          .eq("task_type", "independent")
+          .is("commitment_id", null);
+
+        for (const task of independentTasks || []) {
+          tasksMap[dateKey].push({
+            id: task.id,
+            commitmentId: null,
+            title: task.title || "Untitled Task",
+            isCompleted: true, // Independent tasks in completions are marked as existing
+            timeStart: task.time_start,
+            timeEnd: task.time_end,
+            taskType: "independent",
           });
         }
       }
@@ -225,7 +251,7 @@ const Weekly = () => {
       setTasksByDate(tasksMap);
     } catch (error: any) {
       console.error("Error fetching commitments:", error);
-      toast.error("Failed to load commitments");
+      toast.error("Failed to load tasks");
     } finally {
       setLoading(false);
     }
@@ -249,42 +275,7 @@ const Weekly = () => {
     fetchGoals();
   }, [user]);
 
-  const handleAddCommitment = async () => {
-    if (!user || !newTitle.trim()) return;
-    setSaving(true);
-
-    try {
-      const { error } = await supabase
-        .from("weekly_commitments")
-        .insert({
-          user_id: user.id,
-          title: newTitle.trim(),
-          goal_id: selectedGoalId || null,
-          frequency_json: { times_per_week: parseInt(timesPerWeek) || 3 },
-          commitment_type: "habit",
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setNewTitle("");
-      setSelectedGoalId("");
-      setTimesPerWeek("3");
-      setDialogOpen(false);
-      toast.success("Commitment created");
-      fetchCommitments();
-    } catch (error: any) {
-      console.error("Error adding commitment:", error);
-      toast.error("Failed to add commitment");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleTaskClick = (task: DayTask, date: Date) => {
-    // Open task detail modal instead of toggling completion directly
     setSelectedTask(task);
     setSelectedTaskDate(date);
     setTaskModalOpen(true);
@@ -304,10 +295,13 @@ const Weekly = () => {
   const focusedCommitmentIds = new Set(filteredCommitments.map(c => c.id));
   
   Object.entries(tasksByDate).forEach(([dateKey, tasks]) => {
+    // Include recurring tasks from focused commitments AND all independent tasks
     filteredTasksByDate[dateKey] = tasks.filter(t => 
-      focusedCommitmentIds.has(t.commitmentId)
+      t.taskType === "independent" || focusedCommitmentIds.has(t.commitmentId || "")
     );
   });
+
+  const hasAnyTasks = Object.values(filteredTasksByDate).some(tasks => tasks.length > 0);
 
   if (loading) {
     return (
@@ -327,68 +321,15 @@ const Weekly = () => {
             showFocusedOnly={showFocusedOnly}
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8">
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                Add
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Weekly Commitment</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 mt-4">
-                <div>
-                  <Label htmlFor="title">What will you commit to?</Label>
-                  <Input
-                    id="title"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="e.g., Exercise, Read, Meditate"
-                  />
-                </div>
-                <div>
-                  <Label>Times per week</Label>
-                  <Select value={timesPerWeek} onValueChange={setTimesPerWeek}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                        <SelectItem key={n} value={n.toString()}>
-                          {n}x per week
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Link to goal (optional)</Label>
-                  <Select value={selectedGoalId || "none"} onValueChange={(val) => setSelectedGoalId(val === "none" ? "" : val)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="No goal linked" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No goal linked</SelectItem>
-                      {goals.map(goal => (
-                        <SelectItem key={goal.id} value={goal.id}>
-                          {goal.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button 
-                  onClick={handleAddCommitment} 
-                  disabled={saving || !newTitle.trim()}
-                  className="w-full"
-                >
-                  {saving ? "Saving..." : "Add Commitment"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8"
+            onClick={() => setCreateModalOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add
+          </Button>
         </div>
       </div>
 
@@ -423,16 +364,16 @@ const Weekly = () => {
         </button>
       </div>
 
-      {filteredCommitments.length === 0 ? (
+      {!hasAnyTasks && filteredCommitments.length === 0 ? (
         <div className="border border-border p-12 text-center">
           <p className="text-muted-foreground text-sm mb-4">
             {showFocusedOnly 
-              ? "No commitments linked to focused goals" 
-              : "No weekly commitments yet"}
+              ? "No tasks linked to focused goals" 
+              : "No tasks yet"}
           </p>
           {!showFocusedOnly && (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-              Add your first commitment
+            <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(true)}>
+              Add your first task
             </Button>
           )}
         </div>
@@ -447,17 +388,30 @@ const Weekly = () => {
             onTaskClick={handleTaskClick}
           />
 
-          {/* Weekly totals */}
-          <WeeklyTotals
-            commitments={filteredCommitments.map(c => ({
-              id: c.id,
-              title: c.title,
-              planned: c.checkin?.planned_count || c.frequency_json.times_per_week,
-              actual: c.checkin?.actual_count || 0,
-            }))}
-          />
+          {/* Weekly totals (only for recurring) */}
+          {filteredCommitments.length > 0 && (
+            <WeeklyTotals
+              commitments={filteredCommitments.map(c => ({
+                id: c.id,
+                title: c.title,
+                planned: c.checkin?.planned_count || c.frequency_json.times_per_week,
+                actual: c.checkin?.actual_count || 0,
+              }))}
+            />
+          )}
         </>
       )}
+
+      {/* Task create modal */}
+      <TaskCreateModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        defaultDate={selectedDate}
+        defaultTaskType="recurring"
+        goals={goals}
+        onSuccess={fetchCommitments}
+        weekStart={currentWeekStart}
+      />
 
       {/* Task detail modal */}
       <TaskDetailModal
