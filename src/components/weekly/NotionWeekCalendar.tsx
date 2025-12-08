@@ -85,6 +85,20 @@ const NotionWeekCalendar = ({
           const dayIsToday = isToday(date);
           const dayIsSelected = isSelected(date);
 
+          // Sort tasks chronologically: scheduled first (by time), then unscheduled
+          const sortedTasks = [...tasks].sort((a, b) => {
+            // Both have times - sort by time
+            if (a.timeStart && b.timeStart) {
+              return a.timeStart.localeCompare(b.timeStart);
+            }
+            // Only a has time - a comes first
+            if (a.timeStart && !b.timeStart) return -1;
+            // Only b has time - b comes first
+            if (!a.timeStart && b.timeStart) return 1;
+            // Neither has time - maintain order
+            return 0;
+          });
+
           return (
             <div
               key={dateKey}
@@ -112,9 +126,9 @@ const NotionWeekCalendar = ({
                 )}
               </div>
 
-                {/* Tasks */}
+                {/* Tasks - sorted chronologically */}
               <div className="space-y-1">
-                {tasks.slice(0, 5).map((task) => {
+                {sortedTasks.slice(0, 5).map((task) => {
                   const formatTime = (time: string | null | undefined) => {
                     if (!time) return null;
                     return time.substring(0, 5);
@@ -152,9 +166,9 @@ const NotionWeekCalendar = ({
                     </button>
                   );
                 })}
-                {tasks.length > 5 && (
+                {sortedTasks.length > 5 && (
                   <span className="text-[10px] text-muted-foreground pl-1">
-                    +{tasks.length - 5} more
+                    +{sortedTasks.length - 5} more
                   </span>
                 )}
               </div>
