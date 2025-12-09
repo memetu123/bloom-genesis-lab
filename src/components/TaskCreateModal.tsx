@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus } from "lucide-react";
 import {
   Dialog,
@@ -71,6 +71,21 @@ const TaskCreateModal = ({
     format(defaultDate, "yyyy-MM-dd")
   );
   const [saving, setSaving] = useState(false);
+
+  // Reset form when modal opens or defaultDate changes
+  useEffect(() => {
+    if (open) {
+      setScheduledDate(format(defaultDate, "yyyy-MM-dd"));
+      // Reset to independent task by default
+      setRecurrenceType("none");
+      setTitle("");
+      setTimesPerDay("1");
+      setSelectedDays([]);
+      setGoalId("");
+      setTimeStart("");
+      setTimeEnd("");
+    }
+  }, [open, defaultDate]);
 
   const handleDayToggle = (day: DayOfWeek) => {
     setSelectedDays((prev) =>
@@ -164,33 +179,33 @@ const TaskCreateModal = ({
             />
           </div>
 
-          {/* Recurrence Type */}
+           {/* Recurrence Type */}
           <div>
-            <Label className="mb-2 block">Repeat</Label>
+            <Label className="mb-2 block">Task Type</Label>
             <RadioGroup
               value={recurrenceType}
               onValueChange={(val) => setRecurrenceType(val as RecurrenceType)}
               className="flex flex-col gap-3"
             >
-              {/* Does not repeat */}
+              {/* Independent (default) */}
               <div className="flex items-start space-x-2">
                 <RadioGroupItem value="none" id="recurrence-none" className="mt-0.5" />
                 <div>
                   <Label htmlFor="recurrence-none" className="font-normal cursor-pointer">
-                    Does not repeat
+                    Independent
                   </Label>
-                  <p className="text-xs text-muted-foreground">One-time task</p>
+                  <p className="text-xs text-muted-foreground">One-time task for this date only</p>
                 </div>
               </div>
 
-              {/* Daily */}
+              {/* Daily recurring */}
               <div className="flex items-start space-x-2">
                 <RadioGroupItem value="daily" id="recurrence-daily" className="mt-0.5" />
                 <div className="flex-1">
                   <Label htmlFor="recurrence-daily" className="font-normal cursor-pointer">
-                    Daily
+                    Recurring daily
                   </Label>
-                  <p className="text-xs text-muted-foreground">Every day</p>
+                  <p className="text-xs text-muted-foreground">Repeats every day</p>
                   
                   {recurrenceType === "daily" && (
                     <div className="mt-2 flex items-center gap-2">
@@ -212,12 +227,12 @@ const TaskCreateModal = ({
                 </div>
               </div>
 
-              {/* Weekly on specific days */}
+              {/* Weekly recurring */}
               <div className="flex items-start space-x-2">
                 <RadioGroupItem value="weekly" id="recurrence-weekly" className="mt-0.5" />
                 <div className="flex-1">
                   <Label htmlFor="recurrence-weekly" className="font-normal cursor-pointer">
-                    Weekly on specific days
+                    Recurring weekly
                   </Label>
                   <p className="text-xs text-muted-foreground">
                     {selectedDays.length > 0 
