@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Target, ChevronRight, Star } from "lucide-react";
+import EditableTitle from "@/components/EditableTitle";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -208,7 +209,17 @@ const VisionDetail = () => {
       {/* Vision info */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-2xl font-semibold text-foreground">{vision.title}</h1>
+          <EditableTitle
+            value={vision.title}
+            onSave={async (newTitle) => {
+              const { error } = await supabase
+                .from("life_visions")
+                .update({ title: newTitle })
+                .eq("id", vision.id);
+              if (error) throw error;
+              setVision(prev => prev ? { ...prev, title: newTitle } : prev);
+            }}
+          />
           <button
             onClick={toggleVisionFocus}
             disabled={updatingFocus === vision.id}
