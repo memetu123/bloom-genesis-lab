@@ -80,7 +80,7 @@ const NotionWeekCalendar = ({
       </div>
 
       {/* Day cells with tasks */}
-      <div className="grid grid-cols-7 min-h-[200px]">
+      <div className="grid grid-cols-7">
         {weekDays.map(({ date, tasks }) => {
           const dateKey = format(date, "yyyy-MM-dd");
           const dayIsToday = isToday(date);
@@ -100,18 +100,22 @@ const NotionWeekCalendar = ({
             return 0;
           });
 
+          const visibleTasks = sortedTasks.slice(0, 6);
+          const remainingCount = sortedTasks.length - 6;
+
           return (
             <div
               key={dateKey}
-              onClick={() => handleDayClick(date)}
               className={`
-                border-r border-border last:border-r-0 p-2 cursor-pointer
-                hover:bg-muted/30 transition-calm
+                border-r border-border last:border-r-0 p-2 min-h-[180px]
                 ${dayIsSelected ? "bg-accent/30" : ""}
               `}
             >
-              {/* Date number */}
-              <div className="flex items-center justify-between mb-2">
+              {/* Date number - clickable to go to daily view */}
+              <div 
+                onClick={() => handleDayClick(date)}
+                className="flex items-center justify-between mb-2 cursor-pointer hover:bg-muted/30 -mx-2 -mt-2 px-2 pt-2 pb-1 transition-calm"
+              >
                 <span
                   className={`
                     text-sm font-medium
@@ -127,9 +131,9 @@ const NotionWeekCalendar = ({
                 )}
               </div>
 
-                {/* Tasks - sorted chronologically */}
+              {/* Tasks - show max 6, no inner scroll */}
               <div className="space-y-1">
-                {sortedTasks.slice(0, 5).map((task) => {
+                {visibleTasks.map((task) => {
                   const formatTime = (time: string | null | undefined) => {
                     if (!time) return null;
                     return time.substring(0, 5);
@@ -175,10 +179,13 @@ const NotionWeekCalendar = ({
                     </button>
                   );
                 })}
-                {sortedTasks.length > 5 && (
-                  <span className="text-[10px] text-muted-foreground pl-1">
-                    +{sortedTasks.length - 5} more
-                  </span>
+                {remainingCount > 0 && (
+                  <button
+                    onClick={() => handleDayClick(date)}
+                    className="text-[11px] text-primary hover:underline pl-1 pt-1"
+                  >
+                    +{remainingCount} more
+                  </button>
                 )}
               </div>
             </div>
