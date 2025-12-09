@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Clock, X, Check, RefreshCw, Calendar } from "lucide-react";
+import { Clock, X, Check, RefreshCw, Calendar, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -318,6 +318,47 @@ const TaskDetailModal = ({
     setIsCompleted(!isCompleted);
   };
 
+  /**
+   * Handle deleting the task (soft delete)
+   */
+  const handleDelete = async () => {
+    if (!user || !task) return;
+    setSaving(true);
+
+    try {
+      const isRecurringTask = task.commitmentId !== null && !task.isDetached;
+
+      if (isRecurringTask && task.commitmentId) {
+        // For recurring tasks, soft delete the weekly commitment
+        await supabase
+          .from("weekly_commitments")
+          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+          .eq("id", task.commitmentId);
+        
+        toast.success("Recurring task deleted");
+      } else {
+        // For independent/detached tasks, soft delete the completion record
+        const taskIdParts = task.id.split("-");
+        const actualId = taskIdParts[0];
+        
+        await supabase
+          .from("commitment_completions")
+          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+          .eq("id", actualId);
+        
+        toast.success("Task deleted");
+      }
+
+      onUpdate();
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error("Error deleting task:", error);
+      toast.error("Failed to delete task");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!task) return null;
 
   const isRecurring = task.commitmentId !== null && !task.isDetached;
@@ -565,6 +606,17 @@ const TaskDetailModal = ({
           {/* Save button */}
           <Button onClick={handleSave} disabled={saving} className="w-full">
             {saving ? "Saving..." : "Save"}
+          </Button>
+
+          {/* Delete button */}
+          <Button
+            variant="ghost"
+            onClick={handleDelete}
+            disabled={saving}
+            className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete task
           </Button>
         </div>
       </DialogContent>
