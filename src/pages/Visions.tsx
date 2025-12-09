@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Plus } from "lucide-react";
+import { Star, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import FocusFilter from "@/components/FocusFilter";
+import AddIconButton from "@/components/AddIconButton";
 
 /**
  * Visions List Page
@@ -166,12 +167,10 @@ const Visions = () => {
             onToggle={() => setShowOnlyFocused(!showOnlyFocused)}
           />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Vision
-              </Button>
-            </DialogTrigger>
+            <AddIconButton
+              onClick={() => setDialogOpen(true)}
+              tooltip="Add vision"
+            />
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Vision</DialogTitle>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Target, Plus } from "lucide-react";
+import { Star, ChevronRight, Target } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
 import FocusFilter from "@/components/FocusFilter";
+import AddIconButton from "@/components/AddIconButton";
 
 /**
  * Goals Page
@@ -221,12 +222,10 @@ const Goals = () => {
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Goal
-              </Button>
-            </DialogTrigger>
+            <AddIconButton
+              onClick={() => setDialogOpen(true)}
+              tooltip="Add goal"
+            />
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Goal</DialogTitle>

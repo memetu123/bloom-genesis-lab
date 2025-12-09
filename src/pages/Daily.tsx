@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import FocusFilter from "@/components/FocusFilter";
+import AddIconButton from "@/components/AddIconButton";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
 import type { TaskType } from "@/types/scheduling";
@@ -289,15 +290,10 @@ const Daily = () => {
             showFocusedOnly={showFocusedOnly}
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8"
+          <AddIconButton
             onClick={() => setCreateModalOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Add
-          </Button>
+            tooltip="Add task"
+          />
         </div>
       </div>
 
