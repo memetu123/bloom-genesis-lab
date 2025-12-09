@@ -4,6 +4,7 @@ import { LogOut, LayoutDashboard, Eye, Target, Calendar, CalendarDays, Trash2 } 
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import GlobalSearch from "@/components/GlobalSearch";
 
 /**
  * AppLayout - Shared layout with top navigation
@@ -68,11 +69,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               ))}
             </nav>
 
-            {/* Sign Out */}
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Sign out</span>
-            </Button>
+            {/* Global Search and Sign Out */}
+            <div className="flex items-center gap-2">
+              <GlobalSearch />
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Sign out</span>
+              </Button>
+            </div>
           </div>
 
           {/* Mobile Navigation */}
