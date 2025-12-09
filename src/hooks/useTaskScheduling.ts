@@ -109,7 +109,7 @@ export const useTaskScheduling = () => {
       const { title, scheduledDate, timeStart, timeEnd } = params;
 
       // Create directly in commitment_completions without a weekly commitment
-      const { data, error } = await supabase
+      const { data: completion, error } = await supabase
         .from("commitment_completions")
         .insert({
           user_id: user.id,
@@ -126,7 +126,19 @@ export const useTaskScheduling = () => {
         .single();
 
       if (error) throw error;
-      return data;
+
+      // Create a daily_task_instance for completion tracking
+      if (completion) {
+        await supabase.from("daily_task_instances").insert({
+          user_id: user.id,
+          completion_id: completion.id,
+          is_completed: false,
+          time_start: timeStart || null,
+          time_end: timeEnd || null,
+        });
+      }
+
+      return completion;
     },
     [user]
   );
