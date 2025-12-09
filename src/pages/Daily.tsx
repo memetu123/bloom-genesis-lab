@@ -69,12 +69,13 @@ const Daily = () => {
       const weekStartStr = format(weekStart, "yyyy-MM-dd");
       const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
-      // Fetch all active recurring commitments with their default times
+      // Fetch all active recurring commitments with their default times (exclude soft-deleted)
       const { data: commitments, error: commitError } = await supabase
         .from("weekly_commitments")
         .select("*, default_time_start, default_time_end, flexible_time, repeat_times_per_period")
         .eq("user_id", user.id)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .or("is_deleted.is.null,is_deleted.eq.false");
 
       if (commitError) throw commitError;
 
@@ -151,13 +152,14 @@ const Daily = () => {
         });
       }
 
-      // Fetch independent tasks for this date (including detached instances)
+      // Fetch independent tasks for this date (including detached instances, exclude deleted)
       const { data: independentTasks } = await supabase
         .from("commitment_completions")
         .select("*, is_detached")
         .eq("user_id", user.id)
         .eq("completed_date", dateKey)
-        .or("task_type.eq.independent,is_detached.eq.true");
+        .or("task_type.eq.independent,is_detached.eq.true")
+        .or("is_deleted.is.null,is_deleted.eq.false");
 
       for (const task of independentTasks || []) {
         // Check if there's a daily_task_instance for completion status
