@@ -331,10 +331,12 @@ export type Database = {
           goal_id: string | null
           id: string
           is_active: boolean | null
+          recurrence_type: string | null
           repeat_days_of_week: string[] | null
           repeat_frequency: string | null
           repeat_times_per_period: number | null
           task_type: string | null
+          times_per_day: number | null
           title: string
           updated_at: string | null
           user_id: string
@@ -349,10 +351,12 @@ export type Database = {
           goal_id?: string | null
           id?: string
           is_active?: boolean | null
+          recurrence_type?: string | null
           repeat_days_of_week?: string[] | null
           repeat_frequency?: string | null
           repeat_times_per_period?: number | null
           task_type?: string | null
+          times_per_day?: number | null
           title: string
           updated_at?: string | null
           user_id: string
@@ -367,10 +371,12 @@ export type Database = {
           goal_id?: string | null
           id?: string
           is_active?: boolean | null
+          recurrence_type?: string | null
           repeat_days_of_week?: string[] | null
           repeat_frequency?: string | null
           repeat_times_per_period?: number | null
           task_type?: string | null
+          times_per_day?: number | null
           title?: string
           updated_at?: string | null
           user_id?: string

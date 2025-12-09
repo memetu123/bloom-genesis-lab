@@ -460,7 +460,6 @@ const Daily = () => {
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         defaultDate={selectedDate}
-        defaultTaskType="independent"
         goals={goals}
         onSuccess={fetchTasks}
       />
