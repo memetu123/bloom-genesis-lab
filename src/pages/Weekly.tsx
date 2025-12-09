@@ -231,8 +231,14 @@ const Weekly = () => {
           if (details.recurrenceType === 'daily') {
             shouldShow = true;
           } else if (details.recurrenceType === 'weekly') {
-            // Only show on selected days of week
-            shouldShow = details.daysOfWeek.includes(dayName);
+            // If daysOfWeek is empty (legacy data), show on all weekdays (Mon-Fri)
+            if (details.daysOfWeek.length === 0) {
+              // Weekdays: Mon=1, Tue=2, Wed=3, Thu=4, Fri=5
+              shouldShow = dayOfWeek >= 1 && dayOfWeek <= 5;
+            } else {
+              // Only show on selected days of week
+              shouldShow = details.daysOfWeek.includes(dayName);
+            }
           }
           // 'none' type tasks are handled as independent tasks
 
