@@ -4,6 +4,7 @@ import { Search, X, Eye, Target, CheckSquare } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
 /**
  * GlobalSearch Component
@@ -15,6 +16,7 @@ interface SearchResult {
   type: "vision" | "goal" | "task";
   title: string;
   description?: string;
+  taskDate?: string; // For tasks, store latest date if available
 }
 
 const GlobalSearch = () => {
@@ -24,6 +26,7 @@ const GlobalSearch = () => {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -32,6 +35,7 @@ const GlobalSearch = () => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setSelectedIndex(-1);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -67,7 +71,7 @@ const GlobalSearch = () => {
         .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
         .limit(5);
 
-      // Search tasks (weekly_commitments)
+      // Search tasks (weekly_commitments) and get their latest completion date
       const { data: tasks } = await supabase
         .from("weekly_commitments")
         .select("id, title")
@@ -76,13 +80,34 @@ const GlobalSearch = () => {
         .ilike("title", `%${q}%`)
         .limit(5);
 
+      // For tasks, try to get the latest completion date
+      const taskResults: SearchResult[] = [];
+      for (const task of tasks || []) {
+        // Get the most recent completion for this task
+        const { data: completion } = await supabase
+          .from("commitment_completions")
+          .select("completed_date")
+          .eq("commitment_id", task.id)
+          .order("completed_date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        taskResults.push({
+          id: task.id,
+          type: "task",
+          title: task.title,
+          taskDate: completion?.completed_date || format(new Date(), "yyyy-MM-dd"),
+        });
+      }
+
       const allResults: SearchResult[] = [
         ...(visions || []).map(v => ({ id: v.id, type: "vision" as const, title: v.title, description: v.description || undefined })),
         ...(goals || []).map(g => ({ id: g.id, type: "goal" as const, title: g.title, description: g.description || undefined })),
-        ...(tasks || []).map(t => ({ id: t.id, type: "task" as const, title: t.title })),
+        ...taskResults,
       ];
 
       setResults(allResults);
+      setSelectedIndex(-1);
     } catch (error) {
       console.error("Search error:", error);
     } finally {
@@ -106,17 +131,45 @@ const GlobalSearch = () => {
 
   const handleSelect = (result: SearchResult) => {
     setQuery("");
+    setResults([]);
     setIsOpen(false);
+    setSelectedIndex(-1);
     
     switch (result.type) {
       case "vision":
-        navigate(`/vision/${result.id}`);
+        navigate(`/visions?focusId=${result.id}`);
         break;
       case "goal":
-        navigate(`/goal/${result.id}`);
+        navigate(`/goals?focusId=${result.id}`);
         break;
       case "task":
-        navigate(`/weekly`);
+        navigate(`/daily?date=${result.taskDate}&taskId=${result.id}`);
+        break;
+    }
+  };
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen || results.length === 0) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedIndex(prev => (prev < results.length - 1 ? prev + 1 : 0));
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedIndex(prev => (prev > 0 ? prev - 1 : results.length - 1));
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (selectedIndex >= 0 && selectedIndex < results.length) {
+          handleSelect(results[selectedIndex]);
+        }
+        break;
+      case "Escape":
+        setIsOpen(false);
+        setSelectedIndex(-1);
         break;
     }
   };
@@ -161,6 +214,7 @@ const GlobalSearch = () => {
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
           placeholder="Search…"
           className="pl-8 pr-8 h-8 text-sm w-40 md:w-52 focus:ring-primary focus:border-primary"
         />
@@ -196,16 +250,21 @@ const GlobalSearch = () => {
                   <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Visions
                   </div>
-                  {visionResults.map(result => (
-                    <button
-                      key={`vision-${result.id}`}
-                      onClick={() => handleSelect(result)}
-                      className="w-full px-3 py-2 flex items-center gap-2 hover:bg-muted text-left transition-calm"
-                    >
-                      {getIcon(result.type)}
-                      <span className="text-sm text-foreground truncate">{result.title}</span>
-                    </button>
-                  ))}
+                  {visionResults.map((result) => {
+                    const globalIndex = results.indexOf(result);
+                    return (
+                      <button
+                        key={`vision-${result.id}`}
+                        onClick={() => handleSelect(result)}
+                        className={`w-full px-3 py-2 flex items-center gap-2 text-left transition-calm ${
+                          selectedIndex === globalIndex ? "bg-primary/10" : "hover:bg-muted"
+                        }`}
+                      >
+                        {getIcon(result.type)}
+                        <span className="text-sm text-foreground truncate">{result.title}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -215,16 +274,21 @@ const GlobalSearch = () => {
                   <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-t border-border mt-1 pt-2">
                     Goals
                   </div>
-                  {goalResults.map(result => (
-                    <button
-                      key={`goal-${result.id}`}
-                      onClick={() => handleSelect(result)}
-                      className="w-full px-3 py-2 flex items-center gap-2 hover:bg-muted text-left transition-calm"
-                    >
-                      {getIcon(result.type)}
-                      <span className="text-sm text-foreground truncate">{result.title}</span>
-                    </button>
-                  ))}
+                  {goalResults.map((result) => {
+                    const globalIndex = results.indexOf(result);
+                    return (
+                      <button
+                        key={`goal-${result.id}`}
+                        onClick={() => handleSelect(result)}
+                        className={`w-full px-3 py-2 flex items-center gap-2 text-left transition-calm ${
+                          selectedIndex === globalIndex ? "bg-primary/10" : "hover:bg-muted"
+                        }`}
+                      >
+                        {getIcon(result.type)}
+                        <span className="text-sm text-foreground truncate">{result.title}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -234,16 +298,21 @@ const GlobalSearch = () => {
                   <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-t border-border mt-1 pt-2">
                     Tasks
                   </div>
-                  {taskResults.map(result => (
-                    <button
-                      key={`task-${result.id}`}
-                      onClick={() => handleSelect(result)}
-                      className="w-full px-3 py-2 flex items-center gap-2 hover:bg-muted text-left transition-calm"
-                    >
-                      {getIcon(result.type)}
-                      <span className="text-sm text-foreground truncate">{result.title}</span>
-                    </button>
-                  ))}
+                  {taskResults.map((result) => {
+                    const globalIndex = results.indexOf(result);
+                    return (
+                      <button
+                        key={`task-${result.id}`}
+                        onClick={() => handleSelect(result)}
+                        className={`w-full px-3 py-2 flex items-center gap-2 text-left transition-calm ${
+                          selectedIndex === globalIndex ? "bg-primary/10" : "hover:bg-muted"
+                        }`}
+                      >
+                        {getIcon(result.type)}
+                        <span className="text-sm text-foreground truncate">{result.title}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
