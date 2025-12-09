@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
-import SearchInput from "@/components/SearchInput";
 import StatusFilter, { StatusFilterValue } from "@/components/StatusFilter";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
@@ -50,8 +49,7 @@ const Visions = () => {
   const [showOnlyFocused, setShowOnlyFocused] = useState(false);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
   
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState("");
+  // Filter state
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("active");
   
   // Dialog state
@@ -196,20 +194,13 @@ const Visions = () => {
       setSaving(false);
     }
   };
-
-  // Filter visions based on search, status, and focus
+  // Filter visions based on status and focus
   const filteredVisions = visions
     .filter(v => {
       // Status filter
       if (statusFilter !== "all" && v.status !== statusFilter) return false;
       // Focus filter
       if (showOnlyFocused && !v.is_focus) return false;
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return v.title.toLowerCase().includes(query) || 
-               (v.description && v.description.toLowerCase().includes(query));
-      }
       return true;
     });
 
@@ -238,13 +229,8 @@ const Visions = () => {
         </div>
       </div>
 
-      {/* Search and filters */}
+      {/* Filters */}
       <div className="flex items-center gap-3 mb-6">
-        <SearchInput 
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search visions..."
-        />
         <StatusFilter 
           value={statusFilter}
           onChange={setStatusFilter}
@@ -260,16 +246,14 @@ const Visions = () => {
           <CardContent className="py-8 text-center">
             <Star className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">
-              {searchQuery ? "No visions match your search" : 
-               showOnlyFocused ? "No focused visions" : 
+              {showOnlyFocused ? "No focused visions" : 
                statusFilter !== "active" ? `No ${statusFilter} visions` : "No visions yet"}
             </p>
-            {(showOnlyFocused || searchQuery || statusFilter !== "active") && (
+            {(showOnlyFocused || statusFilter !== "active") && (
               <Button 
                 variant="link" 
                 onClick={() => {
                   setShowOnlyFocused(false);
-                  setSearchQuery("");
                   setStatusFilter("active");
                 }}
                 className="mt-2"

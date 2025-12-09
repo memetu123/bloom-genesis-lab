@@ -14,7 +14,6 @@ import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
-import SearchInput from "@/components/SearchInput";
 import StatusFilter, { StatusFilterValue } from "@/components/StatusFilter";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
@@ -68,8 +67,7 @@ const Goals = () => {
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
 
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState("");
+  // Filter state
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("active");
   const [visionFilter, setVisionFilter] = useState<string>("all");
 
@@ -276,12 +274,6 @@ const Goals = () => {
     if (showFocusedOnly && !g.is_focus) return false;
     // Vision filter
     if (visionFilter !== "all" && g.life_vision_id !== visionFilter) return false;
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return g.title.toLowerCase().includes(query) || 
-             (g.description && g.description.toLowerCase().includes(query));
-    }
     return true;
   });
 
@@ -328,13 +320,8 @@ const Goals = () => {
         </div>
       </div>
 
-      {/* Search and filters */}
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
-        <SearchInput 
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search goals..."
-        />
         <StatusFilter 
           value={statusFilter}
           onChange={setStatusFilter}
@@ -357,15 +344,14 @@ const Goals = () => {
           <CardContent className="py-12 text-center">
             <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground mb-2">
-              {searchQuery || statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly 
+              {statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly 
                 ? "No goals match your filters" 
                 : "No goals yet"}
             </p>
-            {(searchQuery || statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly) && (
+            {(statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly) && (
               <Button 
                 variant="link"
                 onClick={() => {
-                  setSearchQuery("");
                   setStatusFilter("active");
                   setVisionFilter("all");
                   setShowFocusedOnly(false);
