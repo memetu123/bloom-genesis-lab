@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, ChevronLeft, Plus } from "lucide-react";
+import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "date-fns";
 import FocusFilter from "@/components/FocusFilter";
+import AddIconButton from "@/components/AddIconButton";
 import NotionWeekCalendar from "@/components/weekly/NotionWeekCalendar";
 import WeeklyTotals from "@/components/weekly/WeeklyTotals";
 import TaskDetailModal from "@/components/TaskDetailModal";
@@ -369,15 +370,10 @@ const Weekly = () => {
             showFocusedOnly={showFocusedOnly}
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8"
+          <AddIconButton
             onClick={() => setCreateModalOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Add
-          </Button>
+            tooltip="Add task"
+          />
         </div>
       </div>
 
