@@ -350,18 +350,16 @@ const TaskDetailModal = ({
             {format(date, "EEEE, MMMM d, yyyy")}
           </div>
 
-          {/* Title edit (for independent tasks) */}
-          {!isRecurring && (
-            <div>
-              <Label htmlFor="task-title">Title</Label>
-              <Input
-                id="task-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          )}
+          {/* Title edit */}
+          <div>
+            <Label htmlFor="task-title">Title</Label>
+            <Input
+              id="task-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="mt-1"
+            />
+          </div>
 
           {/* Task type indicator and actions */}
           <div className="flex flex-col gap-2">
