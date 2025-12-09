@@ -19,8 +19,10 @@ export type Database = {
           commitment_id: string | null
           completed_date: string
           created_at: string | null
+          deleted_at: string | null
           id: string
           instance_number: number | null
+          is_deleted: boolean | null
           is_detached: boolean | null
           is_flexible_time: boolean | null
           task_type: string | null
@@ -33,8 +35,10 @@ export type Database = {
           commitment_id?: string | null
           completed_date?: string
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
           instance_number?: number | null
+          is_deleted?: boolean | null
           is_detached?: boolean | null
           is_flexible_time?: boolean | null
           task_type?: string | null
@@ -47,8 +51,10 @@ export type Database = {
           commitment_id?: string | null
           completed_date?: string
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
           instance_number?: number | null
+          is_deleted?: boolean | null
           is_detached?: boolean | null
           is_flexible_time?: boolean | null
           task_type?: string | null
@@ -108,9 +114,11 @@ export type Database = {
       goals: {
         Row: {
           created_at: string | null
+          deleted_at: string | null
           description: string | null
           goal_type: Database["public"]["Enums"]["goal_type"]
           id: string
+          is_deleted: boolean | null
           is_focus: boolean
           life_vision_id: string | null
           parent_goal_id: string | null
@@ -124,9 +132,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           goal_type: Database["public"]["Enums"]["goal_type"]
           id?: string
+          is_deleted?: boolean | null
           is_focus?: boolean
           life_vision_id?: string | null
           parent_goal_id?: string | null
@@ -140,9 +150,11 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           goal_type?: Database["public"]["Enums"]["goal_type"]
           id?: string
+          is_deleted?: boolean | null
           is_focus?: boolean
           life_vision_id?: string | null
           parent_goal_id?: string | null
@@ -181,30 +193,39 @@ export type Database = {
       life_visions: {
         Row: {
           created_at: string | null
+          deleted_at: string | null
           description: string | null
           id: string
+          is_deleted: boolean | null
           is_focus: boolean
           pillar_id: string
+          status: string | null
           title: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
+          is_deleted?: boolean | null
           is_focus?: boolean
           pillar_id: string
+          status?: string | null
           title: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
+          is_deleted?: boolean | null
           is_focus?: boolean
           pillar_id?: string
+          status?: string | null
           title?: string
           updated_at?: string | null
           user_id?: string
@@ -326,11 +347,13 @@ export type Database = {
           created_at: string | null
           default_time_end: string | null
           default_time_start: string | null
+          deleted_at: string | null
           flexible_time: boolean | null
           frequency_json: Json | null
           goal_id: string | null
           id: string
           is_active: boolean | null
+          is_deleted: boolean | null
           recurrence_type: string | null
           repeat_days_of_week: string[] | null
           repeat_frequency: string | null
@@ -346,11 +369,13 @@ export type Database = {
           created_at?: string | null
           default_time_end?: string | null
           default_time_start?: string | null
+          deleted_at?: string | null
           flexible_time?: boolean | null
           frequency_json?: Json | null
           goal_id?: string | null
           id?: string
           is_active?: boolean | null
+          is_deleted?: boolean | null
           recurrence_type?: string | null
           repeat_days_of_week?: string[] | null
           repeat_frequency?: string | null
@@ -366,11 +391,13 @@ export type Database = {
           created_at?: string | null
           default_time_end?: string | null
           default_time_start?: string | null
+          deleted_at?: string | null
           flexible_time?: boolean | null
           frequency_json?: Json | null
           goal_id?: string | null
           id?: string
           is_active?: boolean | null
+          is_deleted?: boolean | null
           recurrence_type?: string | null
           repeat_days_of_week?: string[] | null
           repeat_frequency?: string | null
@@ -400,7 +427,13 @@ export type Database = {
     }
     Enums: {
       commitment_type: "habit" | "task"
-      goal_status: "not_started" | "in_progress" | "completed" | "paused"
+      goal_status:
+        | "not_started"
+        | "in_progress"
+        | "completed"
+        | "paused"
+        | "active"
+        | "archived"
       goal_type: "three_year" | "one_year" | "ninety_day"
     }
     CompositeTypes: {
@@ -530,7 +563,14 @@ export const Constants = {
   public: {
     Enums: {
       commitment_type: ["habit", "task"],
-      goal_status: ["not_started", "in_progress", "completed", "paused"],
+      goal_status: [
+        "not_started",
+        "in_progress",
+        "completed",
+        "paused",
+        "active",
+        "archived",
+      ],
       goal_type: ["three_year", "one_year", "ninety_day"],
     },
   },

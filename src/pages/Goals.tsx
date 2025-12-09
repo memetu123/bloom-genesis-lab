@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Target } from "lucide-react";
+import { Star, ChevronRight, Target, Check, Archive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -14,10 +14,17 @@ import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
+import SearchInput from "@/components/SearchInput";
+import StatusFilter, { StatusFilterValue } from "@/components/StatusFilter";
+import ItemActions from "@/components/ItemActions";
+import UndoToast from "@/components/UndoToast";
+import ProgressIndicator from "@/components/ProgressIndicator";
+import { useSoftDelete } from "@/hooks/useSoftDelete";
+import { format, startOfWeek, endOfWeek } from "date-fns";
 
 /**
  * Goals Page
- * Lists all goals grouped by type with focus toggle
+ * Lists all goals grouped by type with focus toggle, search, and status filter
  */
 
 interface Goal {
@@ -29,6 +36,8 @@ interface Goal {
   life_vision_id: string | null;
   parent_goal_id: string | null;
   pillar_id: string;
+  status: "active" | "completed" | "archived";
+  is_deleted: boolean;
 }
 
 interface Vision {
@@ -40,6 +49,7 @@ interface Vision {
 interface GoalWithRelations extends Goal {
   vision_title?: string;
   parent_title?: string;
+  weeklyProgress?: { completed: number; total: number };
 }
 
 const GOAL_TYPE_CONFIG: Record<GoalType, { label: string; order: number }> = {
@@ -51,11 +61,17 @@ const GOAL_TYPE_CONFIG: Record<GoalType, { label: string; order: number }> = {
 const Goals = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { softDelete, undoDelete, pendingDelete } = useSoftDelete();
   const [goals, setGoals] = useState<GoalWithRelations[]>([]);
   const [visions, setVisions] = useState<Vision[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("active");
+  const [visionFilter, setVisionFilter] = useState<string>("all");
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,6 +91,7 @@ const Goals = () => {
           .from("goals")
           .select("*")
           .eq("user_id", user.id)
+          .eq("is_deleted", false)
           .order("created_at", { ascending: true });
 
         if (goalsError) throw goalsError;
@@ -83,7 +100,8 @@ const Goals = () => {
         const { data: visionsData } = await supabase
           .from("life_visions")
           .select("id, title, pillar_id")
-          .eq("user_id", user.id);
+          .eq("user_id", user.id)
+          .eq("is_deleted", false);
 
         setVisions(visionsData || []);
 
@@ -98,11 +116,50 @@ const Goals = () => {
           goalsMap[g.id] = g.title;
         });
 
-        // Enrich goals with relation titles
+        // Calculate weekly progress for 90-day goals
+        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+        const weekStartStr = format(weekStart, "yyyy-MM-dd");
+        const weekEndStr = format(weekEnd, "yyyy-MM-dd");
+
+        // Fetch weekly commitments and completions
+        const { data: commitments } = await supabase
+          .from("weekly_commitments")
+          .select("id, goal_id")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .eq("is_deleted", false);
+
+        const { data: checkins } = await supabase
+          .from("weekly_checkins")
+          .select("weekly_commitment_id, planned_count, actual_count")
+          .eq("user_id", user.id)
+          .eq("period_start_date", weekStartStr);
+
+        // Group progress by goal
+        const progressByGoal: Record<string, { completed: number; total: number }> = {};
+        
+        (commitments || []).forEach(c => {
+          if (c.goal_id) {
+            if (!progressByGoal[c.goal_id]) {
+              progressByGoal[c.goal_id] = { completed: 0, total: 0 };
+            }
+            const checkin = (checkins || []).find(ch => ch.weekly_commitment_id === c.id);
+            if (checkin) {
+              progressByGoal[c.goal_id].completed += checkin.actual_count;
+              progressByGoal[c.goal_id].total += checkin.planned_count;
+            }
+          }
+        });
+
+        // Enrich goals with relation titles and progress
         const enrichedGoals: GoalWithRelations[] = (goalsData || []).map(g => ({
           ...g,
+          status: (g.status as "active" | "completed" | "archived") || "active",
+          is_deleted: g.is_deleted || false,
           vision_title: g.life_vision_id ? visionsMap[g.life_vision_id] : undefined,
           parent_title: g.parent_goal_id ? goalsMap[g.parent_goal_id] : undefined,
+          weeklyProgress: progressByGoal[g.id],
         }));
 
         setGoals(enrichedGoals);
@@ -141,6 +198,37 @@ const Goals = () => {
     }
   };
 
+  const updateStatus = async (goalId: string, newStatus: "active" | "completed" | "archived") => {
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: newStatus })
+        .eq("id", goalId);
+
+      if (error) throw error;
+
+      setGoals(prev =>
+        prev.map(g => g.id === goalId ? { ...g, status: newStatus } : g)
+      );
+      toast.success(`Goal ${newStatus === "completed" ? "completed" : newStatus === "archived" ? "archived" : "reactivated"}`);
+    } catch (error: any) {
+      console.error("Error updating status:", error);
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleDelete = async (goal: GoalWithRelations) => {
+    const success = await softDelete({
+      table: "goals",
+      id: goal.id,
+      title: goal.title,
+    });
+    
+    if (success) {
+      setGoals(prev => prev.filter(g => g.id !== goal.id));
+    }
+  };
+
   const handleAddGoal = async () => {
     if (!user || !newTitle.trim() || !selectedVisionId) return;
     setSaving(true);
@@ -158,14 +246,14 @@ const Goals = () => {
           goal_type: selectedGoalType,
           title: newTitle.trim(),
           description: newDescription.trim() || null,
-          status: "not_started"
+          status: "active"
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      setGoals(prev => [...prev, { ...data, vision_title: vision.title }]);
+      setGoals(prev => [...prev, { ...data, vision_title: vision.title, status: "active", is_deleted: false }]);
       setNewTitle("");
       setNewDescription("");
       setSelectedVisionId("");
@@ -180,10 +268,22 @@ const Goals = () => {
     }
   };
 
-  // Filter goals based on focus toggle
-  const filteredGoals = showFocusedOnly 
-    ? goals.filter(g => g.is_focus) 
-    : goals;
+  // Filter goals
+  const filteredGoals = goals.filter(g => {
+    // Status filter
+    if (statusFilter !== "all" && g.status !== statusFilter) return false;
+    // Focus filter
+    if (showFocusedOnly && !g.is_focus) return false;
+    // Vision filter
+    if (visionFilter !== "all" && g.life_vision_id !== visionFilter) return false;
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return g.title.toLowerCase().includes(query) || 
+             (g.description && g.description.toLowerCase().includes(query));
+    }
+    return true;
+  });
 
   // Group goals by type
   const groupedGoals = filteredGoals.reduce<Record<GoalType, GoalWithRelations[]>>((acc, goal) => {
@@ -212,8 +312,8 @@ const Goals = () => {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">My Goals</h1>
-          <p className="text-muted-foreground mt-1">
-            View and focus on goals at every level of your plan.
+          <p className="text-muted-foreground mt-1 text-sm">
+            View and focus on goals at every level.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -221,74 +321,35 @@ const Goals = () => {
             showFocusedOnly={showFocusedOnly}
             onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
           />
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <AddIconButton
-              onClick={() => setDialogOpen(true)}
-              tooltip="Add goal"
-            />
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Goal</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 mt-4">
-                <div>
-                  <Label>Vision</Label>
-                  <Select value={selectedVisionId} onValueChange={setSelectedVisionId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a vision" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {visions.map(vision => (
-                        <SelectItem key={vision.id} value={vision.id}>
-                          {vision.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Goal Type</Label>
-                  <Select value={selectedGoalType} onValueChange={(v) => setSelectedGoalType(v as GoalType)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="three_year">3-Year Goal</SelectItem>
-                      <SelectItem value="one_year">1-Year Goal</SelectItem>
-                      <SelectItem value="ninety_day">90-Day Plan</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="title">Title</Label>
-                  <Input
-                    id="title"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="What do you want to achieve?"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="description">Description (optional)</Label>
-                  <Textarea
-                    id="description"
-                    value={newDescription}
-                    onChange={(e) => setNewDescription(e.target.value)}
-                    placeholder="Add more details..."
-                    rows={3}
-                  />
-                </div>
-                <Button 
-                  onClick={handleAddGoal} 
-                  disabled={saving || !newTitle.trim() || !selectedVisionId}
-                  className="w-full"
-                >
-                  {saving ? "Saving..." : "Add Goal"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <AddIconButton
+            onClick={() => setDialogOpen(true)}
+            tooltip="Add goal"
+          />
         </div>
+      </div>
+
+      {/* Search and filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <SearchInput 
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search goals..."
+        />
+        <StatusFilter 
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+        <Select value={visionFilter} onValueChange={setVisionFilter}>
+          <SelectTrigger className="w-[150px] h-8 text-xs">
+            <SelectValue placeholder="All visions" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All visions</SelectItem>
+            {visions.map(v => (
+              <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {filteredGoals.length === 0 ? (
@@ -296,13 +357,23 @@ const Goals = () => {
           <CardContent className="py-12 text-center">
             <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground mb-2">
-              {showFocusedOnly ? "No focused goals" : "No goals yet"}
+              {searchQuery || statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly 
+                ? "No goals match your filters" 
+                : "No goals yet"}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {showFocusedOnly 
-                ? "Star goals to add them to your focus." 
-                : "Create goals using the Add Goal button above."}
-            </p>
+            {(searchQuery || statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly) && (
+              <Button 
+                variant="link"
+                onClick={() => {
+                  setSearchQuery("");
+                  setStatusFilter("active");
+                  setVisionFilter("all");
+                  setShowFocusedOnly(false);
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -338,11 +409,25 @@ const Goals = () => {
 
                         {/* Goal content */}
                         <div 
-                          className="flex-1 cursor-pointer"
+                          className="flex-1 cursor-pointer min-w-0"
                           onClick={() => navigate(`/goal/${goal.id}`)}
                         >
-                          <h3 className="font-medium text-foreground">{goal.title}</h3>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {goal.status !== "active" && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                goal.status === "completed" 
+                                  ? "bg-primary/10 text-primary" 
+                                  : "bg-muted text-muted-foreground"
+                              }`}>
+                                {goal.status === "completed" ? <Check className="h-3 w-3 inline mr-0.5" /> : <Archive className="h-3 w-3 inline mr-0.5" />}
+                                {goal.status}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className={`font-medium text-foreground truncate ${goal.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                            {goal.title}
+                          </h3>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                             {goal.vision_title && (
                               <span>Vision: {goal.vision_title}</span>
                             )}
@@ -353,7 +438,27 @@ const Goals = () => {
                               </>
                             )}
                           </div>
+                          {/* Progress indicator for 90-day goals */}
+                          {goal.goal_type === "ninety_day" && goal.weeklyProgress && goal.weeklyProgress.total > 0 && (
+                            <div className="mt-2 max-w-[200px]">
+                              <ProgressIndicator 
+                                completed={goal.weeklyProgress.completed}
+                                total={goal.weeklyProgress.total}
+                                label="This week"
+                              />
+                            </div>
+                          )}
                         </div>
+
+                        {/* Actions */}
+                        <ItemActions
+                          status={goal.status}
+                          onComplete={() => updateStatus(goal.id, "completed")}
+                          onArchive={() => updateStatus(goal.id, "archived")}
+                          onReactivate={() => updateStatus(goal.id, "active")}
+                          onRestore={() => updateStatus(goal.id, "active")}
+                          onDelete={() => handleDelete(goal)}
+                        />
 
                         <ChevronRight 
                           className="h-5 w-5 text-muted-foreground flex-shrink-0 cursor-pointer"
@@ -367,6 +472,98 @@ const Goals = () => {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Add goal dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Goal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Vision</Label>
+              <Select value={selectedVisionId} onValueChange={setSelectedVisionId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a vision" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visions.map(vision => (
+                    <SelectItem key={vision.id} value={vision.id}>
+                      {vision.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Goal Type</Label>
+              <Select value={selectedGoalType} onValueChange={(v) => setSelectedGoalType(v as GoalType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="three_year">3-Year Goal</SelectItem>
+                  <SelectItem value="one_year">1-Year Goal</SelectItem>
+                  <SelectItem value="ninety_day">90-Day Plan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="What do you want to achieve?"
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea
+                id="description"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Add more details..."
+                rows={3}
+              />
+            </div>
+            <Button 
+              onClick={handleAddGoal} 
+              disabled={saving || !newTitle.trim() || !selectedVisionId}
+              className="w-full"
+            >
+              {saving ? "Saving..." : "Add Goal"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo toast */}
+      {pendingDelete && (
+        <UndoToast
+          itemName={pendingDelete.title}
+          onUndo={async () => {
+            const success = await undoDelete();
+            if (success) {
+              // Refetch to restore
+              const { data } = await supabase
+                .from("goals")
+                .select("*")
+                .eq("id", pendingDelete.id)
+                .single();
+              if (data) {
+                const restored: GoalWithRelations = {
+                  ...data,
+                  status: (data.status as "active" | "completed" | "archived") || "active",
+                  is_deleted: false,
+                };
+                setGoals(prev => [...prev, restored]);
+              }
+            }
+          }}
+          onClose={() => {}}
+        />
       )}
     </div>
   );
