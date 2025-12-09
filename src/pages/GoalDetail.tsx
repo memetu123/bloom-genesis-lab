@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Target, ChevronRight, Star } from "lucide-react";
 import EditableTitle from "@/components/EditableTitle";
+import ItemActions from "@/components/ItemActions";
+import UndoToast from "@/components/UndoToast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,8 +18,10 @@ import type { GoalType } from "@/types/todayoum";
 
 /**
  * Goal Detail Page
- * Shows a goal and its children (sub-goals or commitments)
+ * Shows a goal and its children (sub-goals or commitments) with full editing capability
  */
+
+type GoalStatus = "active" | "completed" | "archived" | "not_started" | "in_progress" | "paused";
 
 interface Goal {
   id: string;
@@ -27,7 +31,7 @@ interface Goal {
   pillar_id: string;
   life_vision_id: string | null;
   parent_goal_id: string | null;
-  status: string;
+  status: GoalStatus;
   is_focus: boolean;
 }
 
@@ -67,6 +71,7 @@ const GoalDetail = () => {
   const [breadcrumb, setBreadcrumb] = useState<Breadcrumb>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   // Form state
   const [newTitle, setNewTitle] = useState("");
@@ -74,6 +79,14 @@ const GoalDetail = () => {
   const [newFrequency, setNewFrequency] = useState("3");
   const [saving, setSaving] = useState(false);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
+  
+  // Undo state
+  const [undoItem, setUndoItem] = useState<{ id: string } | null>(null);
+  const [showUndo, setShowUndo] = useState(false);
+  
+  // Edit form state
+  const [editDescription, setEditDescription] = useState("");
+  const [editStatus, setEditStatus] = useState<GoalStatus>("active");
 
   useEffect(() => {
     if (!user || !id) return;
@@ -95,7 +108,10 @@ const GoalDetail = () => {
           return;
         }
 
-        setGoal(goalData as Goal);
+        setGoal({
+          ...goalData,
+          status: (goalData.status as GoalStatus) || "active"
+        } as Goal);
 
         // Build breadcrumb
         const bc: Breadcrumb = {};
@@ -296,6 +312,130 @@ const GoalDetail = () => {
     }
   };
 
+  // Status actions
+  const handleComplete = async () => {
+    if (!goal) return;
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "completed" })
+        .eq("id", goal.id);
+      if (error) throw error;
+      setGoal(prev => prev ? { ...prev, status: "completed" } : prev);
+      toast.success("Goal marked as complete");
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!goal) return;
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "archived" })
+        .eq("id", goal.id);
+      if (error) throw error;
+      setGoal(prev => prev ? { ...prev, status: "archived" } : prev);
+      toast.success("Goal archived");
+    } catch (error) {
+      toast.error("Failed to archive");
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!goal) return;
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "active" })
+        .eq("id", goal.id);
+      if (error) throw error;
+      setGoal(prev => prev ? { ...prev, status: "active" } : prev);
+      toast.success("Goal restored to active");
+    } catch (error) {
+      toast.error("Failed to restore");
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!goal) return;
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "active" })
+        .eq("id", goal.id);
+      if (error) throw error;
+      setGoal(prev => prev ? { ...prev, status: "active" } : prev);
+      toast.success("Goal reactivated");
+    } catch (error) {
+      toast.error("Failed to reactivate");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!goal) return;
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", goal.id);
+      if (error) throw error;
+      setUndoItem({ id: goal.id });
+      setShowUndo(true);
+      navigate("/goals");
+    } catch (error) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoItem) return;
+    try {
+      await supabase
+        .from("goals")
+        .update({ is_deleted: false, deleted_at: null })
+        .eq("id", undoItem.id);
+      setShowUndo(false);
+      setUndoItem(null);
+    } catch (error) {
+      toast.error("Failed to undo");
+    }
+  };
+
+  const openEditDialog = () => {
+    if (!goal) return;
+    setEditDescription(goal.description || "");
+    setEditStatus(goal.status);
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!goal) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ 
+          description: editDescription.trim() || null,
+          status: editStatus 
+        })
+        .eq("id", goal.id);
+      if (error) throw error;
+      setGoal(prev => prev ? { 
+        ...prev, 
+        description: editDescription.trim() || null,
+        status: editStatus 
+      } : prev);
+      setEditDialogOpen(false);
+      toast.success("Goal updated");
+    } catch (error) {
+      toast.error("Failed to update goal");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -308,9 +448,19 @@ const GoalDetail = () => {
 
   const childConfig = CHILD_TYPE_LABELS[goal.goal_type];
   const isNinetyDay = goal.goal_type === "ninety_day";
+  const displayStatus = goal.status === "not_started" || goal.status === "in_progress" || goal.status === "paused" ? "active" : goal.status;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* Undo toast */}
+      {showUndo && undoItem && (
+        <UndoToast
+          itemName="Goal"
+          onUndo={handleUndo}
+          onClose={() => setShowUndo(false)}
+        />
+      )}
+
       {/* Breadcrumb */}
       <div className="text-sm text-muted-foreground mb-4 flex items-center flex-wrap gap-1">
         {breadcrumb.pillar && (
@@ -368,11 +518,58 @@ const GoalDetail = () => {
               }`}
             />
           </button>
+          <ItemActions
+            status={displayStatus as "active" | "completed" | "archived"}
+            onComplete={displayStatus === "active" ? handleComplete : undefined}
+            onArchive={displayStatus !== "archived" ? handleArchive : undefined}
+            onRestore={displayStatus === "archived" ? handleRestore : undefined}
+            onReactivate={displayStatus === "completed" ? handleReactivate : undefined}
+            onDelete={handleDelete}
+            onEdit={openEditDialog}
+          />
         </div>
         {goal.description && (
           <p className="text-muted-foreground">{goal.description}</p>
         )}
       </div>
+
+      {/* Edit Goal Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Goal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Describe your goal..."
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-status">Status</Label>
+              <Select value={editStatus} onValueChange={(v) => setEditStatus(v as GoalStatus)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleSaveEdit} disabled={saving} className="w-full">
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
         {/* Children section */}
         <div className="mb-6 flex items-center justify-between">

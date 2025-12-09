@@ -2,20 +2,25 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Target, ChevronRight, Star } from "lucide-react";
 import EditableTitle from "@/components/EditableTitle";
+import ItemActions from "@/components/ItemActions";
+import UndoToast from "@/components/UndoToast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 /**
  * Vision Detail Page
- * Shows a vision and its 3-year goals
+ * Shows a vision and its 3-year goals with full editing capability
  */
+
+type VisionStatus = "active" | "completed" | "archived";
 
 interface Vision {
   id: string;
@@ -23,6 +28,7 @@ interface Vision {
   description: string | null;
   pillar_id: string;
   is_focus: boolean;
+  status: VisionStatus;
 }
 
 interface Goal {
@@ -47,10 +53,19 @@ const VisionDetail = () => {
   const [threeYearGoals, setThreeYearGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [newGoalTitle, setNewGoalTitle] = useState("");
   const [newGoalDescription, setNewGoalDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
+  
+  // Undo state
+  const [undoItem, setUndoItem] = useState<{ id: string; type: "vision" | "goal" } | null>(null);
+  const [showUndo, setShowUndo] = useState(false);
+  
+  // Edit form state
+  const [editDescription, setEditDescription] = useState("");
+  const [editStatus, setEditStatus] = useState<VisionStatus>("active");
 
   useEffect(() => {
     if (!user || !id) return;
@@ -72,7 +87,10 @@ const VisionDetail = () => {
           return;
         }
 
-        setVision(visionData);
+        setVision({
+          ...visionData,
+          status: (visionData.status as VisionStatus) || "active"
+        });
 
         // Fetch pillar
         const { data: pillarData } = await supabase
@@ -185,6 +203,132 @@ const VisionDetail = () => {
     }
   };
 
+  // Status actions
+  const handleComplete = async () => {
+    if (!vision) return;
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ status: "completed" })
+        .eq("id", vision.id);
+      if (error) throw error;
+      setVision(prev => prev ? { ...prev, status: "completed" } : prev);
+      toast.success("Vision marked as complete");
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!vision) return;
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ status: "archived" })
+        .eq("id", vision.id);
+      if (error) throw error;
+      setVision(prev => prev ? { ...prev, status: "archived" } : prev);
+      toast.success("Vision archived");
+    } catch (error) {
+      toast.error("Failed to archive");
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!vision) return;
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ status: "active" })
+        .eq("id", vision.id);
+      if (error) throw error;
+      setVision(prev => prev ? { ...prev, status: "active" } : prev);
+      toast.success("Vision restored to active");
+    } catch (error) {
+      toast.error("Failed to restore");
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!vision) return;
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ status: "active" })
+        .eq("id", vision.id);
+      if (error) throw error;
+      setVision(prev => prev ? { ...prev, status: "active" } : prev);
+      toast.success("Vision reactivated");
+    } catch (error) {
+      toast.error("Failed to reactivate");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!vision) return;
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", vision.id);
+      if (error) throw error;
+      setUndoItem({ id: vision.id, type: "vision" });
+      setShowUndo(true);
+      navigate("/visions");
+    } catch (error) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoItem) return;
+    try {
+      if (undoItem.type === "vision") {
+        await supabase
+          .from("life_visions")
+          .update({ is_deleted: false, deleted_at: null })
+          .eq("id", undoItem.id);
+      }
+      setShowUndo(false);
+      setUndoItem(null);
+    } catch (error) {
+      toast.error("Failed to undo");
+    }
+  };
+
+  const openEditDialog = () => {
+    if (!vision) return;
+    setEditDescription(vision.description || "");
+    setEditStatus(vision.status);
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!vision) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ 
+          description: editDescription.trim() || null,
+          status: editStatus 
+        })
+        .eq("id", vision.id);
+      if (error) throw error;
+      setVision(prev => prev ? { 
+        ...prev, 
+        description: editDescription.trim() || null,
+        status: editStatus 
+      } : prev);
+      setEditDialogOpen(false);
+      toast.success("Vision updated");
+    } catch (error) {
+      toast.error("Failed to update vision");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -197,12 +341,29 @@ const VisionDetail = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* Undo toast */}
+      {showUndo && undoItem && (
+        <UndoToast
+          itemName="Vision"
+          onUndo={handleUndo}
+          onClose={() => setShowUndo(false)}
+        />
+      )}
+
       {/* Breadcrumb */}
       {pillar && (
         <div className="text-sm text-muted-foreground mb-4 flex items-center gap-1">
           <span className="text-primary font-medium">{pillar.name}</span>
           <ChevronRight className="h-3 w-3" />
           <span>Vision</span>
+          {vision.status !== "active" && (
+            <>
+              <ChevronRight className="h-3 w-3" />
+              <span className={vision.status === "completed" ? "text-primary" : "text-muted-foreground"}>
+                {vision.status.charAt(0).toUpperCase() + vision.status.slice(1)}
+              </span>
+            </>
+          )}
         </div>
       )}
 
@@ -234,11 +395,57 @@ const VisionDetail = () => {
               }`}
             />
           </button>
+          <ItemActions
+            status={vision.status}
+            onComplete={vision.status === "active" ? handleComplete : undefined}
+            onArchive={vision.status !== "archived" ? handleArchive : undefined}
+            onRestore={vision.status === "archived" ? handleRestore : undefined}
+            onReactivate={vision.status === "completed" ? handleReactivate : undefined}
+            onDelete={handleDelete}
+            onEdit={openEditDialog}
+          />
         </div>
         {vision.description && (
           <p className="text-muted-foreground">{vision.description}</p>
         )}
       </div>
+
+      {/* Edit Vision Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Vision</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Describe your vision..."
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-status">Status</Label>
+              <Select value={editStatus} onValueChange={(v) => setEditStatus(v as VisionStatus)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleSaveEdit} disabled={saving} className="w-full">
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
         {/* 3-Year Goals section */}
         <div className="mb-6 flex items-center justify-between">

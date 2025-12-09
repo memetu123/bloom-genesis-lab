@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, LayoutDashboard, Eye, Target, Calendar, CalendarDays } from "lucide-react";
+import { LogOut, LayoutDashboard, Eye, Target, Calendar, CalendarDays, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ const navItems = [
   { label: "Goals", path: "/goals", icon: Target },
   { label: "Weekly", path: "/weekly", icon: Calendar },
   { label: "Daily", path: "/daily", icon: CalendarDays },
+  { label: "Deleted", path: "/recently-deleted", icon: Trash2 },
 ];
 
 const AppLayout = ({ children }: AppLayoutProps) => {

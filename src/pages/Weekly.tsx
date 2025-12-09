@@ -366,11 +366,28 @@ const Weekly = () => {
     );
   }
 
+  // Calculate weekly progress
+  const weeklyProgress = Object.values(filteredTasksByDate).reduce(
+    (acc, tasks) => {
+      const completed = tasks.filter(t => t.isCompleted).length;
+      const total = tasks.length;
+      return { completed: acc.completed + completed, total: acc.total + total };
+    },
+    { completed: 0, total: 0 }
+  );
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-medium text-foreground">Weekly</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-medium text-foreground">Weekly</h1>
+          {weeklyProgress.total > 0 && (
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+              {weeklyProgress.completed}/{weeklyProgress.total} completed
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <FocusFilter
             showFocusedOnly={showFocusedOnly}

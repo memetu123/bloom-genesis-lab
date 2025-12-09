@@ -280,11 +280,22 @@ const Daily = () => {
     );
   }
 
+  // Calculate daily progress
+  const dailyCompleted = filteredTasks.filter(t => t.isCompleted).length;
+  const dailyTotal = filteredTasks.length;
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl" style={{ maxHeight: '80vh' }}>
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-medium text-foreground">Daily View</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-medium text-foreground">Daily View</h1>
+          {dailyTotal > 0 && (
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+              {dailyCompleted}/{dailyTotal} completed
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <FocusFilter
             showFocusedOnly={showFocusedOnly}
