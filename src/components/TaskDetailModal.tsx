@@ -17,17 +17,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import type { TaskType, RepeatFrequency, DayOfWeek } from "@/types/scheduling";
+import type { TaskType, RecurrenceType, DayOfWeek } from "@/types/scheduling";
 
 /**
  * TaskDetailModal - Modal for viewing/editing task details
- * Supports editing time, completion status, task type, and repetition rules
+ * Uses the simplified recurrence model: none, daily, weekly
  */
 
 interface TaskDetailModalProps {
@@ -67,16 +66,15 @@ const TaskDetailModal = ({
   onUpdate,
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
-  const { convertToRecurring, convertToIndependent, detachInstance, updateInstanceTime, updateRepetitionRules } =
+  const { convertToRecurring, detachInstance, updateRecurrenceRules } =
     useTaskScheduling();
 
   const [title, setTitle] = useState("");
   const [timeStart, setTimeStart] = useState<string>("");
   const [timeEnd, setTimeEnd] = useState<string>("");
   const [isCompleted, setIsCompleted] = useState(false);
-  const [taskType, setTaskType] = useState<TaskType>("recurring");
-  const [frequency, setFrequency] = useState<RepeatFrequency>("weekly");
-  const [timesPerPeriod, setTimesPerPeriod] = useState("3");
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("none");
+  const [timesPerDay, setTimesPerDay] = useState("1");
   const [selectedDays, setSelectedDays] = useState<DayOfWeek[]>([]);
   const [showRepetitionEditor, setShowRepetitionEditor] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,26 +87,27 @@ const TaskDetailModal = ({
       setTimeStart(task.timeStart || "");
       setTimeEnd(task.timeEnd || "");
       setIsCompleted(task.isCompleted);
-      setTaskType(task.taskType || (task.commitmentId ? "recurring" : "independent"));
       setShowRepetitionEditor(false);
 
-      // Fetch repetition rules if recurring
+      // Fetch recurrence rules if recurring
       if (task.commitmentId) {
-        fetchRepetitionRules(task.commitmentId);
+        fetchRecurrenceRules(task.commitmentId);
+      } else {
+        setRecurrenceType("none");
       }
     }
   }, [task]);
 
-  const fetchRepetitionRules = async (commitmentId: string) => {
+  const fetchRecurrenceRules = async (commitmentId: string) => {
     const { data } = await supabase
       .from("weekly_commitments")
-      .select("repeat_frequency, repeat_times_per_period, repeat_days_of_week")
+      .select("recurrence_type, times_per_day, repeat_days_of_week")
       .eq("id", commitmentId)
       .maybeSingle();
 
     if (data) {
-      setFrequency((data.repeat_frequency as RepeatFrequency) || "weekly");
-      setTimesPerPeriod((data.repeat_times_per_period || 3).toString());
+      setRecurrenceType((data.recurrence_type as RecurrenceType) || "weekly");
+      setTimesPerDay((data.times_per_day || 1).toString());
       setSelectedDays((data.repeat_days_of_week as DayOfWeek[]) || []);
     }
   };
@@ -138,12 +137,12 @@ const TaskDetailModal = ({
           })
           .eq("id", task.commitmentId);
 
-        // Update repetition rules if changed
+        // Update recurrence rules if changed
         if (showRepetitionEditor) {
-          await updateRepetitionRules(task.commitmentId, {
-            frequency,
-            timesPerPeriod: parseInt(timesPerPeriod) || 1,
-            daysOfWeek: frequency === "custom" ? selectedDays : [],
+          await updateRecurrenceRules(task.commitmentId, {
+            recurrenceType,
+            timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
+            daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
           });
         }
       }
@@ -268,15 +267,22 @@ const TaskDetailModal = ({
       const isCurrentlyRecurring = task.commitmentId !== null && !task.isDetached;
       
       if (isCurrentlyRecurring && task.commitmentId) {
-        // For recurring tasks in daily view, use detachInstance instead
-        // This only affects this day, not the entire series
+        // For recurring tasks, use detachInstance
         await detachInstance(task.commitmentId, dateKey);
         toast.success("This day is now independent");
       } else {
-        // Convert independent to recurring - need repetition rules first
+        // Convert independent to recurring - need recurrence rules first
         if (!showRepetitionEditor) {
-          // Show the repetition editor first so user can configure rules
+          // Show the recurrence editor first so user can configure rules
           setShowRepetitionEditor(true);
+          setRecurrenceType("weekly");
+          setSaving(false);
+          return;
+        }
+        
+        // Validate weekly recurrence has days selected
+        if (recurrenceType === "weekly" && selectedDays.length === 0) {
+          toast.error("Please select at least one day for weekly recurrence");
           setSaving(false);
           return;
         }
@@ -286,9 +292,9 @@ const TaskDetailModal = ({
         const actualId = taskIdParts[0];
         
         await convertToRecurring(actualId, {
-          frequency,
-          timesPerPeriod: parseInt(timesPerPeriod) || 1,
-          daysOfWeek: frequency === "custom" ? selectedDays : [],
+          recurrenceType,
+          timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
+          daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
         });
         toast.success("Converted to recurring task");
       }
@@ -468,76 +474,71 @@ const TaskDetailModal = ({
             )}
           </div>
 
-          {/* Repetition rules (for recurring or when converting) */}
-          {(isRecurring || showRepetitionEditor) && showRepetitionEditor && (
+          {/* Recurrence rules (for recurring or when converting) */}
+          {showRepetitionEditor && (
             <div className="space-y-3 border-t border-border pt-4">
-              <Label className="text-sm font-medium">Repetition Rules</Label>
+              <Label className="text-sm font-medium">Recurrence Rules</Label>
 
-              {/* Frequency */}
+              {/* Recurrence Type */}
               <RadioGroup
-                value={frequency}
-                onValueChange={(val) => setFrequency(val as RepeatFrequency)}
-                className="flex flex-col gap-2"
+                value={recurrenceType}
+                onValueChange={(val) => setRecurrenceType(val as RecurrenceType)}
+                className="flex flex-col gap-3"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="daily" id="edit-freq-daily" />
-                  <Label htmlFor="edit-freq-daily" className="font-normal cursor-pointer">
-                    Daily
-                  </Label>
+                <div className="flex items-start space-x-2">
+                  <RadioGroupItem value="daily" id="edit-recurrence-daily" className="mt-0.5" />
+                  <div className="flex-1">
+                    <Label htmlFor="edit-recurrence-daily" className="font-normal cursor-pointer">
+                      Daily
+                    </Label>
+                    {recurrenceType === "daily" && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Label className="text-xs whitespace-nowrap">Times per day:</Label>
+                        <Select value={timesPerDay} onValueChange={setTimesPerDay}>
+                          <SelectTrigger className="w-16 h-7">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <SelectItem key={n} value={n.toString()}>
+                                {n}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="weekly" id="edit-freq-weekly" />
-                  <Label htmlFor="edit-freq-weekly" className="font-normal cursor-pointer">
-                    Weekly
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="custom" id="edit-freq-custom" />
-                  <Label htmlFor="edit-freq-custom" className="font-normal cursor-pointer">
-                    Custom days
-                  </Label>
+                <div className="flex items-start space-x-2">
+                  <RadioGroupItem value="weekly" id="edit-recurrence-weekly" className="mt-0.5" />
+                  <div className="flex-1">
+                    <Label htmlFor="edit-recurrence-weekly" className="font-normal cursor-pointer">
+                      Weekly on specific days
+                    </Label>
+                    {recurrenceType === "weekly" && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {DAYS_OF_WEEK.map((day) => (
+                          <button
+                            key={day.value}
+                            type="button"
+                            onClick={() => handleDayToggle(day.value)}
+                            className={`
+                              px-2 py-1 text-xs rounded border transition-colors
+                              ${selectedDays.includes(day.value)
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background border-border hover:bg-muted"
+                              }
+                            `}
+                          >
+                            {day.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </RadioGroup>
-
-              {/* Times per period */}
-              <div>
-                <Label className="text-xs text-muted-foreground">
-                  {frequency === "daily" ? "Times per day" : "Times per week"}
-                </Label>
-                <Select value={timesPerPeriod} onValueChange={setTimesPerPeriod}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-                      <SelectItem key={n} value={n.toString()}>
-                        {n}×
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Custom days */}
-              {frequency === "custom" && (
-                <div className="flex flex-wrap gap-2">
-                  {DAYS_OF_WEEK.map((day) => (
-                    <div key={day.value} className="flex items-center space-x-1">
-                      <Checkbox
-                        id={`edit-day-${day.value}`}
-                        checked={selectedDays.includes(day.value)}
-                        onCheckedChange={() => handleDayToggle(day.value)}
-                      />
-                      <Label
-                        htmlFor={`edit-day-${day.value}`}
-                        className="text-xs font-normal cursor-pointer"
-                      >
-                        {day.label}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               {/* Apply conversion button */}
               {!isRecurring && (
@@ -559,7 +560,7 @@ const TaskDetailModal = ({
               onClick={() => setShowRepetitionEditor(true)}
               className="text-xs text-primary hover:underline"
             >
-              Edit repetition rules
+              Edit recurrence rules
             </button>
           )}
 

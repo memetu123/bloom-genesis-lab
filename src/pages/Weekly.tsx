@@ -180,18 +180,32 @@ const Weekly = () => {
 
       setCommitments(enrichedCommitments);
 
-      // Build default times map
-      const { data: commitmentsWithTimes } = await supabase
+      // Build default times and recurrence data map
+      const { data: commitmentsWithDetails } = await supabase
         .from("weekly_commitments")
-        .select("id, default_time_start, default_time_end, repeat_frequency, repeat_times_per_period")
+        .select("id, default_time_start, default_time_end, recurrence_type, times_per_day, repeat_days_of_week")
         .eq("user_id", user.id);
       
-      const defaultTimesMap: Record<string, { start: string | null; end: string | null; timesPerPeriod: number }> = {};
-      (commitmentsWithTimes || []).forEach((c: any) => {
-        defaultTimesMap[c.id] = {
+      // Day name mapping for checking which days to show
+      const dayIndexToName: Record<number, string> = {
+        0: "sun", 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat"
+      };
+      
+      const commitmentDetailsMap: Record<string, { 
+        start: string | null; 
+        end: string | null; 
+        recurrenceType: string;
+        timesPerDay: number;
+        daysOfWeek: string[];
+      }> = {};
+      
+      (commitmentsWithDetails || []).forEach((c: any) => {
+        commitmentDetailsMap[c.id] = {
           start: c.default_time_start,
           end: c.default_time_end,
-          timesPerPeriod: c.repeat_times_per_period || 1,
+          recurrenceType: c.recurrence_type || 'weekly',
+          timesPerDay: c.times_per_day || 1,
+          daysOfWeek: c.repeat_days_of_week || [],
         };
       });
 
@@ -201,10 +215,28 @@ const Weekly = () => {
       for (let i = 0; i < 7; i++) {
         const date = addDays(weekStart, i);
         const dateKey = format(date, "yyyy-MM-dd");
+        const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const dayName = dayIndexToName[dayOfWeek];
         tasksMap[dateKey] = [];
 
-        // Add recurring tasks
+        // Add recurring tasks based on recurrence rules
         for (const commitment of enrichedCommitments) {
+          const details = commitmentDetailsMap[commitment.id] || { 
+            start: null, end: null, recurrenceType: 'weekly', timesPerDay: 1, daysOfWeek: [] 
+          };
+
+          // Check if task should appear on this day based on recurrence type
+          let shouldShow = false;
+          if (details.recurrenceType === 'daily') {
+            shouldShow = true;
+          } else if (details.recurrenceType === 'weekly') {
+            // Only show on selected days of week
+            shouldShow = details.daysOfWeek.includes(dayName);
+          }
+          // 'none' type tasks are handled as independent tasks
+
+          if (!shouldShow) continue;
+
           const { data: completion } = await supabase
             .from("commitment_completions")
             .select("*, time_start, time_end, instance_number, is_detached")
@@ -217,19 +249,22 @@ const Weekly = () => {
             continue;
           }
 
-          const defaults = defaultTimesMap[commitment.id] || { start: null, end: null, timesPerPeriod: 1 };
+          // For daily recurrence, create multiple instances if times_per_day > 1
+          const instanceCount = details.recurrenceType === 'daily' ? details.timesPerDay : 1;
           
-          tasksMap[dateKey].push({
-            id: `${commitment.id}-${dateKey}`,
-            commitmentId: commitment.id,
-            title: commitment.title,
-            isCompleted: !!completion,
-            timeStart: completion?.time_start || defaults.start,
-            timeEnd: completion?.time_end || defaults.end,
-            taskType: "recurring",
-            instanceNumber: completion?.instance_number || 1,
-            totalInstances: defaults.timesPerPeriod,
-          });
+          for (let inst = 1; inst <= instanceCount; inst++) {
+            tasksMap[dateKey].push({
+              id: `${commitment.id}-${dateKey}-${inst}`,
+              commitmentId: commitment.id,
+              title: commitment.title,
+              isCompleted: !!completion && (completion.instance_number === inst || instanceCount === 1),
+              timeStart: completion?.time_start || details.start,
+              timeEnd: completion?.time_end || details.end,
+              taskType: "recurring",
+              instanceNumber: inst,
+              totalInstances: instanceCount,
+            });
+          }
         }
 
         // Fetch independent tasks for this date (including detached instances)
@@ -420,7 +455,6 @@ const Weekly = () => {
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         defaultDate={selectedDate}
-        defaultTaskType="recurring"
         goals={goals}
         onSuccess={fetchCommitments}
         weekStart={currentWeekStart}
