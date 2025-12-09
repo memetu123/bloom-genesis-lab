@@ -15,6 +15,7 @@ import Goals from "./pages/Goals";
 import GoalDetail from "./pages/GoalDetail";
 import Weekly from "./pages/Weekly";
 import Daily from "./pages/Daily";
+import RecentlyDeleted from "./pages/RecentlyDeleted";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/goal/:id" element={<AppLayout><GoalDetail /></AppLayout>} />
             <Route path="/weekly" element={<AppLayout><Weekly /></AppLayout>} />
             <Route path="/daily" element={<AppLayout><Daily /></AppLayout>} />
+            <Route path="/recently-deleted" element={<AppLayout><RecentlyDeleted /></AppLayout>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
