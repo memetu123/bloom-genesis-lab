@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Target, ChevronRight, Star } from "lucide-react";
+import EditableTitle from "@/components/EditableTitle";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -342,7 +343,17 @@ const GoalDetail = () => {
       {/* Goal info */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-2xl font-semibold text-foreground">{goal.title}</h1>
+          <EditableTitle
+            value={goal.title}
+            onSave={async (newTitle) => {
+              const { error } = await supabase
+                .from("goals")
+                .update({ title: newTitle })
+                .eq("id", goal.id);
+              if (error) throw error;
+              setGoal(prev => prev ? { ...prev, title: newTitle } : prev);
+            }}
+          />
           <button
             onClick={toggleGoalFocus}
             disabled={updatingFocus === goal.id}
