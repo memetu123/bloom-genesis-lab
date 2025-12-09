@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Star, ChevronRight, Check, Archive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,6 +40,7 @@ interface Pillar {
 
 const Visions = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { softDelete, undoDelete, pendingDelete } = useSoftDelete();
   const [visions, setVisions] = useState<Vision[]>([]);
@@ -48,6 +49,8 @@ const Visions = () => {
   const [loading, setLoading] = useState(true);
   const [showOnlyFocused, setShowOnlyFocused] = useState(false);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   
   // Filter state
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("active");
@@ -58,6 +61,29 @@ const Visions = () => {
   const [newDescription, setNewDescription] = useState("");
   const [selectedPillarId, setSelectedPillarId] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Handle focusId from search
+  const focusId = searchParams.get("focusId");
+  
+  useEffect(() => {
+    if (focusId && !loading) {
+      // Reset filters to show the item
+      setStatusFilter("all");
+      setShowOnlyFocused(false);
+      
+      // Highlight and scroll to the item
+      setHighlightedId(focusId);
+      setTimeout(() => {
+        const element = cardRefs.current[focusId];
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+      
+      // Remove highlight after animation
+      setTimeout(() => setHighlightedId(null), 2000);
+    }
+  }, [focusId, loading]);
 
   useEffect(() => {
     if (!user) return;
@@ -266,7 +292,11 @@ const Visions = () => {
       ) : (
         <div className="space-y-3">
           {filteredVisions.map((vision) => (
-            <Card key={vision.id} className="transition-calm">
+            <Card 
+              key={vision.id} 
+              ref={(el) => { cardRefs.current[vision.id] = el; }}
+              className={`transition-calm ${highlightedId === vision.id ? "ring-2 ring-primary bg-primary/5" : ""}`}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   {/* Focus toggle */}

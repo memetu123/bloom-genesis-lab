@@ -42,9 +42,12 @@ const Daily = () => {
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
-  // Get date from URL or use today
+  // Get date and taskId from URL
   const dateParam = searchParams.get("date");
+  const taskIdParam = searchParams.get("taskId");
+  
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     if (dateParam) {
       try {
@@ -55,6 +58,25 @@ const Daily = () => {
     }
     return new Date();
   });
+
+  // Store taskId to open modal after loading
+  useEffect(() => {
+    if (taskIdParam) {
+      setPendingTaskId(taskIdParam);
+    }
+  }, [taskIdParam]);
+
+  // Open task modal when tasks are loaded and we have a pending taskId
+  useEffect(() => {
+    if (pendingTaskId && !loading && tasks.length > 0) {
+      const task = tasks.find(t => t.commitmentId === pendingTaskId);
+      if (task) {
+        setSelectedTask(task);
+        setModalOpen(true);
+      }
+      setPendingTaskId(null);
+    }
+  }, [pendingTaskId, loading, tasks]);
 
   const formattedDate = format(selectedDate, "EEEE, MMM d");
   const dateKey = format(selectedDate, "yyyy-MM-dd");
