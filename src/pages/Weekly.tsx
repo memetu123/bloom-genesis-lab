@@ -349,6 +349,64 @@ const Weekly = () => {
     setTaskModalOpen(true);
   };
 
+  const handleToggleComplete = async (task: DayTask, date: Date) => {
+    if (!user) return;
+    const dateKey = format(date, "yyyy-MM-dd");
+    
+    try {
+      if (task.taskType === "independent") {
+        // For independent tasks, toggle daily_task_instances
+        const { data: existingInstance } = await supabase
+          .from("daily_task_instances")
+          .select("id, is_completed")
+          .eq("completion_id", task.id)
+          .maybeSingle();
+
+        if (existingInstance) {
+          await supabase
+            .from("daily_task_instances")
+            .update({ is_completed: !existingInstance.is_completed })
+            .eq("id", existingInstance.id);
+        } else {
+          // Create instance if it doesn't exist
+          await supabase
+            .from("daily_task_instances")
+            .insert({
+              user_id: user.id,
+              completion_id: task.id,
+              is_completed: true,
+            });
+        }
+      } else {
+        // For recurring tasks, toggle commitment_completions
+        if (task.isCompleted) {
+          // Remove the completion record
+          await supabase
+            .from("commitment_completions")
+            .delete()
+            .eq("commitment_id", task.commitmentId)
+            .eq("completed_date", dateKey);
+        } else {
+          // Create a completion record
+          await supabase
+            .from("commitment_completions")
+            .insert({
+              user_id: user.id,
+              commitment_id: task.commitmentId,
+              completed_date: dateKey,
+              instance_number: task.instanceNumber || 1,
+            });
+        }
+      }
+      
+      // Refresh tasks
+      fetchCommitments();
+    } catch (error) {
+      console.error("Error toggling completion:", error);
+      toast.error("Failed to update task");
+    }
+  };
+
   const goToPreviousWeek = () => setCurrentWeekStart(prev => subWeeks(prev, 1));
   const goToNextWeek = () => setCurrentWeekStart(prev => addWeeks(prev, 1));
   const goToCurrentWeek = () => setCurrentWeekStart(getWeekStart(new Date()));
@@ -466,6 +524,7 @@ const Weekly = () => {
             selectedDate={selectedDate}
             onDateSelect={setSelectedDate}
             onTaskClick={handleTaskClick}
+            onToggleComplete={handleToggleComplete}
             weekStartsOn={weekStartsOn}
             timeFormat={preferences.timeFormat}
             dateFormat={preferences.dateFormat}

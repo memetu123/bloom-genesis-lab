@@ -32,6 +32,7 @@ interface NotionWeekCalendarProps {
   selectedDate: Date;
   onDateSelect: (date: Date) => void;
   onTaskClick: (task: DayTask, date: Date) => void;
+  onToggleComplete: (task: DayTask, date: Date) => void;
   weekStartsOn: 0 | 1;
   timeFormat: UserPreferences["timeFormat"];
   dateFormat: UserPreferences["dateFormat"];
@@ -43,6 +44,7 @@ const NotionWeekCalendar = ({
   selectedDate,
   onDateSelect,
   onTaskClick,
+  onToggleComplete,
   weekStartsOn,
   timeFormat,
   dateFormat,
@@ -66,6 +68,11 @@ const NotionWeekCalendar = ({
   const handleTaskClick = (e: React.MouseEvent, task: DayTask, date: Date) => {
     e.stopPropagation();
     onTaskClick(task, date);
+  };
+
+  const handleToggleComplete = (e: React.MouseEvent, task: DayTask, date: Date) => {
+    e.stopPropagation();
+    onToggleComplete(task, date);
   };
 
   const isToday = (date: Date) => isSameDay(date, new Date());
@@ -148,9 +155,8 @@ const NotionWeekCalendar = ({
                     : "";
                   
                   return (
-                    <button
+                    <div
                       key={task.id}
-                      onClick={(e) => handleTaskClick(e, task, date)}
                       className={`
                         w-full text-left text-xs py-0.5 px-1 
                         hover:bg-muted transition-calm
@@ -158,15 +164,25 @@ const NotionWeekCalendar = ({
                       `}
                     >
                       <div className="flex items-start gap-1">
-                        <span className={`flex-shrink-0 ${task.isCompleted ? "text-primary" : ""}`}>
+                        <button
+                          onClick={(e) => handleToggleComplete(e, task, date)}
+                          className={`flex-shrink-0 hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
+                          aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
+                        >
                           {task.isCompleted ? "●" : "○"}
-                        </span>
-                        <span className={`break-words ${task.isCompleted ? "line-through" : ""}`}>
+                        </button>
+                        <button
+                          onClick={(e) => handleTaskClick(e, task, date)}
+                          className={`text-left break-words flex-1 ${task.isCompleted ? "line-through" : ""}`}
+                        >
                           {task.title}{instanceLabel}
-                        </span>
+                        </button>
                       </div>
                       {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
-                        <div className="flex items-center gap-1 pl-4 mt-0.5">
+                        <button
+                          onClick={(e) => handleTaskClick(e, task, date)}
+                          className="flex items-center gap-1 pl-4 mt-0.5 w-full text-left"
+                        >
                           {timeDisplay && (
                             <span className="text-muted-foreground">
                               {timeDisplay}
@@ -178,9 +194,9 @@ const NotionWeekCalendar = ({
                           {task.isDetached && (
                             <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">detached</span>
                           )}
-                        </div>
+                        </button>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
                 {remainingCount > 0 && (
