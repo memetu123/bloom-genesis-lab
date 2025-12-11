@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 
 /**
  * Settings page - MVP version
@@ -19,9 +20,11 @@ import { Loader2 } from "lucide-react";
  */
 const Settings = () => {
   const { user } = useAuth();
+  const { refetch: refetchPreferences } = useUserPreferences();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Preferences state
   const [startOfWeek, setStartOfWeek] = useState("monday");
@@ -80,6 +83,8 @@ const Settings = () => {
         variant: "destructive",
       });
     } else {
+      // Refetch preferences to update the app
+      await refetchPreferences();
       toast({
         title: "Saved",
         description: "Your settings have been updated.",
@@ -87,12 +92,55 @@ const Settings = () => {
     }
   };
 
-  // Export data placeholder
-  const handleExportData = () => {
-    toast({
-      title: "Coming soon",
-      description: "Data export feature is under development.",
-    });
+  // Export user data as JSON
+  const handleExportData = async () => {
+    if (!user) return;
+    setExporting(true);
+
+    try {
+      // Fetch all user data
+      const [visionsRes, goalsRes, commitmentsRes, completionsRes, pillarsRes] = await Promise.all([
+        supabase.from("life_visions").select("*").eq("user_id", user.id),
+        supabase.from("goals").select("*").eq("user_id", user.id),
+        supabase.from("weekly_commitments").select("*").eq("user_id", user.id),
+        supabase.from("commitment_completions").select("*").eq("user_id", user.id),
+        supabase.from("pillars").select("*").eq("user_id", user.id),
+      ]);
+
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        pillars: pillarsRes.data || [],
+        visions: visionsRes.data || [],
+        goals: goalsRes.data || [],
+        weeklyCommitments: commitmentsRes.data || [],
+        taskCompletions: completionsRes.data || [],
+      };
+
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `todayoum-export-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export complete",
+        description: "Your data has been downloaded as a JSON file.",
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "Export failed",
+        description: "Failed to export your data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -133,8 +181,8 @@ const Settings = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="12h">12-hour</SelectItem>
-              <SelectItem value="24h">24-hour</SelectItem>
+              <SelectItem value="12h">12-hour (2:30 PM)</SelectItem>
+              <SelectItem value="24h">24-hour (14:30)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -147,9 +195,9 @@ const Settings = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-              <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-              <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+              <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (15/01/2024)</SelectItem>
+              <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (01/15/2024)</SelectItem>
+              <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-01-15)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -164,9 +212,14 @@ const Settings = () => {
         <div className="pt-6 border-t border-border">
           <h2 className="text-lg font-medium text-foreground mb-2">Your data</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Export all your goals, visions, and tasks.
+            Export all your pillars, visions, goals, and tasks as a JSON file.
           </p>
-          <Button variant="outline" onClick={handleExportData}>
+          <Button variant="outline" onClick={handleExportData} disabled={exporting}>
+            {exporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
             Export my data
           </Button>
         </div>

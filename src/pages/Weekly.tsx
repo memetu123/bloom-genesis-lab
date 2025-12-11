@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserPreferences, getWeekStartsOn } from "@/hooks/useUserPreferences";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "date-fns";
+import { formatWeekRange } from "@/lib/formatPreferences";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
 import NotionWeekCalendar from "@/components/weekly/NotionWeekCalendar";
@@ -50,21 +52,18 @@ interface GoalOption {
   title: string;
 }
 
-const getWeekStart = (date: Date): Date => {
-  return startOfWeek(date, { weekStartsOn: 1 });
-};
-
-const getWeekEnd = (date: Date): Date => {
-  return endOfWeek(date, { weekStartsOn: 1 });
-};
-
 const Weekly = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { preferences } = useUserPreferences();
+  const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
+  
   const [commitments, setCommitments] = useState<CommitmentData[]>([]);
   const [tasksByDate, setTasksByDate] = useState<Record<string, DayTask[]>>({});
   const [loading, setLoading] = useState(true);
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(new Date()));
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => 
+    startOfWeek(new Date(), { weekStartsOn })
+  );
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [goals, setGoals] = useState<GoalOption[]>([]);
@@ -77,8 +76,20 @@ const Weekly = () => {
   const [selectedTaskDate, setSelectedTaskDate] = useState<Date>(new Date());
   const [taskModalOpen, setTaskModalOpen] = useState(false);
 
-  const weekStartFormatted = format(currentWeekStart, "MMM d");
-  const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d, yyyy");
+  // Recalculate week start when preferences change
+  useEffect(() => {
+    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn }));
+  }, [weekStartsOn]);
+
+  const getWeekStart = useCallback((date: Date): Date => {
+    return startOfWeek(date, { weekStartsOn });
+  }, [weekStartsOn]);
+
+  const getWeekEnd = useCallback((date: Date): Date => {
+    return endOfWeek(date, { weekStartsOn });
+  }, [weekStartsOn]);
+
+  const weekRange = formatWeekRange(currentWeekStart, getWeekEnd(currentWeekStart), preferences.dateFormat);
   const isCurrentWeek = format(currentWeekStart, "yyyy-MM-dd") === format(getWeekStart(new Date()), "yyyy-MM-dd");
 
   const ensureCheckin = useCallback(async (
@@ -312,7 +323,7 @@ const Weekly = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, currentWeekStart, ensureCheckin]);
+  }, [user, currentWeekStart, ensureCheckin, getWeekEnd]);
 
   useEffect(() => {
     fetchCommitments();
@@ -413,7 +424,7 @@ const Weekly = () => {
         </button>
         <div className="text-center">
           <h2 className="text-base font-medium text-foreground">
-            {weekStartFormatted} – {weekEndFormatted}
+            {weekRange.start} – {weekRange.end}
           </h2>
           {!isCurrentWeek && (
             <button 
@@ -455,6 +466,9 @@ const Weekly = () => {
             selectedDate={selectedDate}
             onDateSelect={setSelectedDate}
             onTaskClick={handleTaskClick}
+            weekStartsOn={weekStartsOn}
+            timeFormat={preferences.timeFormat}
+            dateFormat={preferences.dateFormat}
           />
 
           {/* Weekly totals (only for recurring) */}

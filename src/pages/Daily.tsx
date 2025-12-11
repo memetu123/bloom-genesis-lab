@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserPreferences, getWeekStartsOn } from "@/hooks/useUserPreferences";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
+import { formatDateWithDay, formatTime, formatTimeRange } from "@/lib/formatPreferences";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
 import TaskDetailModal from "@/components/TaskDetailModal";
@@ -35,6 +37,9 @@ const Daily = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { preferences } = useUserPreferences();
+  const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
+  
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [goals, setGoals] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +83,7 @@ const Daily = () => {
     }
   }, [pendingTaskId, loading, tasks]);
 
-  const formattedDate = format(selectedDate, "EEEE, MMM d");
+  const formattedDate = formatDateWithDay(selectedDate, preferences.dateFormat);
   const dateKey = format(selectedDate, "yyyy-MM-dd");
 
   const fetchTasks = useCallback(async () => {
@@ -86,8 +91,8 @@ const Daily = () => {
     setLoading(true);
 
     try {
-      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
+      const weekStart = startOfWeek(selectedDate, { weekStartsOn });
+      const weekEnd = endOfWeek(selectedDate, { weekStartsOn });
       const weekStartStr = format(weekStart, "yyyy-MM-dd");
       const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
@@ -211,7 +216,7 @@ const Daily = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedDate, dateKey]);
+  }, [user, selectedDate, dateKey, weekStartsOn]);
 
   useEffect(() => {
     fetchTasks();
@@ -282,11 +287,6 @@ const Daily = () => {
       const taskHour = t.timeStart.split(":")[0];
       return taskHour === slotHour;
     });
-  };
-
-  const formatTime = (time: string | null) => {
-    if (!time) return "";
-    return time.substring(0, 5);
   };
 
   const getInstanceLabel = (task: DailyTask) => {
@@ -392,8 +392,8 @@ const Daily = () => {
                   return (
                     <div key={slot} className="flex">
                       {/* Time column */}
-                      <div className="w-16 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground border-r border-border bg-muted/10">
-                        {slot}
+                      <div className="w-20 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground border-r border-border bg-muted/10">
+                        {formatTime(slot, preferences.timeFormat)}
                       </div>
                       {/* Tasks column */}
                       <div className="flex-1 py-1">
@@ -417,8 +417,7 @@ const Daily = () => {
                               {getInstanceLabel(task)}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {formatTime(task.timeStart)}
-                              {task.timeEnd && ` – ${formatTime(task.timeEnd)}`}
+                              {formatTimeRange(task.timeStart, task.timeEnd, preferences.timeFormat)}
                             </span>
                             {task.taskType === "independent" && (
                               <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
@@ -482,7 +481,7 @@ const Daily = () => {
           onClick={() => navigate("/weekly")}
           className="text-sm text-primary hover:underline"
         >
-          ← Back to Weekly View
+          ← Back to weekly view
         </button>
       </div>
 
@@ -493,6 +492,7 @@ const Daily = () => {
         defaultDate={selectedDate}
         goals={goals}
         onSuccess={fetchTasks}
+        weekStart={startOfWeek(selectedDate, { weekStartsOn })}
       />
 
       {/* Task detail modal */}

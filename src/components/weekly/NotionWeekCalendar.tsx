@@ -1,9 +1,11 @@
-import { format, addDays, startOfWeek, isSameDay } from "date-fns";
+import { format, addDays, isSameDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { formatTime, formatDateShort } from "@/lib/formatPreferences";
+import type { UserPreferences } from "@/hooks/useUserPreferences";
 
 /**
  * NotionWeekCalendar - Notion-style 7-day calendar grid
- * Shows tasks inside each day cell
+ * Shows tasks inside each day cell, respects user preferences
  */
 
 interface DayTask {
@@ -30,6 +32,9 @@ interface NotionWeekCalendarProps {
   selectedDate: Date;
   onDateSelect: (date: Date) => void;
   onTaskClick: (task: DayTask, date: Date) => void;
+  weekStartsOn: 0 | 1;
+  timeFormat: UserPreferences["timeFormat"];
+  dateFormat: UserPreferences["dateFormat"];
 }
 
 const NotionWeekCalendar = ({
@@ -38,6 +43,9 @@ const NotionWeekCalendar = ({
   selectedDate,
   onDateSelect,
   onTaskClick,
+  weekStartsOn,
+  timeFormat,
+  dateFormat,
 }: NotionWeekCalendarProps) => {
   const navigate = useNavigate();
 
@@ -134,11 +142,7 @@ const NotionWeekCalendar = ({
               {/* Tasks - show max 6, no inner scroll */}
               <div className="space-y-1">
                 {visibleTasks.map((task) => {
-                  const formatTime = (time: string | null | undefined) => {
-                    if (!time) return null;
-                    return time.substring(0, 5);
-                  };
-                  const timeDisplay = formatTime(task.timeStart);
+                  const timeDisplay = task.timeStart ? formatTime(task.timeStart, timeFormat) : null;
                   const instanceLabel = task.totalInstances && task.totalInstances > 1
                     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
                     : "";
