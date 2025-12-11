@@ -33,11 +33,7 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchPreferences = useCallback(async () => {
-    // Wait for auth to finish loading first
-    if (authLoading) {
-      return;
-    }
-
+    // No user - use defaults
     if (!user) {
       setPreferences(DEFAULT_PREFERENCES);
       setLoading(false);
@@ -62,20 +58,6 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
           dateFormat: (data.date_format as UserPreferences["dateFormat"]) || DEFAULT_PREFERENCES.dateFormat,
         });
       } else {
-        // Create default preferences for new user
-        try {
-          await supabase
-            .from("user_preferences")
-            .upsert({
-              user_id: user.id,
-              start_of_week: DEFAULT_PREFERENCES.startOfWeek,
-              time_format: DEFAULT_PREFERENCES.timeFormat,
-              date_format: DEFAULT_PREFERENCES.dateFormat,
-            }, { onConflict: "user_id" });
-        } catch (upsertError) {
-          console.error("Error creating preferences:", upsertError);
-        }
-        
         setPreferences(DEFAULT_PREFERENCES);
       }
     } catch (err) {
@@ -84,13 +66,25 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user]);
 
+  // When auth finishes loading, fetch preferences
   useEffect(() => {
-    fetchPreferences();
-  }, [fetchPreferences]);
+    if (!authLoading) {
+      fetchPreferences();
+    }
+  }, [authLoading, fetchPreferences]);
 
-  // Always render children - never block the app
+  // Timeout fallback - ensure we never get stuck loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+      }
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
   return (
     <UserPreferencesContext.Provider value={{ preferences, loading, refetch: fetchPreferences }}>
       {children}
