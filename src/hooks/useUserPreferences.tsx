@@ -58,14 +58,18 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
         });
       } else {
         // Create default preferences for new user
-        await supabase
-          .from("user_preferences")
-          .upsert({
-            user_id: user.id,
-            start_of_week: DEFAULT_PREFERENCES.startOfWeek,
-            time_format: DEFAULT_PREFERENCES.timeFormat,
-            date_format: DEFAULT_PREFERENCES.dateFormat,
-          }, { onConflict: "user_id" });
+        try {
+          await supabase
+            .from("user_preferences")
+            .upsert({
+              user_id: user.id,
+              start_of_week: DEFAULT_PREFERENCES.startOfWeek,
+              time_format: DEFAULT_PREFERENCES.timeFormat,
+              date_format: DEFAULT_PREFERENCES.dateFormat,
+            }, { onConflict: "user_id" });
+        } catch (upsertError) {
+          console.error("Error creating preferences:", upsertError);
+        }
         
         setPreferences(DEFAULT_PREFERENCES);
       }
