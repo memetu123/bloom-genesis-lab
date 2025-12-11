@@ -241,6 +241,63 @@ const Daily = () => {
     setModalOpen(true);
   };
 
+  const handleToggleComplete = async (task: DailyTask) => {
+    if (!user) return;
+    
+    try {
+      if (task.taskType === "independent") {
+        // For independent tasks, toggle daily_task_instances
+        const { data: existingInstance } = await supabase
+          .from("daily_task_instances")
+          .select("id, is_completed")
+          .eq("completion_id", task.id)
+          .maybeSingle();
+
+        if (existingInstance) {
+          await supabase
+            .from("daily_task_instances")
+            .update({ is_completed: !existingInstance.is_completed })
+            .eq("id", existingInstance.id);
+        } else {
+          // Create instance if it doesn't exist
+          await supabase
+            .from("daily_task_instances")
+            .insert({
+              user_id: user.id,
+              completion_id: task.id,
+              is_completed: true,
+            });
+        }
+      } else {
+        // For recurring tasks, toggle commitment_completions
+        if (task.isCompleted) {
+          // Remove the completion record
+          await supabase
+            .from("commitment_completions")
+            .delete()
+            .eq("commitment_id", task.commitmentId)
+            .eq("completed_date", dateKey);
+        } else {
+          // Create a completion record
+          await supabase
+            .from("commitment_completions")
+            .insert({
+              user_id: user.id,
+              commitment_id: task.commitmentId,
+              completed_date: dateKey,
+              instance_number: task.instanceNumber || 1,
+            });
+        }
+      }
+      
+      // Refresh tasks
+      fetchTasks();
+    } catch (error) {
+      console.error("Error toggling completion:", error);
+      toast.error("Failed to update task");
+    }
+  };
+
   const goToPreviousDay = () => {
     const newDate = subDays(selectedDate, 1);
     setSelectedDate(newDate);
@@ -395,19 +452,22 @@ const Daily = () => {
                       <div className="w-20 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground border-r border-border bg-muted/10">
                         {formatTime(slot, preferences.timeFormat)}
                       </div>
-                      {/* Tasks column */}
                       <div className="flex-1 py-1">
                         {slotTasks.map((task) => (
-                          <button
+                          <div
                             key={task.id}
-                            onClick={() => handleTaskClick(task)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 transition-calm"
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-calm"
                           >
-                            <span className={`text-sm ${task.isCompleted ? "text-primary" : "text-muted-foreground"}`}>
+                            <button
+                              onClick={() => handleToggleComplete(task)}
+                              className={`text-sm hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                              aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
+                            >
                               {task.isCompleted ? "●" : "○"}
-                            </span>
-                            <span
-                              className={`text-sm flex-1 ${
+                            </button>
+                            <button
+                              onClick={() => handleTaskClick(task)}
+                              className={`text-sm flex-1 text-left ${
                                 task.isCompleted
                                   ? "text-muted-foreground line-through"
                                   : "text-foreground"
@@ -415,7 +475,7 @@ const Daily = () => {
                             >
                               {task.title}
                               {getInstanceLabel(task)}
-                            </span>
+                            </button>
                             <span className="text-xs text-muted-foreground">
                               {formatTimeRange(task.timeStart, task.timeEnd, preferences.timeFormat)}
                             </span>
@@ -424,7 +484,7 @@ const Daily = () => {
                                 1x
                               </span>
                             )}
-                          </button>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -444,16 +504,20 @@ const Daily = () => {
               </div>
               <div className="divide-y divide-border">
                 {unscheduledTasks.map((task) => (
-                  <button
+                  <div
                     key={task.id}
-                    onClick={() => handleTaskClick(task)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-calm"
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-calm"
                   >
-                    <span className={`text-base ${task.isCompleted ? "text-primary" : "text-muted-foreground"}`}>
+                    <button
+                      onClick={() => handleToggleComplete(task)}
+                      className={`text-base hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                      aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
+                    >
                       {task.isCompleted ? "●" : "○"}
-                    </span>
-                    <span
-                      className={`text-sm flex-1 ${
+                    </button>
+                    <button
+                      onClick={() => handleTaskClick(task)}
+                      className={`text-sm flex-1 text-left ${
                         task.isCompleted
                           ? "text-muted-foreground line-through"
                           : "text-foreground"
@@ -461,13 +525,13 @@ const Daily = () => {
                     >
                       {task.title}
                       {getInstanceLabel(task)}
-                    </span>
+                    </button>
                     {task.taskType === "independent" && (
                       <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
                         1x
                       </span>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
