@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
-import { Clock, X, Check, RefreshCw, Calendar, Trash2 } from "lucide-react";
+import { Clock, RefreshCw, Calendar, Trash2, Unlink, Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -20,6 +19,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { formatDateWithDay } from "@/lib/formatPreferences";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { TaskType, RecurrenceType, DayOfWeek } from "@/types/scheduling";
@@ -66,6 +67,7 @@ const TaskDetailModal = ({
   onUpdate,
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
+  const { preferences } = useUserPreferences();
   const { convertToRecurring, detachInstance, updateRecurrenceRules } =
     useTaskScheduling();
 
@@ -78,6 +80,7 @@ const TaskDetailModal = ({
   const [selectedDays, setSelectedDays] = useState<DayOfWeek[]>([]);
   const [showRepetitionEditor, setShowRepetitionEditor] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
 
   const dateKey = format(date, "yyyy-MM-dd");
 
@@ -88,6 +91,7 @@ const TaskDetailModal = ({
       setTimeEnd(task.timeEnd || "");
       setIsCompleted(task.isCompleted);
       setShowRepetitionEditor(false);
+      setJustCompleted(false);
 
       // Fetch recurrence rules if recurring
       if (task.commitmentId) {
@@ -315,7 +319,12 @@ const TaskDetailModal = ({
   };
 
   const handleToggleComplete = () => {
-    setIsCompleted(!isCompleted);
+    const newValue = !isCompleted;
+    setIsCompleted(newValue);
+    if (newValue) {
+      setJustCompleted(true);
+      setTimeout(() => setJustCompleted(false), 600);
+    }
   };
 
   /**
@@ -370,114 +379,243 @@ const TaskDetailModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-base font-medium flex items-center gap-2">
-            {isRecurring ? (
-              <RefreshCw className="h-4 w-4 text-primary" />
-            ) : (
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden">
+        {/* Sticky Header */}
+        <div className="sticky top-0 bg-background z-10 px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            {isRecurring && (
+              <RefreshCw className="h-4 w-4 text-primary flex-shrink-0" />
             )}
-            <span className="truncate">
+            {isDetached && (
+              <Unlink className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            )}
+            {!isRecurring && !isDetached && (
+              <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            )}
+            <h2 className="text-base font-medium truncate">
               {task.title}
               {instanceLabel}
-            </span>
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 mt-2">
-          {/* Date display */}
-          <div className="text-sm text-muted-foreground">
-            {format(date, "EEEE, MMMM d, yyyy")}
+            </h2>
           </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {formatDateWithDay(date, preferences.dateFormat)}
+          </p>
+        </div>
 
-          {/* Title edit */}
+        <div className="px-5 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* 1. Title Field */}
           <div>
-            <Label htmlFor="task-title">Title</Label>
             <Input
               id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1"
+              placeholder="Task title"
+              className="border border-border/60 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-lg"
             />
           </div>
 
-          {/* Task type indicator and actions */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-xs">
-              <span
-                className={`px-2 py-0.5 rounded ${
-                  isRecurring
-                    ? "bg-primary/10 text-primary"
-                    : isDetached
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {isRecurring ? "Recurring" : isDetached ? "Detached" : "One-time"}
+          {/* 2. Mark as Complete */}
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+              Mark as complete
+            </p>
+            <button
+              onClick={handleToggleComplete}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 border rounded-lg transition-all duration-200
+                ${isCompleted
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/40"
+                }
+                ${justCompleted ? "scale-[1.02]" : ""}
+              `}
+            >
+              <div className={`
+                w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200
+                ${isCompleted
+                  ? "bg-primary border-primary"
+                  : "border-muted-foreground/40"
+                }
+              `}>
+                {isCompleted && (
+                  <Check className={`h-3.5 w-3.5 text-primary-foreground ${justCompleted ? "animate-scale-in" : ""}`} />
+                )}
+              </div>
+              <span className={`text-sm ${isCompleted ? "text-primary font-medium" : "text-foreground"}`}>
+                {isCompleted ? "Completed" : "Mark as complete"}
               </span>
-            </div>
-            
-            {/* Detach button for recurring tasks (only affects this day) */}
-            {isRecurring && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDetachInstance}
-                disabled={saving}
-                className="w-full text-xs"
-              >
-                {saving ? "Detaching..." : "Detach this day from series"}
-              </Button>
-            )}
-
-            {/* Convert to recurring for independent tasks */}
-            {!isRecurring && !isDetached && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleConvertTaskType}
-                disabled={saving}
-                className="w-full text-xs"
-              >
-                {saving ? "Converting..." : "Convert to recurring"}
-              </Button>
-            )}
-
-            {/* Info for detached tasks */}
-            {isDetached && (
-              <p className="text-xs text-muted-foreground">
-                This day was detached from a recurring series. Changes only affect this day.
-              </p>
-            )}
+            </button>
           </div>
 
-          {/* Completion toggle */}
-          <button
-            onClick={handleToggleComplete}
-            className={`w-full flex items-center gap-3 p-3 border rounded transition-calm ${
-              isCompleted
-                ? "border-primary bg-primary/5 text-primary"
-                : "border-border hover:border-primary/50"
-            }`}
-          >
-            <span className="text-lg">{isCompleted ? "●" : "○"}</span>
-            <span className="text-sm">
-              {isCompleted ? "Completed" : "Mark as complete"}
-            </span>
-            {isCompleted && <Check className="h-4 w-4 ml-auto" />}
-          </button>
+          {/* 3. Recurrence Section */}
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+              Recurrence
+            </p>
+            
+            <div className="space-y-3">
+              {/* Recurrence Status Badge */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`
+                    inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                    ${isRecurring
+                      ? "bg-primary/10 text-primary"
+                      : isDetached
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-muted text-muted-foreground"
+                    }
+                  `}
+                >
+                  {isRecurring && <RefreshCw className="h-3 w-3" />}
+                  {isDetached && <Unlink className="h-3 w-3" />}
+                  {isRecurring ? "Recurring" : isDetached ? "Detached" : "One-time"}
+                </span>
+              </div>
 
-          {/* Time scheduling */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>Schedule time</span>
+              {/* Edit recurrence rules link */}
+              {isRecurring && !showRepetitionEditor && (
+                <button
+                  onClick={() => setShowRepetitionEditor(true)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Edit recurrence rules
+                </button>
+              )}
+
+              {/* Detach toggle for recurring tasks */}
+              {isRecurring && (
+                <div className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg">
+                  <Label htmlFor="detach-toggle" className="text-xs text-foreground cursor-pointer">
+                    Detach this instance from series
+                  </Label>
+                  <Switch
+                    id="detach-toggle"
+                    checked={false}
+                    onCheckedChange={handleDetachInstance}
+                    disabled={saving}
+                  />
+                </div>
+              )}
+
+              {/* Convert to recurring for independent tasks */}
+              {!isRecurring && !isDetached && (
+                <button
+                  onClick={handleConvertTaskType}
+                  disabled={saving}
+                  className="text-xs text-primary hover:underline disabled:opacity-50"
+                >
+                  {saving ? "Converting..." : "Convert to recurring"}
+                </button>
+              )}
+
+              {/* Info for detached tasks */}
+              {isDetached && (
+                <p className="text-xs text-muted-foreground bg-muted/30 px-3 py-2 rounded-lg">
+                  This day was detached from a recurring series. Changes only affect this day.
+                </p>
+              )}
+
+              {/* Recurrence rules editor */}
+              {showRepetitionEditor && (
+                <div className="space-y-3 pt-2 border-t border-border/50">
+                  <RadioGroup
+                    value={recurrenceType}
+                    onValueChange={(val) => setRecurrenceType(val as RecurrenceType)}
+                    className="flex flex-col gap-3"
+                  >
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem value="daily" id="edit-recurrence-daily" className="mt-0.5" />
+                      <div className="flex-1">
+                        <Label htmlFor="edit-recurrence-daily" className="font-normal cursor-pointer text-sm">
+                          Daily
+                        </Label>
+                        {recurrenceType === "daily" && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <Label className="text-xs whitespace-nowrap text-muted-foreground">Times per day:</Label>
+                            <Select value={timesPerDay} onValueChange={setTimesPerDay}>
+                              <SelectTrigger className="w-16 h-7 rounded-lg">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5].map((n) => (
+                                  <SelectItem key={n} value={n.toString()}>
+                                    {n}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem value="weekly" id="edit-recurrence-weekly" className="mt-0.5" />
+                      <div className="flex-1">
+                        <Label htmlFor="edit-recurrence-weekly" className="font-normal cursor-pointer text-sm">
+                          Weekly on specific days
+                        </Label>
+                        {recurrenceType === "weekly" && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {DAYS_OF_WEEK.map((day) => (
+                              <button
+                                key={day.value}
+                                type="button"
+                                onClick={() => handleDayToggle(day.value)}
+                                className={`
+                                  px-2 py-1 text-xs rounded-md border transition-colors
+                                  ${selectedDays.includes(day.value)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background border-border hover:bg-muted"
+                                  }
+                                `}
+                              >
+                                {day.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </RadioGroup>
+
+                  {/* Apply conversion button */}
+                  {!isRecurring && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleConvertTaskType}
+                      disabled={saving}
+                      className="w-full rounded-lg"
+                    >
+                      Convert to Recurring
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Schedule Time */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <Clock className="h-3 w-3" />
+                Schedule time
+              </p>
+              {(timeStart || timeEnd) && (
+                <button
+                  onClick={handleClearTime}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-3 items-center">
               <div className="flex-1">
-                <Label htmlFor="time-start" className="text-xs text-muted-foreground">
+                <Label htmlFor="time-start" className="text-xs text-muted-foreground mb-1 block">
                   Start
                 </Label>
                 <Input
@@ -485,11 +623,11 @@ const TaskDetailModal = ({
                   type="time"
                   value={timeStart}
                   onChange={(e) => setTimeStart(e.target.value)}
-                  className="h-9"
+                  className="h-9 border-border/60 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-lg"
                 />
               </div>
               <div className="flex-1">
-                <Label htmlFor="time-end" className="text-xs text-muted-foreground">
+                <Label htmlFor="time-end" className="text-xs text-muted-foreground mb-1 block">
                   End
                 </Label>
                 <Input
@@ -497,127 +635,26 @@ const TaskDetailModal = ({
                   type="time"
                   value={timeEnd}
                   onChange={(e) => setTimeEnd(e.target.value)}
-                  className="h-9"
+                  className="h-9 border-border/60 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-lg"
                 />
               </div>
             </div>
-
-            {(timeStart || timeEnd) && (
-              <button
-                onClick={handleClearTime}
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-              >
-                <X className="h-3 w-3" />
-                Clear time
-              </button>
-            )}
           </div>
 
-          {/* Recurrence rules (for recurring or when converting) */}
-          {showRepetitionEditor && (
-            <div className="space-y-3 border-t border-border pt-4">
-              <Label className="text-sm font-medium">Recurrence Rules</Label>
-
-              {/* Recurrence Type */}
-              <RadioGroup
-                value={recurrenceType}
-                onValueChange={(val) => setRecurrenceType(val as RecurrenceType)}
-                className="flex flex-col gap-3"
-              >
-                <div className="flex items-start space-x-2">
-                  <RadioGroupItem value="daily" id="edit-recurrence-daily" className="mt-0.5" />
-                  <div className="flex-1">
-                    <Label htmlFor="edit-recurrence-daily" className="font-normal cursor-pointer">
-                      Daily
-                    </Label>
-                    {recurrenceType === "daily" && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <Label className="text-xs whitespace-nowrap">Times per day:</Label>
-                        <Select value={timesPerDay} onValueChange={setTimesPerDay}>
-                          <SelectTrigger className="w-16 h-7">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[1, 2, 3, 4, 5].map((n) => (
-                              <SelectItem key={n} value={n.toString()}>
-                                {n}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <RadioGroupItem value="weekly" id="edit-recurrence-weekly" className="mt-0.5" />
-                  <div className="flex-1">
-                    <Label htmlFor="edit-recurrence-weekly" className="font-normal cursor-pointer">
-                      Weekly on specific days
-                    </Label>
-                    {recurrenceType === "weekly" && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {DAYS_OF_WEEK.map((day) => (
-                          <button
-                            key={day.value}
-                            type="button"
-                            onClick={() => handleDayToggle(day.value)}
-                            className={`
-                              px-2 py-1 text-xs rounded border transition-colors
-                              ${selectedDays.includes(day.value)
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background border-border hover:bg-muted"
-                              }
-                            `}
-                          >
-                            {day.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </RadioGroup>
-
-              {/* Apply conversion button */}
-              {!isRecurring && (
-                <Button
-                  variant="outline"
-                  onClick={handleConvertTaskType}
-                  disabled={saving}
-                  className="w-full"
-                >
-                  Convert to Recurring
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Edit repetition toggle for existing recurring tasks */}
-          {isRecurring && !showRepetitionEditor && (
-            <button
-              onClick={() => setShowRepetitionEditor(true)}
-              className="text-xs text-primary hover:underline"
-            >
-              Edit recurrence rules
-            </button>
-          )}
-
-          {/* Save button */}
-          <Button onClick={handleSave} disabled={saving} className="w-full">
+          {/* 5. Save Button */}
+          <Button onClick={handleSave} disabled={saving} className="w-full rounded-lg">
             {saving ? "Saving..." : "Save"}
           </Button>
 
-          {/* Delete button */}
-          <Button
-            variant="ghost"
+          {/* 6. Delete Button */}
+          <button
             onClick={handleDelete}
             disabled={saving}
-            className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-destructive/80 hover:text-destructive transition-colors disabled:opacity-50"
           >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete task
-          </Button>
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Delete task</span>
+          </button>
         </div>
       </DialogContent>
     </Dialog>
