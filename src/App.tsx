@@ -24,7 +24,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 /**
- * App - Root component with routing and providers
+ * App - Root component with routing
  * Provides auth, query, tooltip, and user preferences contexts
  */
 const App = () => (
