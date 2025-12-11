@@ -294,6 +294,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          created_at: string
+          date_format: string | null
+          display_name: string | null
+          id: string
+          start_of_week: string | null
+          time_format: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_format?: string | null
+          display_name?: string | null
+          id?: string
+          start_of_week?: string | null
+          time_format?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date_format?: string | null
+          display_name?: string | null
+          id?: string
+          start_of_week?: string | null
+          time_format?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       weekly_checkins: {
         Row: {
           actual_count: number
