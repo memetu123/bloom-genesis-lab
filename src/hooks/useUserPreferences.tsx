@@ -1,4 +1,4 @@
-/* User Preferences Hook - v2 */
+/* User Preferences Hook - v3 - Fixed import path */
 import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
