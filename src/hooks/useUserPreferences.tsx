@@ -28,11 +28,16 @@ interface UserPreferencesContextType {
 const UserPreferencesContext = createContext<UserPreferencesContextType | undefined>(undefined);
 
 export function UserPreferencesProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [loading, setLoading] = useState(true);
 
   const fetchPreferences = useCallback(async () => {
+    // Wait for auth to finish loading first
+    if (authLoading) {
+      return;
+    }
+
     if (!user) {
       setPreferences(DEFAULT_PREFERENCES);
       setLoading(false);
@@ -79,12 +84,13 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   useEffect(() => {
     fetchPreferences();
   }, [fetchPreferences]);
 
+  // Always render children - never block the app
   return (
     <UserPreferencesContext.Provider value={{ preferences, loading, refetch: fetchPreferences }}>
       {children}
