@@ -1,10 +1,16 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, LayoutDashboard, Eye, Target, Calendar, CalendarDays, Trash2 } from "lucide-react";
+import { LayoutDashboard, Eye, Target, Calendar, CalendarDays, User, Settings, Trash2, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import GlobalSearch from "@/components/GlobalSearch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * AppLayout - Shared layout with top navigation
@@ -21,17 +27,23 @@ const navItems = [
   { label: "Goals", path: "/goals", icon: Target },
   { label: "Weekly", path: "/weekly", icon: Calendar },
   { label: "Daily", path: "/daily", icon: CalendarDays },
-  { label: "Deleted", path: "/recently-deleted", icon: Trash2 },
 ];
 
 const AppLayout = ({ children }: AppLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth");
+  };
+
+  // Get user initials for avatar
+  const getUserInitials = () => {
+    if (!user?.email) return "U";
+    const email = user.email;
+    return email.charAt(0).toUpperCase();
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -69,13 +81,35 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               ))}
             </nav>
 
-            {/* Global Search and Sign Out */}
-            <div className="flex items-center gap-2">
+            {/* Global Search and User Menu */}
+            <div className="flex items-center gap-3">
               <GlobalSearch />
-              <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Sign out</span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center justify-center h-8 w-8 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-calm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                    {getUserInitials()}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => navigate("/profile")} className="cursor-pointer">
+                    <User className="h-4 w-4 mr-2" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/settings")} className="cursor-pointer">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/recently-deleted")} className="cursor-pointer">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Deleted items
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
