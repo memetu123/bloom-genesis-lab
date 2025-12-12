@@ -104,97 +104,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   
   // Strict guards to prevent duplicate fetches
   const didFetchRef = useRef(false);
+  const isFetchingRef = useRef(false);
   const userIdRef = useRef<string | null>(null);
 
-  // ============ FETCH FUNCTIONS ============
-
-  const fetchPreferences = useCallback(async () => {
-    if (!user) {
-      setPreferences(DEFAULT_PREFERENCES);
-      setPreferencesLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("user_preferences")
-        .select("start_of_week, time_format, date_format")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching preferences:", error);
-      }
-
-      if (data) {
-        setPreferences({
-          startOfWeek: (data.start_of_week as "sunday" | "monday") || DEFAULT_PREFERENCES.startOfWeek,
-          timeFormat: (data.time_format as "12h" | "24h") || DEFAULT_PREFERENCES.timeFormat,
-          dateFormat: (data.date_format as UserPreferences["dateFormat"]) || DEFAULT_PREFERENCES.dateFormat,
-        });
-      } else {
-        setPreferences(DEFAULT_PREFERENCES);
-      }
-    } catch (err) {
-      console.error("Error in fetchPreferences:", err);
-      setPreferences(DEFAULT_PREFERENCES);
-    } finally {
-      setPreferencesLoading(false);
-    }
-  }, [user]);
-
-  const fetchCoreData = useCallback(async () => {
-    if (!user) {
-      setPillars([]);
-      setVisions([]);
-      setGoals([]);
-      setCoreDataLoading(false);
-      return;
-    }
-
-    try {
-      // Fetch all core data in a single parallel batch
-      const [pillarsResult, visionsResult, goalsResult] = await Promise.all([
-        supabase
-          .from("pillars")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("sort_order", { ascending: true }),
-        supabase
-          .from("life_visions")
-          .select("*")
-          .eq("user_id", user.id)
-          .or("is_deleted.is.null,is_deleted.eq.false"),
-        supabase
-          .from("goals")
-          .select("*")
-          .eq("user_id", user.id)
-          .or("is_deleted.is.null,is_deleted.eq.false"),
-      ]);
-
-      if (pillarsResult.error) throw pillarsResult.error;
-      if (visionsResult.error) throw visionsResult.error;
-      if (goalsResult.error) throw goalsResult.error;
-
-      setPillars(pillarsResult.data || []);
-      
-      setVisions((visionsResult.data || []).map(v => ({
-        ...v,
-        status: (v.status as "active" | "completed" | "archived") || "active",
-        is_deleted: v.is_deleted || false,
-      })));
-      
-      setGoals((goalsResult.data || []).map(g => ({
-        ...g,
-        is_deleted: g.is_deleted || false,
-      })));
-
-    } catch (err) {
-      console.error("Error fetching core data:", err);
-    } finally {
-      setCoreDataLoading(false);
-    }
-  }, [user]);
+  // ============ MAIN FETCH FUNCTION ============
 
   const fetchAllData = useCallback(async () => {
     if (!user) {
@@ -204,19 +117,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setGoals([]);
       setPreferencesLoading(false);
       setCoreDataLoading(false);
+      didFetchRef.current = false;
+      userIdRef.current = null;
       return;
     }
 
-    // Prevent duplicate fetches for same user
+    // STRICT GUARD: Prevent duplicate fetches
+    if (isFetchingRef.current) {
+      return;
+    }
     if (didFetchRef.current && userIdRef.current === user.id) {
+      setPreferencesLoading(false);
+      setCoreDataLoading(false);
       return;
     }
 
+    isFetchingRef.current = true;
     setPreferencesLoading(true);
     setCoreDataLoading(true);
 
     try {
-      // Fetch everything in parallel
+      // Fetch everything in parallel - SINGLE batch request
       const [prefsResult, pillarsResult, visionsResult, goalsResult] = await Promise.all([
         supabase
           .from("user_preferences")
@@ -273,42 +194,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         })));
       }
 
+      // Mark as fetched for this user
       didFetchRef.current = true;
       userIdRef.current = user.id;
 
     } catch (err) {
-      console.error("Error fetching all data:", err);
+      console.error("Error fetching app data:", err);
     } finally {
       setPreferencesLoading(false);
       setCoreDataLoading(false);
+      isFetchingRef.current = false;
     }
   }, [user]);
 
   // ============ EFFECTS ============
 
-  // Fetch all data when auth finishes loading
+  // Fetch all data when auth finishes loading - only once
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && user && !didFetchRef.current) {
       fetchAllData();
-    }
-  }, [authLoading, fetchAllData]);
-
-  // Reset when user changes
-  useEffect(() => {
-    if (user?.id !== userIdRef.current) {
+    } else if (!authLoading && !user) {
+      // Reset state when user logs out
+      setPreferences(DEFAULT_PREFERENCES);
+      setPillars([]);
+      setVisions([]);
+      setGoals([]);
+      setPreferencesLoading(false);
+      setCoreDataLoading(false);
       didFetchRef.current = false;
-      if (user) {
-        fetchAllData();
-      } else {
-        setPreferences(DEFAULT_PREFERENCES);
-        setPillars([]);
-        setVisions([]);
-        setGoals([]);
-        setPreferencesLoading(false);
-        setCoreDataLoading(false);
-      }
+      userIdRef.current = null;
     }
-  }, [user, fetchAllData]);
+  }, [authLoading, user, fetchAllData]);
 
   // Timeout fallback for preferences
   useEffect(() => {
@@ -340,8 +256,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // ============ REFETCH METHODS ============
 
   const refetchPreferences = useCallback(async () => {
-    await fetchPreferences();
-  }, [fetchPreferences]);
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from("user_preferences")
+        .select("start_of_week, time_format, date_format")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      if (data) {
+        setPreferences({
+          startOfWeek: (data.start_of_week as "sunday" | "monday") || DEFAULT_PREFERENCES.startOfWeek,
+          timeFormat: (data.time_format as "12h" | "24h") || DEFAULT_PREFERENCES.timeFormat,
+          dateFormat: (data.date_format as UserPreferences["dateFormat"]) || DEFAULT_PREFERENCES.dateFormat,
+        });
+      }
+    } catch (err) {
+      console.error("Error refetching preferences:", err);
+    }
+  }, [user]);
 
   const refetchPillars = useCallback(async () => {
     if (!user) return;
@@ -382,6 +315,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const refetchAll = useCallback(async () => {
     didFetchRef.current = false;
+    isFetchingRef.current = false;
     await fetchAllData();
   }, [fetchAllData]);
 
@@ -442,7 +376,7 @@ export function useAppData() {
 }
 
 /**
- * User preferences selector (backwards compatible with useUserPreferences)
+ * User preferences selector (backwards compatible)
  */
 export function usePreferences() {
   const context = useContext(AppDataContext);
@@ -461,7 +395,7 @@ export function usePreferences() {
 }
 
 /**
- * Goals selector (backwards compatible with useGoals)
+ * Goals selector (backwards compatible)
  */
 export function useGoalsData() {
   const context = useContext(AppDataContext);
