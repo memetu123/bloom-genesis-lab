@@ -394,7 +394,7 @@ const TaskDetailModal = ({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Task title"
-            className="h-10 text-sm border border-border/50 rounded-lg bg-transparent focus:border-primary focus:outline-none focus:ring-0 focus:ring-offset-0 focus:shadow-none"
+            className="h-10 text-sm border border-border/50 rounded-lg bg-transparent focus:border-primary focus:outline-none focus:ring-0 focus:ring-offset-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
 
           {/* 2. Mark as Complete - flat inline row */}
