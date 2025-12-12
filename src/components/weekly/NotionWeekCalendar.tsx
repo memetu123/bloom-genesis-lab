@@ -1,6 +1,8 @@
 import { format, addDays, isSameDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { Unlink } from "lucide-react";
 import { formatTime, formatDateShort } from "@/lib/formatPreferences";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
@@ -192,7 +194,16 @@ const NotionWeekCalendar = ({
                             <span className="text-[9px] bg-muted px-1 rounded">1x</span>
                           )}
                           {task.isDetached && (
-                            <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">detached</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <Unlink className="h-3 w-3 text-muted-foreground/60" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Detached from recurring task
+                              </TooltipContent>
+                            </Tooltip>
                           )}
                         </button>
                       )}
