@@ -8,7 +8,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
-import { useGoals } from "@/hooks/useGoalsContext";
+import { useAppData } from "@/hooks/useAppData";
 import type { TaskType } from "@/types/scheduling";
 
 export interface DailyTask {
@@ -46,7 +46,7 @@ export function useDailyData(
   weekStartsOn: 0 | 1 = 1
 ): UseDailyDataResult {
   const { user } = useAuth();
-  const { goals, goalsMap } = useGoals();
+  const { goalsMap } = useAppData();
   
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);

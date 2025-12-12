@@ -19,7 +19,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
-import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useAppData } from "@/hooks/useAppData";
 import { formatDateWithDay } from "@/lib/formatPreferences";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -67,7 +67,7 @@ const TaskDetailModal = ({
   onUpdate,
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
-  const { preferences } = useUserPreferences();
+  const { preferences } = useAppData();
   const { convertToRecurring, detachInstance, updateRecurrenceRules } =
     useTaskScheduling();
 
