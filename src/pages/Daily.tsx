@@ -1,57 +1,94 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserPreferences, getWeekStartsOn } from "@/hooks/useUserPreferences";
+import { useGoals } from "@/hooks/useGoalsContext";
+import { useDailyData, DailyTask } from "@/hooks/useDailyData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { format, addDays, subDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
+import { format, addDays, subDays, parseISO } from "date-fns";
 import { formatDateWithDay, formatTime, formatTimeRange } from "@/lib/formatPreferences";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
-import type { TaskType } from "@/types/scheduling";
 
 /**
  * Daily Page - Notion-style daily view with time slots
- * Shows tasks in a timeline format with time scheduling
- * 
- * OPTIMIZATION: All data is fetched in a single batch, then processed in-memory
+ * OPTIMIZED: Uses useDailyData hook for single-batch fetching
  */
 
-interface DailyTask {
-  id: string;
-  commitmentId: string | null;
-  title: string;
-  timeStart: string | null;
-  timeEnd: string | null;
-  isCompleted: boolean;
-  taskType: TaskType;
-  instanceNumber?: number;
-  totalInstances?: number;
-  goalIsFocus: boolean | null;
-  isDetached?: boolean;
-}
+// Memoized task item component
+const TaskItem = memo(({ 
+  task, 
+  timeFormat, 
+  onToggle, 
+  onClick 
+}: { 
+  task: DailyTask; 
+  timeFormat: "12h" | "24h";
+  onToggle: () => void;
+  onClick: () => void;
+}) => {
+  const timeDisplay = task.timeStart 
+    ? formatTimeRange(task.timeStart, task.timeEnd || null, timeFormat)
+    : null;
+  
+  const instanceLabel = task.totalInstances && task.totalInstances > 1
+    ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
+    : "";
+
+  return (
+    <div className="flex items-start gap-3 py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm">
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
+      >
+        {task.isCompleted ? "●" : "○"}
+      </button>
+      <button
+        onClick={onClick}
+        className="flex-1 text-left"
+      >
+        <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
+          {task.title}{instanceLabel}
+        </span>
+        {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
+          <div className="flex items-center gap-2 mt-0.5">
+            {timeDisplay && (
+              <span className="text-xs text-muted-foreground">{timeDisplay}</span>
+            )}
+            {task.taskType === "independent" && !task.isDetached && (
+              <span className="text-[9px] bg-muted px-1 rounded">1x</span>
+            )}
+            {task.isDetached && (
+              <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">detached</span>
+            )}
+          </div>
+        )}
+      </button>
+    </div>
+  );
+});
+TaskItem.displayName = 'TaskItem';
 
 const Daily = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { preferences } = useUserPreferences();
+  const { goals } = useGoals();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
   
-  const [tasks, setTasks] = useState<DailyTask[]>([]);
-  const [goals, setGoals] = useState<{ id: string; title: string }[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
-  // Get date and taskId from URL
+  // Get date from URL
   const dateParam = searchParams.get("date");
   const taskIdParam = searchParams.get("taskId");
   
@@ -65,6 +102,12 @@ const Daily = () => {
     }
     return new Date();
   });
+
+  // Use centralized data hook
+  const { tasks, loading, refetch, updateTaskCompletion } = useDailyData(
+    selectedDate,
+    weekStartsOn
+  );
 
   // Store taskId to open modal after loading
   useEffect(() => {
@@ -88,228 +131,18 @@ const Daily = () => {
   const formattedDate = formatDateWithDay(selectedDate, preferences.dateFormat);
   const dateKey = format(selectedDate, "yyyy-MM-dd");
 
-  // Day name mapping for checking which days to show
-  const dayIndexToName: Record<number, string> = useMemo(() => ({
-    0: "sun", 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat"
-  }), []);
-
-  /**
-   * OPTIMIZED: Single batch fetch for all daily data
-   * - Fetches all data in parallel
-   * - Processes everything in memory
-   * - No N+1 queries
-   */
-  const fetchDailyData = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-
-    try {
-      const weekStart = startOfWeek(selectedDate, { weekStartsOn });
-      const weekEnd = endOfWeek(selectedDate, { weekStartsOn });
-      const weekStartStr = format(weekStart, "yyyy-MM-dd");
-      const weekEndStr = format(weekEnd, "yyyy-MM-dd");
-
-      // BATCH FETCH: All data in parallel (single request each)
-      const [
-        commitmentsResult,
-        checkinsResult,
-        completionsResult,
-        independentTasksResult,
-        taskInstancesResult,
-        goalsResult
-      ] = await Promise.all([
-        // 1. All active weekly commitments
-        supabase
-          .from("weekly_commitments")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .or("is_deleted.is.null,is_deleted.eq.false"),
-        
-        // 2. Weekly checkins for this week
-        supabase
-          .from("weekly_checkins")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("period_start_date", weekStartStr),
-        
-        // 3. Completions for this specific date
-        supabase
-          .from("commitment_completions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("completed_date", dateKey)
-          .or("is_deleted.is.null,is_deleted.eq.false"),
-        
-        // 4. Independent tasks for this date
-        supabase
-          .from("commitment_completions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("completed_date", dateKey)
-          .or("task_type.eq.independent,is_detached.eq.true")
-          .or("is_deleted.is.null,is_deleted.eq.false"),
-        
-        // 5. All daily task instances for the user
-        supabase
-          .from("daily_task_instances")
-          .select("*")
-          .eq("user_id", user.id),
-        
-        // 6. All goals (for focus status and dropdown)
-        supabase
-          .from("goals")
-          .select("id, title, is_focus, goal_type")
-          .eq("user_id", user.id)
-          .or("is_deleted.is.null,is_deleted.eq.false")
-      ]);
-
-      if (commitmentsResult.error) throw commitmentsResult.error;
-
-      const rawCommitments = commitmentsResult.data || [];
-      const existingCheckins = checkinsResult.data || [];
-      const allCompletions = completionsResult.data || [];
-      const independentTasks = independentTasksResult.data || [];
-      const taskInstances = taskInstancesResult.data || [];
-      const allGoals = goalsResult.data || [];
-
-      // Build lookup maps for O(1) access
-      const checkinByCommitmentId = new Map(
-        existingCheckins.map(c => [c.weekly_commitment_id, c])
-      );
-      const goalFocusMap = new Map(
-        allGoals.map(g => [g.id, g.is_focus])
-      );
-      const taskInstanceMap = new Map(
-        taskInstances.map(ti => [ti.completion_id, ti])
-      );
-      const completionByCommitmentId = new Map(
-        allCompletions.filter(c => c.commitment_id).map(c => [c.commitment_id, c])
-      );
-
-      // Create missing checkins in batch
-      const checkinsToCreate: any[] = [];
-      for (const commitment of rawCommitments) {
-        if (!checkinByCommitmentId.has(commitment.id)) {
-          const frequency = commitment.frequency_json as { times_per_week: number };
-          checkinsToCreate.push({
-            user_id: user.id,
-            weekly_commitment_id: commitment.id,
-            period_start_date: weekStartStr,
-            period_end_date: weekEndStr,
-            planned_count: frequency.times_per_week || 1,
-            actual_count: 0
-          });
-        }
-      }
-
-      // Batch insert new checkins if any
-      if (checkinsToCreate.length > 0) {
-        await supabase
-          .from("weekly_checkins")
-          .insert(checkinsToCreate);
-      }
-
-      // Build daily tasks (all in memory)
-      const dailyTasks: DailyTask[] = [];
-      const dayOfWeek = selectedDate.getDay();
-      const dayName = dayIndexToName[dayOfWeek];
-
-      for (const commitment of rawCommitments) {
-        const recurrenceType = commitment.recurrence_type || 'weekly';
-        const daysOfWeek = commitment.repeat_days_of_week || [];
-        
-        // Check if task should appear on this day
-        let shouldShow = false;
-        if (recurrenceType === 'daily') {
-          shouldShow = true;
-        } else if (recurrenceType === 'weekly') {
-          if (daysOfWeek.length === 0) {
-            shouldShow = dayOfWeek >= 1 && dayOfWeek <= 5;
-          } else {
-            shouldShow = daysOfWeek.includes(dayName);
-          }
-        }
-
-        if (!shouldShow) continue;
-
-        const completion = completionByCommitmentId.get(commitment.id);
-
-        // Skip if this instance is detached
-        if (completion?.is_detached) {
-          continue;
-        }
-
-        const goalIsFocus = commitment.goal_id ? goalFocusMap.get(commitment.goal_id) ?? null : null;
-        const timeStart = completion?.time_start || commitment.default_time_start || null;
-        const timeEnd = completion?.time_end || commitment.default_time_end || null;
-        const timesPerDay = commitment.times_per_day || 1;
-
-        dailyTasks.push({
-          id: `${commitment.id}-${dateKey}`,
-          commitmentId: commitment.id,
-          title: commitment.title,
-          timeStart,
-          timeEnd,
-          isCompleted: !!completion,
-          taskType: "recurring",
-          instanceNumber: completion?.instance_number || 1,
-          totalInstances: timesPerDay,
-          goalIsFocus,
-        });
-      }
-
-      // Add independent/detached tasks
-      for (const task of independentTasks) {
-        const taskInstance = taskInstanceMap.get(task.id);
-
-        dailyTasks.push({
-          id: task.id,
-          commitmentId: task.is_detached ? task.commitment_id : null,
-          title: task.title || "Untitled Task",
-          timeStart: task.time_start,
-          timeEnd: task.time_end,
-          isCompleted: taskInstance?.is_completed ?? false,
-          taskType: "independent",
-          goalIsFocus: null,
-          isDetached: task.is_detached ?? false,
-        });
-      }
-
-      setTasks(dailyTasks);
-      
-      // Set goals for dropdown (all goals, filter ninety_day for UI)
-      const ninety_day_goals = allGoals.filter(g => g.goal_type === "ninety_day");
-      setGoals(ninety_day_goals.map(g => ({ id: g.id, title: g.title })));
-
-    } catch (error: any) {
-      console.error("Error fetching daily data:", error);
-      toast.error("Failed to load tasks");
-    } finally {
-      setLoading(false);
-    }
-  }, [user, selectedDate, dateKey, weekStartsOn, dayIndexToName]);
-
-  // Single useEffect with stable dependencies
-  useEffect(() => {
-    if (user) {
-      fetchDailyData();
-    }
-  }, [user, dateKey, fetchDailyData]);
-
-  const handleTaskClick = (task: DailyTask) => {
+  // Stable handlers
+  const handleTaskClick = useCallback((task: DailyTask) => {
     setSelectedTask(task);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleToggleComplete = async (task: DailyTask) => {
+  const handleToggleComplete = useCallback(async (task: DailyTask) => {
     if (!user) return;
     const newCompleted = !task.isCompleted;
     
-    // Optimistic update - immediately update UI
-    setTasks(prev => prev.map(t => 
-      t.id === task.id ? { ...t, isCompleted: newCompleted } : t
-    ));
+    // Optimistic update
+    updateTaskCompletion(task.id, newCompleted);
     
     try {
       if (task.taskType === "independent") {
@@ -354,67 +187,72 @@ const Daily = () => {
     } catch (error) {
       console.error("Error toggling completion:", error);
       toast.error("Failed to update task");
-      // Rollback optimistic update on error
-      setTasks(prev => prev.map(t => 
-        t.id === task.id ? { ...t, isCompleted: !newCompleted } : t
-      ));
+      // Rollback optimistic update
+      updateTaskCompletion(task.id, !newCompleted);
     }
-  };
+  }, [user, dateKey, updateTaskCompletion]);
 
-  const goToPreviousDay = () => {
+  const goToPreviousDay = useCallback(() => {
     const newDate = subDays(selectedDate, 1);
     setSelectedDate(newDate);
     navigate(`/daily?date=${format(newDate, "yyyy-MM-dd")}`, { replace: true });
-  };
+  }, [selectedDate, navigate]);
 
-  const goToNextDay = () => {
+  const goToNextDay = useCallback(() => {
     const newDate = addDays(selectedDate, 1);
     setSelectedDate(newDate);
     navigate(`/daily?date=${format(newDate, "yyyy-MM-dd")}`, { replace: true });
-  };
+  }, [selectedDate, navigate]);
 
-  const goToToday = () => {
+  const goToToday = useCallback(() => {
     const today = new Date();
     setSelectedDate(today);
     navigate(`/daily?date=${format(today, "yyyy-MM-dd")}`, { replace: true });
-  };
+  }, [navigate]);
 
   const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
-  // Filter tasks based on focus toggle
-  const filteredTasks = showFocusedOnly
-    ? tasks.filter((t) => t.taskType === "independent" || t.goalIsFocus === true)
-    : tasks;
+  // Filter tasks based on focus toggle - memoized
+  const filteredTasks = useMemo(() => 
+    showFocusedOnly
+      ? tasks.filter(t => t.taskType === "independent" || t.goalIsFocus === true)
+      : tasks,
+    [showFocusedOnly, tasks]
+  );
 
-  // Separate tasks with scheduled time from unscheduled
-  const scheduledTasks = filteredTasks
-    .filter((t) => t.timeStart)
-    .sort((a, b) => (a.timeStart || "").localeCompare(b.timeStart || ""));
-  
-  const unscheduledTasks = filteredTasks.filter((t) => !t.timeStart);
+  // Separate tasks - memoized
+  const { scheduledTasks, unscheduledTasks } = useMemo(() => ({
+    scheduledTasks: filteredTasks
+      .filter(t => t.timeStart)
+      .sort((a, b) => (a.timeStart || "").localeCompare(b.timeStart || "")),
+    unscheduledTasks: filteredTasks.filter(t => !t.timeStart)
+  }), [filteredTasks]);
 
-  // Generate time slots for the timeline
-  const timeSlots = [
+  // Time slots
+  const timeSlots = useMemo(() => [
     "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
     "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"
-  ];
+  ], []);
 
-  // Group scheduled tasks by hour
-  const getTasksForSlot = (slot: string) => {
+  // Group tasks by hour - memoized
+  const getTasksForSlot = useCallback((slot: string) => {
     const slotHour = slot.split(":")[0];
-    return scheduledTasks.filter((t) => {
+    return scheduledTasks.filter(t => {
       if (!t.timeStart) return false;
       const taskHour = t.timeStart.split(":")[0];
       return taskHour === slotHour;
     });
-  };
+  }, [scheduledTasks]);
 
-  const getInstanceLabel = (task: DailyTask) => {
-    if (task.totalInstances && task.totalInstances > 1) {
-      return ` #${task.instanceNumber || 1}`;
-    }
-    return "";
-  };
+  // Goals for dropdown - memoized
+  const goalOptions = useMemo(() => 
+    goals.filter(g => g.goal_type === "ninety_day").map(g => ({ id: g.id, title: g.title })),
+    [goals]
+  );
+
+  // Daily progress
+  const dailyCompleted = filteredTasks.filter(t => t.isCompleted).length;
+  const dailyTotal = filteredTasks.length;
 
   if (loading) {
     return (
@@ -423,10 +261,6 @@ const Daily = () => {
       </div>
     );
   }
-
-  // Calculate daily progress
-  const dailyCompleted = filteredTasks.filter(t => t.isCompleted).length;
-  const dailyTotal = filteredTasks.length;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl" style={{ maxHeight: '80vh' }}>
@@ -498,53 +332,29 @@ const Daily = () => {
         <div className="space-y-6">
           {/* Scheduled tasks - Timeline view */}
           {scheduledTasks.length > 0 && (
-            <div className="border border-border">
-              <div className="border-b border-border px-4 py-2 bg-muted/30">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Scheduled
-                </span>
-              </div>
-              <div className="divide-y divide-border">
+            <div>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">
+                Scheduled
+              </h3>
+              <div className="border border-border">
                 {timeSlots.map((slot) => {
                   const slotTasks = getTasksForSlot(slot);
                   if (slotTasks.length === 0) return null;
-                  
+
                   return (
-                    <div key={slot} className="flex">
-                      {/* Time column */}
-                      <div className="w-20 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground border-r border-border bg-muted/10">
+                    <div key={slot} className="flex border-b border-border last:border-b-0">
+                      <div className="w-16 py-2 px-2 text-xs text-muted-foreground border-r border-border">
                         {formatTime(slot, preferences.timeFormat)}
                       </div>
-                      <div className="flex-1 py-1">
+                      <div className="flex-1 py-1 px-2">
                         {slotTasks.map((task) => (
-                          <div
+                          <TaskItem
                             key={task.id}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-calm"
-                          >
-                            <button
-                              onClick={() => handleToggleComplete(task)}
-                              className={`text-sm hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
-                              aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
-                            >
-                              {task.isCompleted ? "●" : "○"}
-                            </button>
-                            <button
-                              onClick={() => handleTaskClick(task)}
-                              className={`text-sm flex-1 text-left ${
-                                task.isCompleted
-                                  ? "text-muted-foreground line-through"
-                                  : "text-foreground"
-                              }`}
-                            >
-                              {task.title}
-                              {getInstanceLabel(task)}
-                            </button>
-                            {task.timeEnd && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatTimeRange(task.timeStart!, task.timeEnd, preferences.timeFormat)}
-                              </span>
-                            )}
-                          </div>
+                            task={task}
+                            timeFormat={preferences.timeFormat}
+                            onToggle={() => handleToggleComplete(task)}
+                            onClick={() => handleTaskClick(task)}
+                          />
                         ))}
                       </div>
                     </div>
@@ -556,47 +366,19 @@ const Daily = () => {
 
           {/* Unscheduled tasks */}
           {unscheduledTasks.length > 0 && (
-            <div className="border border-border">
-              <div className="border-b border-border px-4 py-2 bg-muted/30">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  No Time Assigned
-                </span>
-              </div>
-              <div className="divide-y divide-border">
+            <div>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">
+                No Time Assigned
+              </h3>
+              <div className="border border-border p-3 space-y-1">
                 {unscheduledTasks.map((task) => (
-                  <div
+                  <TaskItem
                     key={task.id}
-                    className="flex items-center gap-2 px-4 py-3 hover:bg-muted/30 transition-calm"
-                  >
-                    <button
-                      onClick={() => handleToggleComplete(task)}
-                      className={`text-sm hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
-                      aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
-                    >
-                      {task.isCompleted ? "●" : "○"}
-                    </button>
-                    <button
-                      onClick={() => handleTaskClick(task)}
-                      className={`text-sm flex-1 text-left ${
-                        task.isCompleted
-                          ? "text-muted-foreground line-through"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {task.title}
-                      {getInstanceLabel(task)}
-                    </button>
-                    {task.taskType === "independent" && (
-                      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        one-time
-                      </span>
-                    )}
-                    {task.isDetached && (
-                      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        detached
-                      </span>
-                    )}
-                  </div>
+                    task={task}
+                    timeFormat={preferences.timeFormat}
+                    onToggle={() => handleToggleComplete(task)}
+                    onClick={() => handleTaskClick(task)}
+                  />
                 ))}
               </div>
             </div>
@@ -604,46 +386,23 @@ const Daily = () => {
         </div>
       )}
 
-      {/* Back to weekly view link */}
-      <div className="mt-8 pt-4 border-t border-border">
-        <button
-          onClick={() => navigate("/weekly")}
-          className="text-sm text-muted-foreground hover:text-foreground transition-calm flex items-center gap-1"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to weekly view
-        </button>
-      </div>
-
-      {/* Task Create Modal */}
+      {/* Task create modal */}
       <TaskCreateModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         defaultDate={selectedDate}
-        goals={goals}
-        onSuccess={() => fetchDailyData()}
+        goals={goalOptions}
+        onSuccess={refetch}
       />
 
-      {/* Task Detail Modal */}
-      {selectedTask && (
-        <TaskDetailModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          task={{
-            id: selectedTask.id,
-            commitmentId: selectedTask.commitmentId,
-            title: selectedTask.title,
-            timeStart: selectedTask.timeStart,
-            timeEnd: selectedTask.timeEnd,
-            isCompleted: selectedTask.isCompleted,
-            taskType: selectedTask.taskType,
-            instanceNumber: selectedTask.instanceNumber,
-            isDetached: selectedTask.isDetached,
-          }}
-          date={selectedDate}
-          onUpdate={() => fetchDailyData()}
-        />
-      )}
+      {/* Task detail modal */}
+      <TaskDetailModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        task={selectedTask}
+        date={selectedDate}
+        onUpdate={refetch}
+      />
     </div>
   );
 };

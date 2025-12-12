@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { UserPreferencesProvider } from "@/hooks/useUserPreferences";
+import { GoalsProvider } from "@/hooks/useGoalsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
@@ -37,6 +38,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <UserPreferencesProvider>
+              <GoalsProvider>
               <Routes>
               {/* Public routes */}
               <Route path="/" element={<Index />} />
@@ -57,6 +59,7 @@ const App = () => (
               
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </GoalsProvider>
             </UserPreferencesProvider>
           </AuthProvider>
         </BrowserRouter>
