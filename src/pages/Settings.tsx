@@ -11,8 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download } from "lucide-react";
+import { exportCSV } from "@/lib/csvExport";
 
 /**
  * Settings page - MVP version
@@ -30,6 +32,9 @@ const Settings = () => {
   const [startOfWeek, setStartOfWeek] = useState("monday");
   const [timeFormat, setTimeFormat] = useState("24h");
   const [dateFormat, setDateFormat] = useState("YYYY-MM-DD");
+
+  // Export format state
+  const [exportFormat, setExportFormat] = useState<"json" | "csv">("json");
 
   // Fetch user preferences on mount
   useEffect(() => {
@@ -93,7 +98,7 @@ const Settings = () => {
   };
 
   // Export user data as JSON
-  const handleExportData = async () => {
+  const handleExportJSON = async () => {
     if (!user) return;
     setExporting(true);
 
@@ -140,6 +145,49 @@ const Settings = () => {
       });
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Export user data as CSV (ZIP with two files)
+  const handleExportCSV = async () => {
+    if (!user) return;
+    setExporting(true);
+
+    try {
+      const blob = await exportCSV(user.id);
+
+      // Download ZIP file
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `todayoum-export-${new Date().toISOString().split("T")[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "CSV export downloaded",
+        description: "Your data has been exported as CSV files.",
+      });
+    } catch (error) {
+      console.error("CSV export error:", error);
+      toast({
+        title: "Export failed",
+        description: "Failed to export your data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Handle export based on selected format
+  const handleExport = () => {
+    if (exportFormat === "json") {
+      handleExportJSON();
+    } else {
+      handleExportCSV();
     }
   };
 
@@ -212,15 +260,44 @@ const Settings = () => {
         <div className="pt-6 border-t border-border">
           <h2 className="text-lg font-medium text-foreground mb-2">Your data</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Export all your pillars, visions, goals, and tasks as a JSON file.
+            Export all your pillars, visions, goals, and tasks.
           </p>
-          <Button variant="outline" onClick={handleExportData} disabled={exporting}>
+
+          {/* Export Format Selection */}
+          <div className="space-y-3 mb-4">
+            <Label>Export format</Label>
+            <RadioGroup
+              value={exportFormat}
+              onValueChange={(value) => setExportFormat(value as "json" | "csv")}
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="json" id="format-json" />
+                <Label htmlFor="format-json" className="font-normal cursor-pointer">
+                  JSON
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="csv" id="format-csv" />
+                <Label htmlFor="format-csv" className="font-normal cursor-pointer">
+                  CSV
+                </Label>
+              </div>
+            </RadioGroup>
+            {exportFormat === "csv" && (
+              <p className="text-xs text-muted-foreground">
+                Downloads a ZIP with two files: Task Log (execution records) and Inventory (task structure).
+              </p>
+            )}
+          </div>
+
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
             {exporting ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            Export my data
+            {exportFormat === "json" ? "Download JSON" : "Download CSV"}
           </Button>
         </div>
       </div>
