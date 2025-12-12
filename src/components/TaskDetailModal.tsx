@@ -397,29 +397,29 @@ const TaskDetailModal = ({
             className="h-10 text-sm border border-border/50 rounded-lg bg-transparent focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
           />
 
-          {/* 2. Mark as Complete - inline row, no border/background/container */}
+          {/* 2. Mark as Complete - flat inline row */}
           <button
             onClick={handleToggleComplete}
-            className="flex items-center gap-2.5 py-1 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 py-0.5 hover:opacity-80 transition-opacity"
           >
             <div className={`
-              w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center transition-all duration-200
+              w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-200
               ${isCompleted
                 ? "bg-primary border-primary"
                 : "border-muted-foreground/40"
               }
             `}>
               {isCompleted && (
-                <Check className={`h-3 w-3 text-primary-foreground ${justCompleted ? "animate-scale-in" : ""}`} />
+                <Check className={`h-2.5 w-2.5 text-primary-foreground ${justCompleted ? "animate-scale-in" : ""}`} />
               )}
             </div>
-            <span className={`text-sm ${isCompleted ? "text-primary font-medium" : "text-foreground/70"}`}>
+            <span className={`text-xs ${isCompleted ? "text-primary font-medium" : "text-foreground/60"}`}>
               Mark as complete
             </span>
           </button>
 
           {/* 3. Recurrence - ONLY section with soft container */}
-          <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+          <div className="px-3 py-2 bg-muted/30 rounded-lg space-y-1.5">
             {/* Top row: badge + edit link */}
             <div className="flex items-center justify-between">
               <span
@@ -561,8 +561,8 @@ const TaskDetailModal = ({
           {/* 4. Schedule Time - flat layout, no container */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium flex items-center gap-1">
-                <Clock className="h-3 w-3 opacity-40" />
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
+                <Clock className="h-3 w-3 opacity-30" />
                 Schedule time
               </span>
               {(timeStart || timeEnd) && (
