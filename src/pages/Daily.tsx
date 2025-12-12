@@ -243,6 +243,12 @@ const Daily = () => {
 
   const handleToggleComplete = async (task: DailyTask) => {
     if (!user) return;
+    const newCompleted = !task.isCompleted;
+    
+    // Optimistic update - immediately update UI
+    setTasks(prev => prev.map(t => 
+      t.id === task.id ? { ...t, isCompleted: newCompleted } : t
+    ));
     
     try {
       if (task.taskType === "independent") {
@@ -256,7 +262,7 @@ const Daily = () => {
         if (existingInstance) {
           await supabase
             .from("daily_task_instances")
-            .update({ is_completed: !existingInstance.is_completed })
+            .update({ is_completed: newCompleted })
             .eq("id", existingInstance.id);
         } else {
           // Create instance if it doesn't exist
@@ -289,12 +295,14 @@ const Daily = () => {
             });
         }
       }
-      
-      // Refresh tasks
-      fetchTasks();
+      // No fetchTasks() - optimistic update already applied
     } catch (error) {
       console.error("Error toggling completion:", error);
       toast.error("Failed to update task");
+      // Rollback optimistic update on error
+      setTasks(prev => prev.map(t => 
+        t.id === task.id ? { ...t, isCompleted: !newCompleted } : t
+      ));
     }
   };
 

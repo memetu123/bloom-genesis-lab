@@ -352,6 +352,18 @@ const Weekly = () => {
   const handleToggleComplete = async (task: DayTask, date: Date) => {
     if (!user) return;
     const dateKey = format(date, "yyyy-MM-dd");
+    const newCompleted = !task.isCompleted;
+    
+    // Optimistic update - immediately update UI
+    setTasksByDate(prev => {
+      const updated = { ...prev };
+      if (updated[dateKey]) {
+        updated[dateKey] = updated[dateKey].map(t => 
+          t.id === task.id ? { ...t, isCompleted: newCompleted } : t
+        );
+      }
+      return updated;
+    });
     
     try {
       if (task.taskType === "independent") {
@@ -365,7 +377,7 @@ const Weekly = () => {
         if (existingInstance) {
           await supabase
             .from("daily_task_instances")
-            .update({ is_completed: !existingInstance.is_completed })
+            .update({ is_completed: newCompleted })
             .eq("id", existingInstance.id);
         } else {
           // Create instance if it doesn't exist
@@ -398,12 +410,20 @@ const Weekly = () => {
             });
         }
       }
-      
-      // Refresh tasks
-      fetchCommitments();
+      // No fetchCommitments() - optimistic update already applied
     } catch (error) {
       console.error("Error toggling completion:", error);
       toast.error("Failed to update task");
+      // Rollback optimistic update on error
+      setTasksByDate(prev => {
+        const updated = { ...prev };
+        if (updated[dateKey]) {
+          updated[dateKey] = updated[dateKey].map(t => 
+            t.id === task.id ? { ...t, isCompleted: !newCompleted } : t
+          );
+        }
+        return updated;
+      });
     }
   };
 
