@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Unlink } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useDailyData, DailyTask } from "@/hooks/useDailyData";
@@ -63,7 +64,16 @@ const TaskItem = memo(({
               <span className="text-[9px] bg-muted px-1 rounded">1x</span>
             )}
             {task.isDetached && (
-              <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">detached</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Unlink className="h-3 w-3 text-muted-foreground/60" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Detached from recurring task
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         )}
