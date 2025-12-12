@@ -35,7 +35,7 @@ interface Goal {
   life_vision_id: string | null;
   parent_goal_id: string | null;
   pillar_id: string;
-  status: "active" | "completed" | "archived";
+  status: "active" | "completed" | "archived" | "not_started";
   is_deleted: boolean;
 }
 
@@ -470,7 +470,7 @@ const Goals = () => {
 
                         {/* Actions */}
                         <ItemActions
-                          status={goal.status}
+                          status={goal.status === "not_started" ? "active" : goal.status}
                           onComplete={() => updateStatus(goal.id, "completed")}
                           onArchive={() => updateStatus(goal.id, "archived")}
                           onReactivate={() => updateStatus(goal.id, "active")}
