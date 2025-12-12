@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Star, ChevronRight, Target, Check, Archive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppData, Goal as GlobalGoal, Vision as GlobalVision } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,29 +24,11 @@ import { format, startOfWeek, endOfWeek } from "date-fns";
 
 /**
  * Goals Page
- * Lists all goals grouped by type with focus toggle, search, and status filter
+ * Consumes goals/visions from global AppDataProvider
+ * Only fetches page-specific data (weekly progress)
  */
 
-interface Goal {
-  id: string;
-  title: string;
-  description: string | null;
-  goal_type: GoalType;
-  is_focus: boolean;
-  life_vision_id: string | null;
-  parent_goal_id: string | null;
-  pillar_id: string;
-  status: "active" | "completed" | "archived" | "not_started";
-  is_deleted: boolean;
-}
-
-interface Vision {
-  id: string;
-  title: string;
-  pillar_id: string;
-}
-
-interface GoalWithRelations extends Goal {
+interface GoalWithRelations extends GlobalGoal {
   vision_title?: string;
   parent_title?: string;
   weeklyProgress?: { completed: number; total: number };
@@ -61,10 +44,19 @@ const Goals = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { 
+    goals: globalGoals, 
+    visions: globalVisions, 
+    goalsMap: globalGoalsMap,
+    visionsMap: globalVisionsMap,
+    loading: appDataLoading,
+    refetchGoals 
+  } = useAppData();
   const { softDelete, undoDelete, pendingDelete } = useSoftDelete();
-  const [goals, setGoals] = useState<GoalWithRelations[]>([]);
-  const [visions, setVisions] = useState<Vision[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Local state for enriched goals with weekly progress
+  const [localGoals, setLocalGoals] = useState<GoalWithRelations[]>([]);
+  const [progressLoading, setProgressLoading] = useState(true);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -86,13 +78,10 @@ const Goals = () => {
   const focusId = searchParams.get("focusId");
   
   useEffect(() => {
-    if (focusId && !loading) {
-      // Reset filters to show the item
+    if (focusId && !appDataLoading) {
       setStatusFilter("all");
       setVisionFilter("all");
       setShowFocusedOnly(false);
-      
-      // Highlight and scroll to the item
       setHighlightedId(focusId);
       setTimeout(() => {
         const element = cardRefs.current[focusId];
@@ -100,76 +89,46 @@ const Goals = () => {
           element.scrollIntoView({ behavior: "smooth", block: "center" });
         }
       }, 100);
-      
-      // Remove highlight after animation
       setTimeout(() => setHighlightedId(null), 2000);
     }
-  }, [focusId, loading]);
+  }, [focusId, appDataLoading]);
 
+  // Fetch only page-specific data (weekly progress) and enrich goals
   useEffect(() => {
-    if (!user) return;
+    if (!user || appDataLoading) return;
 
-    const fetchData = async () => {
+    const fetchProgress = async () => {
+      setProgressLoading(true);
       try {
-        // Fetch all goals
-        const { data: goalsData, error: goalsError } = await supabase
-          .from("goals")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("is_deleted", false)
-          .order("created_at", { ascending: true });
-
-        if (goalsError) throw goalsError;
-
-        // Fetch visions for labels and dropdown
-        const { data: visionsData } = await supabase
-          .from("life_visions")
-          .select("id, title, pillar_id")
-          .eq("user_id", user.id)
-          .eq("is_deleted", false);
-
-        setVisions(visionsData || []);
-
-        const visionsMap: Record<string, string> = {};
-        (visionsData || []).forEach(v => {
-          visionsMap[v.id] = v.title;
-        });
-
-        // Build goals map for parent titles
-        const goalsMap: Record<string, string> = {};
-        (goalsData || []).forEach(g => {
-          goalsMap[g.id] = g.title;
-        });
-
-        // Calculate weekly progress for 90-day goals
         const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
         const weekStartStr = format(weekStart, "yyyy-MM-dd");
-        const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
-        // Fetch weekly commitments and completions
-        const { data: commitments } = await supabase
-          .from("weekly_commitments")
-          .select("id, goal_id")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .eq("is_deleted", false);
+        // Fetch only page-specific data
+        const [commitmentsResult, checkinsResult] = await Promise.all([
+          supabase
+            .from("weekly_commitments")
+            .select("id, goal_id")
+            .eq("user_id", user.id)
+            .eq("is_active", true)
+            .or("is_deleted.is.null,is_deleted.eq.false"),
+          supabase
+            .from("weekly_checkins")
+            .select("weekly_commitment_id, planned_count, actual_count")
+            .eq("user_id", user.id)
+            .eq("period_start_date", weekStartStr),
+        ]);
 
-        const { data: checkins } = await supabase
-          .from("weekly_checkins")
-          .select("weekly_commitment_id, planned_count, actual_count")
-          .eq("user_id", user.id)
-          .eq("period_start_date", weekStartStr);
+        const commitments = commitmentsResult.data || [];
+        const checkins = checkinsResult.data || [];
 
         // Group progress by goal
         const progressByGoal: Record<string, { completed: number; total: number }> = {};
-        
-        (commitments || []).forEach(c => {
+        commitments.forEach(c => {
           if (c.goal_id) {
             if (!progressByGoal[c.goal_id]) {
               progressByGoal[c.goal_id] = { completed: 0, total: 0 };
             }
-            const checkin = (checkins || []).find(ch => ch.weekly_commitment_id === c.id);
+            const checkin = checkins.find(ch => ch.weekly_commitment_id === c.id);
             if (checkin) {
               progressByGoal[c.goal_id].completed += checkin.actual_count;
               progressByGoal[c.goal_id].total += checkin.planned_count;
@@ -177,31 +136,42 @@ const Goals = () => {
           }
         });
 
-        // Enrich goals with relation titles and progress
-        const enrichedGoals: GoalWithRelations[] = (goalsData || []).map(g => ({
+        // Enrich goals from global context with vision titles and progress
+        const enrichedGoals: GoalWithRelations[] = globalGoals.map(g => ({
           ...g,
           status: (g.status as "active" | "completed" | "archived") || "active",
-          is_deleted: g.is_deleted || false,
-          vision_title: g.life_vision_id ? visionsMap[g.life_vision_id] : undefined,
-          parent_title: g.parent_goal_id ? goalsMap[g.parent_goal_id] : undefined,
+          vision_title: g.life_vision_id ? globalVisionsMap.get(g.life_vision_id)?.title : undefined,
+          parent_title: g.parent_goal_id ? globalGoalsMap.get(g.parent_goal_id)?.title : undefined,
           weeklyProgress: progressByGoal[g.id],
         }));
 
-        setGoals(enrichedGoals);
-      } catch (error: any) {
-        console.error("Error fetching goals:", error);
-        toast.error("Failed to load goals");
+        setLocalGoals(enrichedGoals);
+      } catch (error) {
+        console.error("Error fetching progress:", error);
       } finally {
-        setLoading(false);
+        setProgressLoading(false);
       }
     };
 
-    fetchData();
-  }, [user]);
+    fetchProgress();
+  }, [user, appDataLoading, globalGoals, globalVisionsMap, globalGoalsMap]);
+
+  // Convert visions for dropdown
+  const visions = useMemo(() => 
+    globalVisions.map(v => ({ id: v.id, title: v.title, pillar_id: v.pillar_id })),
+    [globalVisions]
+  );
+
+  const loading = appDataLoading || progressLoading;
 
   const toggleFocus = async (goalId: string, currentFocus: boolean) => {
     if (updatingFocus) return;
     setUpdatingFocus(goalId);
+
+    // Optimistic update
+    setLocalGoals(prev =>
+      prev.map(g => g.id === goalId ? { ...g, is_focus: !currentFocus } : g)
+    );
 
     try {
       const { error } = await supabase
@@ -210,13 +180,13 @@ const Goals = () => {
         .eq("id", goalId);
 
       if (error) throw error;
-
-      setGoals(prev =>
-        prev.map(g => g.id === goalId ? { ...g, is_focus: !currentFocus } : g)
-      );
       toast.success(currentFocus ? "Removed from focus" : "Added to focus");
     } catch (error: any) {
       console.error("Error toggling focus:", error);
+      // Rollback
+      setLocalGoals(prev =>
+        prev.map(g => g.id === goalId ? { ...g, is_focus: currentFocus } : g)
+      );
       toast.error("Failed to update focus");
     } finally {
       setUpdatingFocus(null);
@@ -224,6 +194,11 @@ const Goals = () => {
   };
 
   const updateStatus = async (goalId: string, newStatus: "active" | "completed" | "archived") => {
+    // Optimistic update
+    setLocalGoals(prev =>
+      prev.map(g => g.id === goalId ? { ...g, status: newStatus } : g)
+    );
+
     try {
       const { error } = await supabase
         .from("goals")
@@ -231,14 +206,11 @@ const Goals = () => {
         .eq("id", goalId);
 
       if (error) throw error;
-
-      setGoals(prev =>
-        prev.map(g => g.id === goalId ? { ...g, status: newStatus } : g)
-      );
       toast.success(`Goal ${newStatus === "completed" ? "completed" : newStatus === "archived" ? "archived" : "reactivated"}`);
     } catch (error: any) {
       console.error("Error updating status:", error);
       toast.error("Failed to update status");
+      refetchGoals();
     }
   };
 
@@ -250,7 +222,7 @@ const Goals = () => {
     });
     
     if (success) {
-      setGoals(prev => prev.filter(g => g.id !== goal.id));
+      setLocalGoals(prev => prev.filter(g => g.id !== goal.id));
     }
   };
 
@@ -278,7 +250,7 @@ const Goals = () => {
 
       if (error) throw error;
 
-      setGoals(prev => [...prev, { ...data, vision_title: vision.title, status: "active", is_deleted: false }]);
+      setLocalGoals(prev => [...prev, { ...data, vision_title: vision.title, status: "active" as const, is_deleted: false }]);
       setNewTitle("");
       setNewDescription("");
       setSelectedVisionId("");
@@ -294,7 +266,7 @@ const Goals = () => {
   };
 
   // Filter goals
-  const filteredGoals = goals.filter(g => {
+  const filteredGoals = localGoals.filter(g => {
     // Status filter - treat "not_started" as "active"
     const effectiveStatus = g.status === "not_started" ? "active" : g.status;
     if (statusFilter !== "all" && effectiveStatus !== statusFilter) return false;
@@ -470,7 +442,7 @@ const Goals = () => {
 
                         {/* Actions */}
                         <ItemActions
-                          status={goal.status === "not_started" ? "active" : goal.status}
+                          status={goal.status === "not_started" ? "active" : (goal.status as "active" | "completed" | "archived")}
                           onComplete={() => updateStatus(goal.id, "completed")}
                           onArchive={() => updateStatus(goal.id, "archived")}
                           onReactivate={() => updateStatus(goal.id, "active")}
@@ -576,7 +548,7 @@ const Goals = () => {
                   status: (data.status as "active" | "completed" | "archived") || "active",
                   is_deleted: false,
                 };
-                setGoals(prev => [...prev, restored]);
+                setLocalGoals(prev => [...prev, restored]);
               }
             }
           }}
