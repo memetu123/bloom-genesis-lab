@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,6 +17,8 @@ import type { TaskType } from "@/types/scheduling";
 /**
  * Daily Page - Notion-style daily view with time slots
  * Shows tasks in a timeline format with time scheduling
+ * 
+ * OPTIMIZATION: All data is fetched in a single batch, then processed in-memory
  */
 
 interface DailyTask {
@@ -86,7 +88,18 @@ const Daily = () => {
   const formattedDate = formatDateWithDay(selectedDate, preferences.dateFormat);
   const dateKey = format(selectedDate, "yyyy-MM-dd");
 
-  const fetchTasks = useCallback(async () => {
+  // Day name mapping for checking which days to show
+  const dayIndexToName: Record<number, string> = useMemo(() => ({
+    0: "sun", 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat"
+  }), []);
+
+  /**
+   * OPTIMIZED: Single batch fetch for all daily data
+   * - Fetches all data in parallel
+   * - Processes everything in memory
+   * - No N+1 queries
+   */
+  const fetchDailyData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
@@ -96,74 +109,141 @@ const Daily = () => {
       const weekStartStr = format(weekStart, "yyyy-MM-dd");
       const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
-      // Fetch all active recurring commitments with their default times (exclude soft-deleted)
-      const { data: commitments, error: commitError } = await supabase
-        .from("weekly_commitments")
-        .select("*, default_time_start, default_time_end, flexible_time, repeat_times_per_period")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .or("is_deleted.is.null,is_deleted.eq.false");
-
-      if (commitError) throw commitError;
-
-      const dailyTasks: DailyTask[] = [];
-
-      for (const commitment of commitments || []) {
-        // Get or create weekly checkin
-        const { data: existingCheckin } = await supabase
+      // BATCH FETCH: All data in parallel (single request each)
+      const [
+        commitmentsResult,
+        checkinsResult,
+        completionsResult,
+        independentTasksResult,
+        taskInstancesResult,
+        goalsResult
+      ] = await Promise.all([
+        // 1. All active weekly commitments
+        supabase
+          .from("weekly_commitments")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .or("is_deleted.is.null,is_deleted.eq.false"),
+        
+        // 2. Weekly checkins for this week
+        supabase
           .from("weekly_checkins")
           .select("*")
-          .eq("weekly_commitment_id", commitment.id)
-          .eq("period_start_date", weekStartStr)
-          .maybeSingle();
+          .eq("user_id", user.id)
+          .eq("period_start_date", weekStartStr),
+        
+        // 3. Completions for this specific date
+        supabase
+          .from("commitment_completions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("completed_date", dateKey)
+          .or("is_deleted.is.null,is_deleted.eq.false"),
+        
+        // 4. Independent tasks for this date
+        supabase
+          .from("commitment_completions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("completed_date", dateKey)
+          .or("task_type.eq.independent,is_detached.eq.true")
+          .or("is_deleted.is.null,is_deleted.eq.false"),
+        
+        // 5. All daily task instances for the user
+        supabase
+          .from("daily_task_instances")
+          .select("*")
+          .eq("user_id", user.id),
+        
+        // 6. All goals (for focus status and dropdown)
+        supabase
+          .from("goals")
+          .select("id, title, is_focus, goal_type")
+          .eq("user_id", user.id)
+          .or("is_deleted.is.null,is_deleted.eq.false")
+      ]);
 
-        let checkinData = existingCheckin;
+      if (commitmentsResult.error) throw commitmentsResult.error;
 
-        if (!checkinData) {
+      const rawCommitments = commitmentsResult.data || [];
+      const existingCheckins = checkinsResult.data || [];
+      const allCompletions = completionsResult.data || [];
+      const independentTasks = independentTasksResult.data || [];
+      const taskInstances = taskInstancesResult.data || [];
+      const allGoals = goalsResult.data || [];
+
+      // Build lookup maps for O(1) access
+      const checkinByCommitmentId = new Map(
+        existingCheckins.map(c => [c.weekly_commitment_id, c])
+      );
+      const goalFocusMap = new Map(
+        allGoals.map(g => [g.id, g.is_focus])
+      );
+      const taskInstanceMap = new Map(
+        taskInstances.map(ti => [ti.completion_id, ti])
+      );
+      const completionByCommitmentId = new Map(
+        allCompletions.filter(c => c.commitment_id).map(c => [c.commitment_id, c])
+      );
+
+      // Create missing checkins in batch
+      const checkinsToCreate: any[] = [];
+      for (const commitment of rawCommitments) {
+        if (!checkinByCommitmentId.has(commitment.id)) {
           const frequency = commitment.frequency_json as { times_per_week: number };
-          const { data: newCheckin } = await supabase
-            .from("weekly_checkins")
-            .insert({
-              user_id: user.id,
-              weekly_commitment_id: commitment.id,
-              period_start_date: weekStartStr,
-              period_end_date: weekEndStr,
-              planned_count: frequency.times_per_week,
-              actual_count: 0,
-            })
-            .select()
-            .single();
-          checkinData = newCheckin;
+          checkinsToCreate.push({
+            user_id: user.id,
+            weekly_commitment_id: commitment.id,
+            period_start_date: weekStartStr,
+            period_end_date: weekEndStr,
+            planned_count: frequency.times_per_week || 1,
+            actual_count: 0
+          });
+        }
+      }
+
+      // Batch insert new checkins if any
+      if (checkinsToCreate.length > 0) {
+        await supabase
+          .from("weekly_checkins")
+          .insert(checkinsToCreate);
+      }
+
+      // Build daily tasks (all in memory)
+      const dailyTasks: DailyTask[] = [];
+      const dayOfWeek = selectedDate.getDay();
+      const dayName = dayIndexToName[dayOfWeek];
+
+      for (const commitment of rawCommitments) {
+        const recurrenceType = commitment.recurrence_type || 'weekly';
+        const daysOfWeek = commitment.repeat_days_of_week || [];
+        
+        // Check if task should appear on this day
+        let shouldShow = false;
+        if (recurrenceType === 'daily') {
+          shouldShow = true;
+        } else if (recurrenceType === 'weekly') {
+          if (daysOfWeek.length === 0) {
+            shouldShow = dayOfWeek >= 1 && dayOfWeek <= 5;
+          } else {
+            shouldShow = daysOfWeek.includes(dayName);
+          }
         }
 
-        // Check completion for this specific date (including detached instances)
-        const { data: completion } = await supabase
-          .from("commitment_completions")
-          .select("*, time_start, time_end, is_flexible_time, instance_number, is_detached")
-          .eq("commitment_id", commitment.id)
-          .eq("completed_date", dateKey)
-          .maybeSingle();
+        if (!shouldShow) continue;
 
-        // Skip if this instance is detached (it will be fetched separately)
+        const completion = completionByCommitmentId.get(commitment.id);
+
+        // Skip if this instance is detached
         if (completion?.is_detached) {
           continue;
         }
 
-        // Get goal focus status
-        let goalIsFocus: boolean | null = null;
-        if (commitment.goal_id) {
-          const { data: goal } = await supabase
-            .from("goals")
-            .select("is_focus")
-            .eq("id", commitment.goal_id)
-            .maybeSingle();
-          goalIsFocus = goal?.is_focus ?? null;
-        }
-
-        // Use completion time if exists, otherwise use default time from commitment
+        const goalIsFocus = commitment.goal_id ? goalFocusMap.get(commitment.goal_id) ?? null : null;
         const timeStart = completion?.time_start || commitment.default_time_start || null;
         const timeEnd = completion?.time_end || commitment.default_time_end || null;
-        const timesPerPeriod = commitment.repeat_times_per_period || 1;
+        const timesPerDay = commitment.times_per_day || 1;
 
         dailyTasks.push({
           id: `${commitment.id}-${dateKey}`,
@@ -174,27 +254,14 @@ const Daily = () => {
           isCompleted: !!completion,
           taskType: "recurring",
           instanceNumber: completion?.instance_number || 1,
-          totalInstances: timesPerPeriod,
+          totalInstances: timesPerDay,
           goalIsFocus,
         });
       }
 
-      // Fetch independent tasks for this date (including detached instances, exclude deleted)
-      const { data: independentTasks } = await supabase
-        .from("commitment_completions")
-        .select("*, is_detached")
-        .eq("user_id", user.id)
-        .eq("completed_date", dateKey)
-        .or("task_type.eq.independent,is_detached.eq.true")
-        .or("is_deleted.is.null,is_deleted.eq.false");
-
-      for (const task of independentTasks || []) {
-        // Check if there's a daily_task_instance for completion status
-        const { data: taskInstance } = await supabase
-          .from("daily_task_instances")
-          .select("is_completed")
-          .eq("completion_id", task.id)
-          .maybeSingle();
+      // Add independent/detached tasks
+      for (const task of independentTasks) {
+        const taskInstance = taskInstanceMap.get(task.id);
 
         dailyTasks.push({
           id: task.id,
@@ -210,31 +277,25 @@ const Daily = () => {
       }
 
       setTasks(dailyTasks);
+      
+      // Set goals for dropdown (all goals, filter ninety_day for UI)
+      const ninety_day_goals = allGoals.filter(g => g.goal_type === "ninety_day");
+      setGoals(ninety_day_goals.map(g => ({ id: g.id, title: g.title })));
+
     } catch (error: any) {
-      console.error("Error fetching tasks:", error);
+      console.error("Error fetching daily data:", error);
       toast.error("Failed to load tasks");
     } finally {
       setLoading(false);
     }
-  }, [user, selectedDate, dateKey, weekStartsOn]);
+  }, [user, selectedDate, dateKey, weekStartsOn, dayIndexToName]);
 
+  // Single useEffect with stable dependencies
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
-
-  // Fetch goals for create modal
-  useEffect(() => {
-    if (!user) return;
-    const fetchGoals = async () => {
-      const { data } = await supabase
-        .from("goals")
-        .select("id, title")
-        .eq("user_id", user.id)
-        .eq("goal_type", "ninety_day");
-      setGoals(data || []);
-    };
-    fetchGoals();
-  }, [user]);
+    if (user) {
+      fetchDailyData();
+    }
+  }, [user, dateKey, fetchDailyData]);
 
   const handleTaskClick = (task: DailyTask) => {
     setSelectedTask(task);
@@ -252,7 +313,6 @@ const Daily = () => {
     
     try {
       if (task.taskType === "independent") {
-        // For independent tasks, toggle daily_task_instances
         const { data: existingInstance } = await supabase
           .from("daily_task_instances")
           .select("id, is_completed")
@@ -265,7 +325,6 @@ const Daily = () => {
             .update({ is_completed: newCompleted })
             .eq("id", existingInstance.id);
         } else {
-          // Create instance if it doesn't exist
           await supabase
             .from("daily_task_instances")
             .insert({
@@ -275,16 +334,13 @@ const Daily = () => {
             });
         }
       } else {
-        // For recurring tasks, toggle commitment_completions
         if (task.isCompleted) {
-          // Remove the completion record
           await supabase
             .from("commitment_completions")
             .delete()
             .eq("commitment_id", task.commitmentId)
             .eq("completed_date", dateKey);
         } else {
-          // Create a completion record
           await supabase
             .from("commitment_completions")
             .insert({
@@ -295,7 +351,6 @@ const Daily = () => {
             });
         }
       }
-      // No fetchTasks() - optimistic update already applied
     } catch (error) {
       console.error("Error toggling completion:", error);
       toast.error("Failed to update task");
@@ -484,12 +539,9 @@ const Daily = () => {
                               {task.title}
                               {getInstanceLabel(task)}
                             </button>
-                            <span className="text-xs text-muted-foreground">
-                              {formatTimeRange(task.timeStart, task.timeEnd, preferences.timeFormat)}
-                            </span>
-                            {task.taskType === "independent" && (
-                              <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                1x
+                            {task.timeEnd && (
+                              <span className="text-xs text-muted-foreground">
+                                {formatTimeRange(task.timeStart!, task.timeEnd, preferences.timeFormat)}
                               </span>
                             )}
                           </div>
@@ -514,11 +566,11 @@ const Daily = () => {
                 {unscheduledTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-calm"
+                    className="flex items-center gap-2 px-4 py-3 hover:bg-muted/30 transition-calm"
                   >
                     <button
                       onClick={() => handleToggleComplete(task)}
-                      className={`text-base hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                      className={`text-sm hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
                       aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
                     >
                       {task.isCompleted ? "●" : "○"}
@@ -535,8 +587,13 @@ const Daily = () => {
                       {getInstanceLabel(task)}
                     </button>
                     {task.taskType === "independent" && (
-                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                        1x
+                      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                        one-time
+                      </span>
+                    )}
+                    {task.isDetached && (
+                      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                        detached
                       </span>
                     )}
                   </div>
@@ -547,34 +604,46 @@ const Daily = () => {
         </div>
       )}
 
-      {/* Back to weekly link */}
-      <div className="mt-8 text-center">
+      {/* Back to weekly view link */}
+      <div className="mt-8 pt-4 border-t border-border">
         <button
           onClick={() => navigate("/weekly")}
-          className="text-sm text-primary hover:underline"
+          className="text-sm text-muted-foreground hover:text-foreground transition-calm flex items-center gap-1"
         >
-          ← Back to weekly view
+          <ChevronLeft className="h-4 w-4" />
+          Back to weekly view
         </button>
       </div>
 
-      {/* Task create modal */}
+      {/* Task Create Modal */}
       <TaskCreateModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         defaultDate={selectedDate}
         goals={goals}
-        onSuccess={fetchTasks}
-        weekStart={startOfWeek(selectedDate, { weekStartsOn })}
+        onSuccess={() => fetchDailyData()}
       />
 
-      {/* Task detail modal */}
-      <TaskDetailModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        task={selectedTask}
-        date={selectedDate}
-        onUpdate={fetchTasks}
-      />
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <TaskDetailModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          task={{
+            id: selectedTask.id,
+            commitmentId: selectedTask.commitmentId,
+            title: selectedTask.title,
+            timeStart: selectedTask.timeStart,
+            timeEnd: selectedTask.timeEnd,
+            isCompleted: selectedTask.isCompleted,
+            taskType: selectedTask.taskType,
+            instanceNumber: selectedTask.instanceNumber,
+            isDetached: selectedTask.isDetached,
+          }}
+          date={selectedDate}
+          onUpdate={() => fetchDailyData()}
+        />
+      )}
     </div>
   );
 };
