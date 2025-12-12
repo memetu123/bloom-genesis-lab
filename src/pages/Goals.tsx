@@ -295,8 +295,9 @@ const Goals = () => {
 
   // Filter goals
   const filteredGoals = goals.filter(g => {
-    // Status filter
-    if (statusFilter !== "all" && g.status !== statusFilter) return false;
+    // Status filter - treat "not_started" as "active"
+    const effectiveStatus = g.status === "not_started" ? "active" : g.status;
+    if (statusFilter !== "all" && effectiveStatus !== statusFilter) return false;
     // Focus filter
     if (showFocusedOnly && !g.is_focus) return false;
     // Vision filter
