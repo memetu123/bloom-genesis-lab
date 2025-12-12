@@ -183,7 +183,7 @@ const VisionDetail = () => {
           goal_type: "three_year",
           title: newGoalTitle.trim(),
           description: newGoalDescription.trim() || null,
-          status: "not_started"
+          status: "active"
         })
         .select()
         .single();
