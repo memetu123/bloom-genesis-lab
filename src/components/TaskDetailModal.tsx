@@ -380,82 +380,50 @@ const TaskDetailModal = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden rounded-xl border-border/50">
-        {/* Sticky Header */}
+        {/* Sticky Header - "Edit task" with date subtitle */}
         <div className="sticky top-0 bg-background z-10 px-5 pt-5 pb-3 border-b border-border/40">
-          <div className="flex items-start gap-2.5">
-            <div className="flex-shrink-0 mt-0.5">
-              {isRecurring && (
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                  <RefreshCw className="h-3 w-3 text-primary" />
-                </div>
-              )}
-              {isDetached && (
-                <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center">
-                  <Unlink className="h-3 w-3 text-amber-600" />
-                </div>
-              )}
-              {!isRecurring && !isDetached && (
-                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                  <Calendar className="h-3 w-3 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-medium text-foreground truncate leading-6">
-                {task.title}
-                {instanceLabel}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {formatDateWithDay(date, preferences.dateFormat)}
-              </p>
-            </div>
-          </div>
+          <h2 className="text-base font-semibold text-foreground">Edit task</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {formatDateWithDay(date, preferences.dateFormat)}
+          </p>
         </div>
 
         <div className="px-5 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
-          {/* 1. Title Field */}
+          {/* 1. Title Field - soft olive glow on focus */}
           <div>
             <Input
               id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Task title"
-              className="h-10 text-sm border border-border/40 focus:border-primary/60 focus:ring-1 focus:ring-primary/20 rounded-[10px] bg-background"
+              className="h-10 text-sm border border-border/40 rounded-[10px] bg-background transition-shadow focus:border-primary/50 focus:ring-2 focus:ring-primary/15 focus:shadow-[0_0_0_3px_hsl(var(--primary)/0.08)]"
             />
           </div>
 
-          {/* 2. Mark as Complete */}
-          <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
-              Status
-            </p>
-            <button
-              onClick={handleToggleComplete}
-              className={`
-                w-full flex items-center gap-3 px-3 py-2.5 border rounded-[10px] transition-all duration-200
-                ${isCompleted
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-border/40 hover:border-primary/30 hover:bg-muted/30"
-                }
-                ${justCompleted ? "scale-[1.01]" : ""}
-              `}
-            >
-              <div className={`
-                w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center transition-all duration-200
-                ${isCompleted
-                  ? "bg-primary border-primary"
-                  : "border-muted-foreground/30"
-                }
-              `}>
-                {isCompleted && (
-                  <Check className={`h-3 w-3 text-primary-foreground ${justCompleted ? "animate-scale-in" : ""}`} />
-                )}
-              </div>
-              <span className={`text-sm ${isCompleted ? "text-primary font-medium" : "text-foreground/80"}`}>
-                {isCompleted ? "Completed" : "Mark as complete"}
-              </span>
-            </button>
-          </div>
+          {/* 2. Mark as Complete - slim row style */}
+          <button
+            onClick={handleToggleComplete}
+            className={`
+              w-full flex items-center gap-2.5 py-2 transition-colors
+              hover:opacity-80
+              ${justCompleted ? "scale-[1.01]" : ""}
+            `}
+          >
+            <div className={`
+              w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center transition-all duration-200
+              ${isCompleted
+                ? "bg-primary border-primary"
+                : "border-muted-foreground/40 hover:border-primary/50"
+              }
+            `}>
+              {isCompleted && (
+                <Check className={`h-3 w-3 text-primary-foreground ${justCompleted ? "animate-scale-in" : ""}`} />
+              )}
+            </div>
+            <span className={`text-sm ${isCompleted ? "text-primary font-medium" : "text-foreground/70"}`}>
+              {isCompleted ? "Completed" : "Mark as complete"}
+            </span>
+          </button>
 
           {/* 3. Recurrence Section */}
           <div className="space-y-1.5">
@@ -464,11 +432,11 @@ const TaskDetailModal = ({
             </p>
             
             <div className="space-y-2.5 p-3 bg-muted/20 rounded-[10px] border border-border/30">
-              {/* Recurrence Status Badge */}
-              <div className="flex items-center justify-between">
+              {/* Recurrence Status Badge + Edit link - aligned on same baseline */}
+              <div className="flex items-baseline justify-between gap-2">
                 <span
                   className={`
-                    inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium
+                    inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium leading-none
                     ${isRecurring
                       ? "bg-primary/15 text-primary"
                       : isDetached
@@ -482,18 +450,18 @@ const TaskDetailModal = ({
                   {isRecurring ? "Recurring" : isDetached ? "Detached" : "One-time"}
                 </span>
 
-                {/* Edit recurrence rules link */}
+                {/* Edit recurrence rules link - underline on hover */}
                 {isRecurring && !showRepetitionEditor && (
                   <button
                     onClick={() => setShowRepetitionEditor(true)}
-                    className="text-[11px] text-primary/80 hover:text-primary hover:underline transition-colors"
+                    className="text-[11px] text-primary/70 hover:text-primary underline-offset-2 hover:underline transition-colors"
                   >
                     Edit rules
                   </button>
                 )}
               </div>
 
-              {/* Detach toggle for recurring tasks */}
+              {/* Detach toggle for recurring tasks - stronger thumb contrast when active */}
               {isRecurring && (
                 <div className="flex items-center justify-between pt-1">
                   <Label htmlFor="detach-toggle" className="text-xs text-foreground/80 cursor-pointer">
@@ -504,7 +472,7 @@ const TaskDetailModal = ({
                     checked={false}
                     onCheckedChange={handleDetachInstance}
                     disabled={saving}
-                    className="scale-90"
+                    className="scale-90 data-[state=checked]:bg-primary"
                   />
                 </div>
               )}
@@ -607,11 +575,11 @@ const TaskDetailModal = ({
             </div>
           </div>
 
-          {/* 4. Schedule Time */}
+          {/* 4. Schedule Time - bolder labels, softer icons */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium flex items-center gap-1">
-                <Clock className="h-3 w-3" />
+                <Clock className="h-3 w-3 opacity-50" />
                 Schedule time
               </p>
               {(timeStart || timeEnd) && (
@@ -626,7 +594,7 @@ const TaskDetailModal = ({
 
             <div className="flex gap-3 items-end">
               <div className="flex-1">
-                <Label htmlFor="time-start" className="text-[11px] text-muted-foreground mb-1 block">
+                <Label htmlFor="time-start" className="text-[11px] font-medium text-foreground/70 mb-1 block">
                   Start
                 </Label>
                 <Input
@@ -634,11 +602,11 @@ const TaskDetailModal = ({
                   type="time"
                   value={timeStart}
                   onChange={(e) => setTimeStart(e.target.value)}
-                  className="h-9 text-sm border-border/40 focus:border-primary/60 focus:ring-1 focus:ring-primary/20 rounded-[10px]"
+                  className="h-9 text-sm border-border/40 rounded-[10px] transition-shadow focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
                 />
               </div>
               <div className="flex-1">
-                <Label htmlFor="time-end" className="text-[11px] text-muted-foreground mb-1 block">
+                <Label htmlFor="time-end" className="text-[11px] font-medium text-foreground/70 mb-1 block">
                   End
                 </Label>
                 <Input
@@ -646,7 +614,7 @@ const TaskDetailModal = ({
                   type="time"
                   value={timeEnd}
                   onChange={(e) => setTimeEnd(e.target.value)}
-                  className="h-9 text-sm border-border/40 focus:border-primary/60 focus:ring-1 focus:ring-primary/20 rounded-[10px]"
+                  className="h-9 text-sm border-border/40 rounded-[10px] transition-shadow focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
                 />
               </div>
             </div>
