@@ -380,10 +380,9 @@ const TaskDetailModal = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden rounded-xl border-border/50">
-        {/* Header - Simple "Edit task" with date, no borders */}
-        <div className="px-5 pt-5 pb-2">
-          <h2 className="text-base font-semibold text-foreground">Edit task</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
+        {/* Header - date only, close button handled by DialogContent */}
+        <div className="px-5 pt-5 pb-3">
+          <p className="text-xs text-muted-foreground">
             {formatDateWithDay(date, preferences.dateFormat)}
           </p>
         </div>
