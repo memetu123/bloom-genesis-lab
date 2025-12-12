@@ -2,8 +2,7 @@ import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserPreferences, getWeekStartsOn } from "@/hooks/useUserPreferences";
-import { useGoals } from "@/hooks/useGoalsContext";
+import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useDailyData, DailyTask } from "@/hooks/useDailyData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -78,8 +77,7 @@ const Daily = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { preferences } = useUserPreferences();
-  const { goals } = useGoals();
+  const { preferences, goals } = useAppData();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
   
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);

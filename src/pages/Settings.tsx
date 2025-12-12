@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useAppData } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ import { exportCSV } from "@/lib/csvExport";
  */
 const Settings = () => {
   const { user } = useAuth();
-  const { refetch: refetchPreferences } = useUserPreferences();
+  const { refetchPreferences } = useAppData();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

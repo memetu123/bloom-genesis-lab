@@ -1,5 +1,5 @@
 import { format, parse } from "date-fns";
-import type { UserPreferences } from "@/hooks/useUserPreferences";
+import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * Formatting utilities that respect user preferences

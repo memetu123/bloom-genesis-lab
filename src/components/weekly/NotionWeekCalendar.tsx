@@ -1,7 +1,7 @@
 import { format, addDays, isSameDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { formatTime, formatDateShort } from "@/lib/formatPreferences";
-import type { UserPreferences } from "@/hooks/useUserPreferences";
+import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * NotionWeekCalendar - Notion-style 7-day calendar grid

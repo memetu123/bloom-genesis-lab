@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Star, ChevronRight, Check, Archive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppData, Vision as GlobalVision } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,33 +21,25 @@ import { useSoftDelete } from "@/hooks/useSoftDelete";
 
 /**
  * Visions List Page
- * Shows all life visions with focus toggle, search, status filter
+ * Consumes visions/pillars from global AppDataProvider
+ * Only maintains local UI state for filtering and modals
  */
-
-interface Vision {
-  id: string;
-  title: string;
-  description: string | null;
-  pillar_id: string;
-  is_focus: boolean;
-  status: "active" | "completed" | "archived";
-  is_deleted: boolean;
-}
-
-interface Pillar {
-  id: string;
-  name: string;
-}
 
 const Visions = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { 
+    visions: globalVisions, 
+    pillars, 
+    pillarsMap, 
+    loading: appDataLoading,
+    refetchVisions 
+  } = useAppData();
   const { softDelete, undoDelete, pendingDelete } = useSoftDelete();
-  const [visions, setVisions] = useState<Vision[]>([]);
-  const [pillars, setPillars] = useState<Record<string, Pillar>>({});
-  const [pillarsList, setPillarsList] = useState<Pillar[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Local UI state for visions (allows optimistic updates)
+  const [localVisions, setLocalVisions] = useState<GlobalVision[]>([]);
   const [showOnlyFocused, setShowOnlyFocused] = useState(false);
   const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -62,11 +55,16 @@ const Visions = () => {
   const [selectedPillarId, setSelectedPillarId] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Sync local visions with global data
+  useEffect(() => {
+    setLocalVisions(globalVisions);
+  }, [globalVisions]);
+
   // Handle focusId from search
   const focusId = searchParams.get("focusId");
   
   useEffect(() => {
-    if (focusId && !loading) {
+    if (focusId && !appDataLoading) {
       // Reset filters to show the item
       setStatusFilter("all");
       setShowOnlyFocused(false);
@@ -83,59 +81,16 @@ const Visions = () => {
       // Remove highlight after animation
       setTimeout(() => setHighlightedId(null), 2000);
     }
-  }, [focusId, loading]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchData = async () => {
-      try {
-        // Fetch all visions (including status and is_deleted)
-        const { data: visionsData, error: visionsError } = await supabase
-          .from("life_visions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("is_deleted", false)
-          .order("created_at", { ascending: true });
-
-        if (visionsError) throw visionsError;
-        
-        // Map to ensure status has a default
-        const mappedVisions: Vision[] = (visionsData || []).map(v => ({
-          ...v,
-          status: (v.status as "active" | "completed" | "archived") || "active",
-          is_deleted: v.is_deleted || false,
-        }));
-        
-        setVisions(mappedVisions);
-
-        // Fetch pillars for labels
-        const { data: pillarsData } = await supabase
-          .from("pillars")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("sort_order", { ascending: true });
-
-        const pillarsMap: Record<string, Pillar> = {};
-        (pillarsData || []).forEach(p => {
-          pillarsMap[p.id] = p;
-        });
-        setPillars(pillarsMap);
-        setPillarsList(pillarsData || []);
-      } catch (error: any) {
-        console.error("Error fetching visions:", error);
-        toast.error("Failed to load visions");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [user]);
+  }, [focusId, appDataLoading]);
 
   const toggleFocus = async (visionId: string, currentFocus: boolean) => {
     if (updatingFocus) return;
     setUpdatingFocus(visionId);
+
+    // Optimistic update
+    setLocalVisions(prev =>
+      prev.map(v => v.id === visionId ? { ...v, is_focus: !currentFocus } : v)
+    );
 
     try {
       const { error } = await supabase
@@ -144,13 +99,13 @@ const Visions = () => {
         .eq("id", visionId);
 
       if (error) throw error;
-
-      setVisions(prev =>
-        prev.map(v => v.id === visionId ? { ...v, is_focus: !currentFocus } : v)
-      );
       toast.success(currentFocus ? "Removed from focus" : "Added to focus");
     } catch (error: any) {
       console.error("Error toggling focus:", error);
+      // Rollback
+      setLocalVisions(prev =>
+        prev.map(v => v.id === visionId ? { ...v, is_focus: currentFocus } : v)
+      );
       toast.error("Failed to update focus");
     } finally {
       setUpdatingFocus(null);
@@ -158,6 +113,11 @@ const Visions = () => {
   };
 
   const updateStatus = async (visionId: string, newStatus: "active" | "completed" | "archived") => {
+    // Optimistic update
+    setLocalVisions(prev =>
+      prev.map(v => v.id === visionId ? { ...v, status: newStatus } : v)
+    );
+
     try {
       const { error } = await supabase
         .from("life_visions")
@@ -165,18 +125,15 @@ const Visions = () => {
         .eq("id", visionId);
 
       if (error) throw error;
-
-      setVisions(prev =>
-        prev.map(v => v.id === visionId ? { ...v, status: newStatus } : v)
-      );
       toast.success(`Vision ${newStatus === "completed" ? "completed" : newStatus === "archived" ? "archived" : "reactivated"}`);
     } catch (error: any) {
       console.error("Error updating status:", error);
       toast.error("Failed to update status");
+      refetchVisions();
     }
   };
 
-  const handleDelete = async (vision: Vision) => {
+  const handleDelete = async (vision: GlobalVision) => {
     const success = await softDelete({
       table: "life_visions",
       id: vision.id,
@@ -184,7 +141,7 @@ const Visions = () => {
     });
     
     if (success) {
-      setVisions(prev => prev.filter(v => v.id !== vision.id));
+      setLocalVisions(prev => prev.filter(v => v.id !== vision.id));
     }
   };
 
@@ -207,7 +164,7 @@ const Visions = () => {
 
       if (error) throw error;
 
-      setVisions(prev => [...prev, { ...data, status: "active", is_deleted: false }]);
+      setLocalVisions(prev => [...prev, { ...data, status: "active" as const, is_deleted: false }]);
       setNewTitle("");
       setNewDescription("");
       setSelectedPillarId("");
@@ -220,23 +177,27 @@ const Visions = () => {
       setSaving(false);
     }
   };
+
   // Filter visions based on status and focus
-  const filteredVisions = visions
-    .filter(v => {
-      // Status filter
+  const filteredVisions = useMemo(() => 
+    localVisions.filter(v => {
       if (statusFilter !== "all" && v.status !== statusFilter) return false;
-      // Focus filter
       if (showOnlyFocused && !v.is_focus) return false;
       return true;
-    });
+    }),
+    [localVisions, statusFilter, showOnlyFocused]
+  );
 
-  if (loading) {
+  if (appDataLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
+
+  // Convert pillars array for dropdown
+  const pillarsList = pillars;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -324,9 +285,9 @@ const Visions = () => {
                     onClick={() => navigate(`/vision/${vision.id}`)}
                   >
                     <div className="flex items-center gap-2 flex-wrap">
-                      {pillars[vision.pillar_id] && (
+                      {pillarsMap.get(vision.pillar_id) && (
                         <span className="text-xs text-primary font-medium">
-                          {pillars[vision.pillar_id].name}
+                          {pillarsMap.get(vision.pillar_id)?.name}
                         </span>
                       )}
                       {vision.status !== "active" && (
@@ -437,12 +398,12 @@ const Visions = () => {
                 .eq("id", pendingDelete.id)
                 .single();
               if (data) {
-                const restored: Vision = {
+                const restored: GlobalVision = {
                   ...data,
                   status: (data.status as "active" | "completed" | "archived") || "active",
                   is_deleted: false,
                 };
-                setVisions(prev => [...prev, restored]);
+                setLocalVisions(prev => [...prev, restored]);
               }
             }
           }}

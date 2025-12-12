@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, ChevronRight, Target, Calendar, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppData } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,19 +10,8 @@ import { format, startOfWeek, endOfWeek } from "date-fns";
 
 /**
  * Dashboard Page - Overview of focused items and weekly progress
- * Quick access to focused visions and weekly commitment summary
+ * Consumes visions/goals/pillars from global AppDataProvider
  */
-
-interface FocusedVision {
-  id: string;
-  title: string;
-  pillar_name: string;
-  focused_goals: {
-    id: string;
-    title: string;
-    goal_type: string;
-  }[];
-}
 
 interface WeeklySummary {
   total_commitments: number;
@@ -30,79 +20,65 @@ interface WeeklySummary {
   completed_reps: number;
 }
 
-const getWeekStart = (date: Date): Date => {
-  return startOfWeek(date, { weekStartsOn: 1 });
-};
-
-const getWeekEnd = (date: Date): Date => {
-  return endOfWeek(date, { weekStartsOn: 1 });
-};
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [focusedVisions, setFocusedVisions] = useState<FocusedVision[]>([]);
+  const { visions, goals, pillarsMap, loading: appDataLoading } = useAppData();
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   // Memoize to prevent infinite re-renders
-  const currentWeekStart = useState(() => getWeekStart(new Date()))[0];
+  const currentWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
+  const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
   const weekStartFormatted = format(currentWeekStart, "MMM d");
-  const weekEndFormatted = format(getWeekEnd(currentWeekStart), "MMM d");
+  const weekEndFormatted = format(currentWeekEnd, "MMM d");
 
-  const fetchData = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+  // Build focused visions with focused goals from cached data
+  const focusedVisions = useMemo(() => {
+    const focused = visions.filter(v => v.is_focus && v.status === "active");
+    return focused.map(vision => ({
+      id: vision.id,
+      title: vision.title,
+      pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
+      focused_goals: goals
+        .filter(g => g.life_vision_id === vision.id && g.is_focus)
+        .map(g => ({ id: g.id, title: g.title, goal_type: g.goal_type }))
+    }));
+  }, [visions, goals, pillarsMap]);
+
+  // Fetch only weekly summary (page-specific data)
+  const fetchWeeklySummary = useCallback(async () => {
+    if (!user) {
+      setSummaryLoading(false);
+      return;
+    }
 
     try {
-      // Fetch focused visions with their focused goals
-      const { data: visions } = await supabase
-        .from("life_visions")
-        .select("*, pillars(name)")
-        .eq("user_id", user.id)
-        .eq("is_focus", true);
-
-      const enrichedVisions: FocusedVision[] = await Promise.all(
-        (visions || []).map(async (vision) => {
-          const { data: focusedGoals } = await supabase
-            .from("goals")
-            .select("id, title, goal_type")
-            .eq("life_vision_id", vision.id)
-            .eq("is_focus", true)
-            .eq("user_id", user.id);
-
-          return {
-            id: vision.id,
-            title: vision.title,
-            pillar_name: (vision.pillars as any)?.name || "",
-            focused_goals: focusedGoals || []
-          };
-        })
-      );
-
-      setFocusedVisions(enrichedVisions);
-
-      // Fetch weekly summary
       const startDate = format(currentWeekStart, "yyyy-MM-dd");
       
-      const { data: commitments } = await supabase
-        .from("weekly_commitments")
-        .select("id, frequency_json")
-        .eq("user_id", user.id)
-        .eq("is_active", true);
+      const [commitmentsResult, checkinsResult] = await Promise.all([
+        supabase
+          .from("weekly_commitments")
+          .select("id, frequency_json")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .or("is_deleted.is.null,is_deleted.eq.false"),
+        supabase
+          .from("weekly_checkins")
+          .select("planned_count, actual_count")
+          .eq("user_id", user.id)
+          .eq("period_start_date", startDate),
+      ]);
 
-      const { data: checkins } = await supabase
-        .from("weekly_checkins")
-        .select("planned_count, actual_count")
-        .eq("user_id", user.id)
-        .eq("period_start_date", startDate);
+      const commitments = commitmentsResult.data || [];
+      const checkins = checkinsResult.data || [];
 
-      const totalCommitments = commitments?.length || 0;
+      const totalCommitments = commitments.length;
       let completedCommitments = 0;
       let totalReps = 0;
       let completedReps = 0;
 
-      (checkins || []).forEach(c => {
+      checkins.forEach(c => {
         totalReps += c.planned_count;
         completedReps += c.actual_count;
         if (c.actual_count >= c.planned_count) {
@@ -117,15 +93,17 @@ const Dashboard = () => {
         completed_reps: completedReps
       });
     } catch (error) {
-      console.error("Error fetching dashboard data:", error);
+      console.error("Error fetching weekly summary:", error);
     } finally {
-      setLoading(false);
+      setSummaryLoading(false);
     }
   }, [user, currentWeekStart]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchWeeklySummary();
+  }, [fetchWeeklySummary]);
+
+  const loading = appDataLoading || summaryLoading;
 
   if (loading) {
     return (

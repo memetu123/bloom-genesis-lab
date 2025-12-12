@@ -2,8 +2,7 @@ import { useState, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserPreferences, getWeekStartsOn } from "@/hooks/useUserPreferences";
-import { useGoals } from "@/hooks/useGoalsContext";
+import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useWeeklyData, DayTask, CommitmentData } from "@/hooks/useWeeklyData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,6 +19,7 @@ import TaskCreateModal from "@/components/TaskCreateModal";
 /**
  * Weekly Page - Notion-style weekly view with calendar grid
  * OPTIMIZED: Uses useWeeklyData hook for single-batch fetching
+ * Consumes preferences/goals from global AppDataProvider
  */
 
 // Memoized WeeklyTotals to prevent unnecessary re-renders
@@ -31,8 +31,7 @@ const MemoizedCalendar = memo(NotionWeekCalendar);
 const Weekly = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { preferences } = useUserPreferences();
-  const { goals } = useGoals();
+  const { preferences, goals } = useAppData();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
   
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => 
