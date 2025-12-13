@@ -131,7 +131,7 @@ const Onboarding = () => {
         times_per_day: 1,
         repeat_days_of_week: c.timesPerWeek >= 7 
           ? null 
-          : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+          : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].slice(0, c.timesPerWeek),
       }));
 
       const { error: commitmentError } = await supabase
