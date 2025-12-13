@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppData } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { OnboardingPillarStep } from "@/components/onboarding/OnboardingPillarStep";
@@ -16,6 +17,7 @@ import { OnboardingData } from "@/types/todayoum";
 const Onboarding = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refetchAll } = useAppData();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<OnboardingData>({
@@ -140,6 +142,9 @@ const Onboarding = () => {
 
       if (profileError) throw profileError;
 
+      // Refresh global cache so new data appears immediately
+      await refetchAll();
+      
       toast.success("Your life plan is ready!");
       navigate("/dashboard");
     } catch (error: any) {
