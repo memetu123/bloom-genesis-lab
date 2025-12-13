@@ -76,6 +76,17 @@ export interface WeeklyCheckin {
   updated_at: string;
 }
 
+// Day of week type for scheduling
+export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+// Onboarding commitment with explicit day and time selection
+export interface OnboardingCommitment {
+  title: string;
+  daysOfWeek: DayOfWeek[];
+  timeStart?: string;
+  timeEnd?: string;
+}
+
 // Onboarding state
 export interface OnboardingData {
   selectedPillars: { name: string; description: string }[];
@@ -84,7 +95,7 @@ export interface OnboardingData {
   threeYearGoal: { title: string; description: string } | null;
   oneYearGoal: { title: string; description: string } | null;
   ninetyDayGoal: { title: string; description: string } | null;
-  commitments: { title: string; timesPerWeek: number }[];
+  commitments: OnboardingCommitment[];
 }
 
 // Default pillar suggestions

@@ -119,19 +119,19 @@ const Onboarding = () => {
 
       if (ninetyDayError) throw ninetyDayError;
 
-      // 6. Create weekly commitments
+      // 6. Create weekly commitments with explicit days and times
       const commitmentInserts = data.commitments.map(c => ({
         user_id: user.id,
         goal_id: ninetyDayGoal.id,
         title: c.title,
         commitment_type: "habit" as const,
-        frequency_json: { times_per_week: c.timesPerWeek },
-        // Set proper recurrence: 7x = daily, otherwise weekly with all days
-        recurrence_type: c.timesPerWeek >= 7 ? 'daily' : 'weekly',
+        frequency_json: { times_per_week: c.daysOfWeek.length },
+        recurrence_type: c.daysOfWeek.length >= 7 ? 'daily' : 'weekly',
         times_per_day: 1,
-        repeat_days_of_week: c.timesPerWeek >= 7 
-          ? null 
-          : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].slice(0, c.timesPerWeek),
+        repeat_days_of_week: c.daysOfWeek.length >= 7 ? null : c.daysOfWeek,
+        default_time_start: c.timeStart || null,
+        default_time_end: c.timeEnd || null,
+        flexible_time: !c.timeStart,
       }));
 
       const { error: commitmentError } = await supabase
