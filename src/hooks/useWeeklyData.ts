@@ -260,7 +260,9 @@ export function useWeeklyData(
             shouldShow = true;
           } else if (details.recurrenceType === 'weekly') {
             if (details.daysOfWeek.length === 0) {
-              shouldShow = dayOfWeek >= 1 && dayOfWeek <= 5;
+              // Fallback: check frequency_json for times_per_week
+              const frequency = commitment.frequency_json?.times_per_week || 0;
+              shouldShow = frequency >= 7; // If 7x/week, show all days
             } else {
               shouldShow = details.daysOfWeek.includes(dayName);
             }
