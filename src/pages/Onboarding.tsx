@@ -125,7 +125,13 @@ const Onboarding = () => {
         goal_id: ninetyDayGoal.id,
         title: c.title,
         commitment_type: "habit" as const,
-        frequency_json: { times_per_week: c.timesPerWeek }
+        frequency_json: { times_per_week: c.timesPerWeek },
+        // Set proper recurrence: 7x = daily, otherwise weekly with all days
+        recurrence_type: c.timesPerWeek >= 7 ? 'daily' : 'weekly',
+        times_per_day: 1,
+        repeat_days_of_week: c.timesPerWeek >= 7 
+          ? null 
+          : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
       }));
 
       const { error: commitmentError } = await supabase
