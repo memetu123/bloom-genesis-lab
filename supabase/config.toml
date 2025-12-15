@@ -1,7 +1,7 @@
 project_id = "khxatfkrkiwkbqhbovgv"
 
 [functions.generate-goal-example]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-vision-example]
-verify_jwt = false
+verify_jwt = true
