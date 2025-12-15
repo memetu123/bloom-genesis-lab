@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { AppDataProvider } from "@/hooks/useAppData";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppLayout from "@/components/AppLayout";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
@@ -43,17 +44,17 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 
-                {/* Main app routes with layout */}
-                <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-                <Route path="/visions" element={<AppLayout><Visions /></AppLayout>} />
-                <Route path="/vision/:id" element={<AppLayout><VisionDetail /></AppLayout>} />
-                <Route path="/goals" element={<AppLayout><Goals /></AppLayout>} />
-                <Route path="/goal/:id" element={<AppLayout><GoalDetail /></AppLayout>} />
-                <Route path="/weekly" element={<AppLayout><Weekly /></AppLayout>} />
-                <Route path="/daily" element={<AppLayout><Daily /></AppLayout>} />
-                <Route path="/recently-deleted" element={<AppLayout><RecentlyDeleted /></AppLayout>} />
-                <Route path="/profile" element={<AppLayout><Profile /></AppLayout>} />
-                <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
+                {/* Protected app routes with layout */}
+                <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
+                <Route path="/visions" element={<ProtectedRoute><AppLayout><Visions /></AppLayout></ProtectedRoute>} />
+                <Route path="/vision/:id" element={<ProtectedRoute><AppLayout><VisionDetail /></AppLayout></ProtectedRoute>} />
+                <Route path="/goals" element={<ProtectedRoute><AppLayout><Goals /></AppLayout></ProtectedRoute>} />
+                <Route path="/goal/:id" element={<ProtectedRoute><AppLayout><GoalDetail /></AppLayout></ProtectedRoute>} />
+                <Route path="/weekly" element={<ProtectedRoute><AppLayout><Weekly /></AppLayout></ProtectedRoute>} />
+                <Route path="/daily" element={<ProtectedRoute><AppLayout><Daily /></AppLayout></ProtectedRoute>} />
+                <Route path="/recently-deleted" element={<ProtectedRoute><AppLayout><RecentlyDeleted /></AppLayout></ProtectedRoute>} />
+                <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
