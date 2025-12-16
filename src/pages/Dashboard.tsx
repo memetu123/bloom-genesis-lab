@@ -1,9 +1,21 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, ChevronDown } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { Star, ChevronRight, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
+import { useAppData, Vision as GlobalVision } from "@/hooks/useAppData";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FocusModal } from "@/components/FocusModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,9 +32,17 @@ const MAX_NINETY_DAY_PER_VISION = 3;
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { visions, goals, pillarsMap, loading, refetchVisions } = useAppData();
+  const { user } = useAuth();
+  const { visions, goals, pillars, pillarsMap, loading, refetchVisions } = useAppData();
   const [focusModalOpen, setFocusModalOpen] = useState(false);
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
+  
+  // Add vision dialog state
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [selectedPillarId, setSelectedPillarId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Build focused visions with related goals (no cap)
   const focusedVisions = useMemo(() => {
@@ -75,6 +95,52 @@ const Dashboard = () => {
     }
   };
 
+  const handleAddVision = async () => {
+    if (!user || !newTitle.trim() || !selectedPillarId) return;
+    setSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .insert({
+          user_id: user.id,
+          pillar_id: selectedPillarId,
+          title: newTitle.trim(),
+          description: newDescription.trim() || null,
+          status: "active",
+        });
+
+      if (error) throw error;
+
+      setNewTitle("");
+      setNewDescription("");
+      setSelectedPillarId("");
+      setAddDialogOpen(false);
+      refetchVisions();
+      toast.success("Vision created");
+    } catch (error) {
+      console.error("Error adding vision:", error);
+      toast.error("Failed to add vision");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleArchiveVision = async (visionId: string) => {
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ status: "archived" })
+        .eq("id", visionId);
+
+      if (error) throw error;
+      refetchVisions();
+      toast.success("Vision archived");
+    } catch (err) {
+      toast.error("Failed to archive vision");
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -91,14 +157,25 @@ const Dashboard = () => {
           <Star className="h-5 w-5 text-primary fill-primary" />
           What I'm building
         </h1>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setFocusModalOpen(true)}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          Set your focus
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFocusModalOpen(true)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Set your focus
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setAddDialogOpen(true)}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            title="Add vision"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* ========== FOCUSED VISIONS ========== */}
@@ -120,7 +197,7 @@ const Dashboard = () => {
           {focusedVisions.map((vision) => (
             <Card key={vision.id} className="border-muted">
               <CardContent className="p-5">
-                {/* Vision Header - Star toggle + label top-right */}
+                {/* Vision Header - Star toggle + menu + label top-right */}
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <h2 
                     className="text-lg font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
@@ -128,9 +205,9 @@ const Dashboard = () => {
                   >
                     {vision.title}
                   </h2>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     {vision.pillar_name && (
-                      <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap mr-1">
                         {vision.pillar_name}
                       </span>
                     )}
@@ -144,6 +221,27 @@ const Dashboard = () => {
                     >
                       <Star className="h-4 w-4 fill-current" />
                     </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
+                          Edit vision
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleArchiveVision(vision.id)}
+                          className="text-muted-foreground"
+                        >
+                          Archive
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
 
@@ -302,16 +400,39 @@ const Dashboard = () => {
                         </span>
                       )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleFocus(vision.id, false);
-                      }}
-                      className="ml-3 p-1 text-muted-foreground/50 hover:text-primary transition-colors shrink-0"
-                      title="Add to focus"
-                    >
-                      <Star className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleFocus(vision.id, false);
+                        }}
+                        className="p-1 text-muted-foreground/50 hover:text-primary transition-colors"
+                        title="Add to focus"
+                      >
+                        <Star className="h-4 w-4" />
+                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
+                            Edit vision
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleArchiveVision(vision.id)}
+                            className="text-muted-foreground"
+                          >
+                            Archive
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -322,6 +443,58 @@ const Dashboard = () => {
 
       {/* Focus Modal */}
       <FocusModal open={focusModalOpen} onOpenChange={setFocusModalOpen} />
+
+      {/* Add Vision Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Vision</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="pillar">Pillar</Label>
+              <Select value={selectedPillarId} onValueChange={setSelectedPillarId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a pillar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pillars.map(pillar => (
+                    <SelectItem key={pillar.id} value={pillar.id}>
+                      {pillar.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="Who do you want to become?"
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea
+                id="description"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Describe your vision..."
+                rows={3}
+              />
+            </div>
+            <Button 
+              onClick={handleAddVision} 
+              disabled={saving || !newTitle.trim() || !selectedPillarId}
+              className="w-full"
+            >
+              {saving ? "Saving..." : "Add Vision"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

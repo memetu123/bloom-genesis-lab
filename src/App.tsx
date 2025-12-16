@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppDataProvider } from "@/hooks/useAppData";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -12,7 +12,6 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
-import Visions from "./pages/Visions";
 import VisionDetail from "./pages/VisionDetail";
 import Goals from "./pages/Goals";
 import GoalDetail from "./pages/GoalDetail";
@@ -46,7 +45,7 @@ const App = () => (
                 
                 {/* Protected app routes with layout */}
                 <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
-                <Route path="/visions" element={<ProtectedRoute><AppLayout><Visions /></AppLayout></ProtectedRoute>} />
+                <Route path="/visions" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/vision/:id" element={<ProtectedRoute><AppLayout><VisionDetail /></AppLayout></ProtectedRoute>} />
                 <Route path="/goals" element={<ProtectedRoute><AppLayout><Goals /></AppLayout></ProtectedRoute>} />
                 <Route path="/goal/:id" element={<ProtectedRoute><AppLayout><GoalDetail /></AppLayout></ProtectedRoute>} />

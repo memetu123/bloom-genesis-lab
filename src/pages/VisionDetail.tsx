@@ -274,7 +274,7 @@ const VisionDetail = () => {
       if (error) throw error;
       setUndoItem({ id: vision.id, type: "vision" });
       setShowUndo(true);
-      navigate("/visions");
+      navigate("/dashboard");
     } catch (error) {
       toast.error("Failed to delete");
     }

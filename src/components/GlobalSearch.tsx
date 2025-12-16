@@ -137,7 +137,7 @@ const GlobalSearch = () => {
     
     switch (result.type) {
       case "vision":
-        navigate(`/visions?focusId=${result.id}`);
+        navigate(`/vision/${result.id}`);
         break;
       case "goal":
         navigate(`/goals?focusId=${result.id}`);
