@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Calendar, Play, CalendarPlus } from "lucide-react";
+import { Star, ChevronRight, Calendar, CalendarPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
@@ -228,31 +228,20 @@ const Dashboard = () => {
                 </span>
                 <span className="text-lg font-semibold text-primary">{weeklyProgress}%</span>
               </div>
-              <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-4">
+              <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-3">
                 <div
                   className="h-full bg-primary transition-all duration-500 rounded-full"
                   style={{ width: `${weeklyProgress}%` }}
                 />
               </div>
-              <p className="text-sm text-muted-foreground mb-5">
+              <p className="text-sm text-muted-foreground">
                 {weeklySummary.completed_reps} of {weeklySummary.total_reps} total reps completed
               </p>
-              <Button 
-                size="lg" 
-                className="w-full" 
-                onClick={() => navigate("/daily")}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Start now
-              </Button>
             </>
           ) : (
-            <div className="text-center py-4">
-              <p className="text-muted-foreground text-sm mb-4">No active commitments this week</p>
-              <Button onClick={() => navigate("/onboarding")}>
-                Set up your plan
-              </Button>
-            </div>
+            <p className="text-muted-foreground text-sm text-center py-2">
+              No active commitments this week
+            </p>
           )}
         </CardContent>
       </Card>
