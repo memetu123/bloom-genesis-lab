@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronRight, ChevronLeft, X, ChevronDown, Eye, RefreshCw } from "lucide-react";
+import { ChevronRight, ChevronLeft, ChevronDown, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useWeeklyData, DayTask, CommitmentData } from "@/hooks/useWeeklyData";
@@ -257,10 +257,13 @@ const Weekly = () => {
     [filteredCommitments]
   );
 
-  // Goals for dropdown - memoized
+  // Goals for dropdown - memoized with vision labels
   const goalOptions = useMemo(() => 
-    goals.filter(g => g.goal_type === "ninety_day").map(g => ({ id: g.id, title: g.title })),
-    [goals]
+    goals.filter(g => g.goal_type === "ninety_day").map(g => {
+      const vision = g.life_vision_id ? visionsMap.get(g.life_vision_id) : null;
+      return { id: g.id, title: g.title, visionLabel: vision?.title || null };
+    }),
+    [goals, visionsMap]
   );
 
   if (loading) {
@@ -286,51 +289,48 @@ const Weekly = () => {
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => navigate(`/goals?focusId=${activePlanId}`)}
-              className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-              title="View plan details"
-            >
-              <Eye className="h-3 w-3" />
-              View plan
-            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button 
                   className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                   title="Change plan"
                 >
-                  <RefreshCw className="h-3 w-3" />
                   Change plan
+                  <ChevronDown className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-popover border border-border shadow-md">
-                {goalOptions.filter(g => g.id !== activePlanId).map((plan) => (
+              <DropdownMenuContent align="end" className="w-64 bg-popover border border-border shadow-md">
+                <DropdownMenuItem 
+                  onClick={clearPlanContext}
+                  className="cursor-pointer flex items-center gap-2"
+                >
+                  <Check className={`h-3 w-3 ${!activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+                  <span>All tasks</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {goalOptions.map((plan) => (
                   <DropdownMenuItem 
                     key={plan.id}
                     onClick={() => setSearchParams({ plan: plan.id })}
-                    className="cursor-pointer"
+                    className="cursor-pointer flex items-start gap-2"
                   >
-                    {plan.title}
+                    <Check className={`h-3 w-3 mt-0.5 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="truncate">{plan.title}</span>
+                      {plan.visionLabel && (
+                        <span className="text-xs text-muted-foreground truncate">{plan.visionLabel}</span>
+                      )}
+                    </div>
                   </DropdownMenuItem>
                 ))}
-                {goalOptions.filter(g => g.id !== activePlanId).length > 0 && (
-                  <DropdownMenuSeparator />
-                )}
-                <DropdownMenuItem 
-                  onClick={clearPlanContext}
-                  className="cursor-pointer text-muted-foreground"
-                >
-                  Show all tasks
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <button
               onClick={clearPlanContext}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-              title="Clear plan context"
+              className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              title="Show all tasks"
             >
-              <X className="h-4 w-4" />
+              Clear plan
             </button>
           </div>
         </div>
