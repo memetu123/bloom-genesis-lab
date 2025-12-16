@@ -108,6 +108,12 @@ const GoalDetail = () => {
           return;
         }
 
+        // Redirect 90-day plans to Weekly page with context
+        if (goalData.goal_type === "ninety_day") {
+          navigate(`/weekly?plan=${id}`, { replace: true });
+          return;
+        }
+
         setGoal({
           ...goalData,
           status: (goalData.status as GoalStatus) || "active"
@@ -144,54 +150,19 @@ const GoalDetail = () => {
           if (threeYear) bc.threeYear = threeYear.title;
         }
 
-        if (goalData.goal_type === "ninety_day" && goalData.parent_goal_id) {
-          const { data: oneYear } = await supabase
-            .from("goals")
-            .select("title, parent_goal_id")
-            .eq("id", goalData.parent_goal_id)
-            .maybeSingle();
-          if (oneYear) {
-            bc.oneYear = oneYear.title;
-            if (oneYear.parent_goal_id) {
-              const { data: threeYear } = await supabase
-                .from("goals")
-                .select("title")
-                .eq("id", oneYear.parent_goal_id)
-                .maybeSingle();
-              if (threeYear) bc.threeYear = threeYear.title;
-            }
-          }
-        }
-
         setBreadcrumb(bc);
 
-        // Fetch children based on goal type
-        if (goalData.goal_type === "ninety_day") {
-          // Fetch commitments
-          const { data: commitmentsData } = await supabase
-            .from("weekly_commitments")
-            .select("*")
-            .eq("goal_id", id)
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: true });
+        // Fetch children - only for 3-year and 1-year goals now
+        const childType = goalData.goal_type === "three_year" ? "one_year" : "ninety_day";
+        const { data: childGoalsData } = await supabase
+          .from("goals")
+          .select("*")
+          .eq("parent_goal_id", id)
+          .eq("goal_type", childType)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
 
-          setCommitments((commitmentsData || []).map(c => ({
-            ...c,
-            frequency_json: c.frequency_json as { times_per_week: number }
-          })));
-        } else {
-          // Fetch child goals
-          const childType = goalData.goal_type === "three_year" ? "one_year" : "ninety_day";
-          const { data: childGoalsData } = await supabase
-            .from("goals")
-            .select("*")
-            .eq("parent_goal_id", id)
-            .eq("goal_type", childType)
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: true });
-
-          setChildGoals((childGoalsData || []) as Goal[]);
-        }
+        setChildGoals((childGoalsData || []) as Goal[]);
       } catch (error: any) {
         console.error("Error fetching goal:", error);
         toast.error("Failed to load goal");

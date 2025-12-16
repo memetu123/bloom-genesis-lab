@@ -41,6 +41,8 @@ interface TaskCreateModalProps {
   weekStart?: Date;
   /** Optional: filter goals to a specific vision context */
   contextVisionId?: string;
+  /** Optional: auto-select this goal when creating tasks (e.g., from 90-day plan context) */
+  defaultGoalId?: string;
 }
 
 const DAYS_OF_WEEK: { value: DayOfWeek; label: string }[] = [
@@ -61,6 +63,7 @@ const TaskCreateModal = ({
   onSuccess,
   weekStart,
   contextVisionId,
+  defaultGoalId,
 }: TaskCreateModalProps) => {
   const { createRecurringTask, createIndependentTask } = useTaskScheduling();
   const { goals: allGoals, visions, visionsMap } = useAppData();
@@ -119,17 +122,19 @@ const TaskCreateModal = ({
       setTitle("");
       setTimesPerDay("1");
       setSelectedDays([]);
-      setGoalId("");
+      // Auto-select goal if defaultGoalId is provided (e.g., from 90-day plan context)
+      setGoalId(defaultGoalId || "");
       setTimeStart("");
       setTimeEnd("");
-      setRelatedExpanded(false);
+      // Auto-expand related section if goal is pre-selected
+      setRelatedExpanded(!!defaultGoalId);
       
       // Auto-focus the title input
       setTimeout(() => {
         titleInputRef.current?.focus();
       }, 50);
     }
-  }, [open, defaultDate]);
+  }, [open, defaultDate, defaultGoalId]);
 
   const handleDayToggle = (day: DayOfWeek) => {
     setSelectedDays((prev) =>

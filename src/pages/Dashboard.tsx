@@ -308,7 +308,7 @@ const Dashboard = () => {
                         <li 
                           key={goal.id} 
                           className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/50 rounded-md p-1.5 -ml-1.5 transition-colors"
-                          onClick={() => navigate(`/goal/${goal.id}`)}
+                          onClick={() => navigate(`/weekly?plan=${goal.id}`)}
                         >
                           <span className="text-muted-foreground/70 text-xs leading-none">•</span>
                           <span className="flex-1 flex items-center justify-between">
