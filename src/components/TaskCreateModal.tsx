@@ -166,12 +166,13 @@ const TaskCreateModal = ({
     try {
       if (recurrenceType === "none") {
         // Create independent (one-time) task
-        // Note: Independent tasks don't support goal linking (schema limitation)
+        // If goalId is provided, a weekly_commitment will be created to link the task
         await createIndependentTask({
           title: title.trim(),
           scheduledDate,
           timeStart: timeStart || undefined,
           timeEnd: timeEnd || undefined,
+          goalId: goalId || undefined,
         });
         toast.success("Task created");
       } else {
@@ -375,7 +376,7 @@ const TaskCreateModal = ({
                   <ChevronRight className="h-4 w-4" />
                 )}
                 <span>Related to (optional)</span>
-                {selectedGoal && recurrenceType !== "none" && (
+                {selectedGoal && (
                   <span className="ml-1 text-foreground">
                     — {selectedGoal.title}
                   </span>
@@ -383,41 +384,38 @@ const TaskCreateModal = ({
               </button>
 
               {relatedExpanded && (
-                <div className="mt-2">
-                  {recurrenceType === "none" ? (
-                    <p className="text-xs text-muted-foreground">
-                      Goal linking is available for recurring tasks only
-                    </p>
-                  ) : (
-                    <Select
-                      value={goalId || "none"}
-                      onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select a plan or goal" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">
-                          <span className="text-muted-foreground">None</span>
-                        </SelectItem>
-                        {relatedGoals.map((goal) => {
-                          const visionName = getVisionContext(goal);
-                          const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
-                          return (
-                            <SelectItem key={goal.id} value={goal.id}>
-                              <div className="flex flex-col">
-                                <span>{goal.title}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {typeLabel}
-                                  {visionName && ` · ${visionName}`}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
+                <div className="mt-2 space-y-2">
+                  <Select
+                    value={goalId || "none"}
+                    onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a plan or goal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        <span className="text-muted-foreground">None</span>
+                      </SelectItem>
+                      {relatedGoals.map((goal) => {
+                        const visionName = getVisionContext(goal);
+                        const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
+                        return (
+                          <SelectItem key={goal.id} value={goal.id}>
+                            <div className="flex flex-col">
+                              <span>{goal.title}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {typeLabel}
+                                {visionName && ` · ${visionName}`}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Used to organize your weekly plan.
+                  </p>
                 </div>
               )}
             </div>

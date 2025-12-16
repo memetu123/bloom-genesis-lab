@@ -96,6 +96,7 @@ export const useTaskScheduling = () => {
 
   /**
    * Create an independent (one-time) task
+   * If goalId is provided, creates a weekly_commitment to link the task to the goal
    */
   const createIndependentTask = useCallback(
     async (params: {
@@ -103,17 +104,52 @@ export const useTaskScheduling = () => {
       scheduledDate: string;
       timeStart?: string;
       timeEnd?: string;
+      goalId?: string;
     }) => {
       if (!user) throw new Error("User not authenticated");
 
-      const { title, scheduledDate, timeStart, timeEnd } = params;
+      const { title, scheduledDate, timeStart, timeEnd, goalId } = params;
 
-      // Create directly in commitment_completions without a weekly commitment
+      let commitmentId: string | null = null;
+
+      // If a goal is selected, create a weekly_commitment to link the task
+      if (goalId) {
+        const { data: commitment, error: commitmentError } = await supabase
+          .from("weekly_commitments")
+          .insert({
+            user_id: user.id,
+            title,
+            goal_id: goalId,
+            task_type: "independent",
+            recurrence_type: "none",
+            times_per_day: 1,
+            repeat_days_of_week: null,
+            default_time_start: timeStart || null,
+            default_time_end: timeEnd || null,
+            flexible_time: !timeStart,
+            commitment_type: "task",
+            is_active: false, // Mark as inactive since it's a one-time task
+            repeat_frequency: null,
+            repeat_times_per_period: 1,
+            frequency_json: { times_per_week: 1 },
+          })
+          .select()
+          .single();
+
+        if (commitmentError) {
+          console.error("Error creating weekly_commitment for independent task:", commitmentError);
+          // Continue without goal linking if it fails
+        } else {
+          commitmentId = commitment.id;
+        }
+      }
+
+      // Create in commitment_completions
       const { data: completion, error } = await supabase
         .from("commitment_completions")
         .insert({
           user_id: user.id,
-          commitment_id: null,
+          commitment_id: commitmentId,
           completed_date: scheduledDate,
           task_type: "independent",
           title,
