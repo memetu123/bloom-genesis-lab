@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, Target, Calendar, Check } from "lucide-react";
+import { Star, ChevronRight, Calendar, Play, CalendarPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,8 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 
 /**
- * Dashboard Page - Overview of focused items and weekly progress
- * Consumes visions/goals/pillars from global AppDataProvider
+ * Dashboard Page - Execution Launchpad
+ * Guides the user to their next concrete action
  */
 
 interface WeeklySummary {
@@ -20,34 +20,50 @@ interface WeeklySummary {
   completed_reps: number;
 }
 
+interface NextTask {
+  id: string;
+  title: string;
+  duration: string | null;
+  visionContext: string | null;
+  pillarName: string | null;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { visions, goals, pillarsMap, loading: appDataLoading } = useAppData();
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);
+  const [nextTask, setNextTask] = useState<NextTask | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
-  // Memoize to prevent infinite re-renders
+  // Memoize week boundaries
   const currentWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
   const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
   const weekStartFormatted = format(currentWeekStart, "MMM d");
   const weekEndFormatted = format(currentWeekEnd, "MMM d");
+  const today = useMemo(() => new Date(), []);
+  const todayKey = format(today, "yyyy-MM-dd");
+  const dayOfWeek = today.getDay();
+  const dayName = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayOfWeek];
 
-  // Build focused visions with focused goals from cached data
+  // Build focused visions with focused goal count
   const focusedVisions = useMemo(() => {
     const focused = visions.filter(v => v.is_focus && v.status === "active");
-    return focused.map(vision => ({
-      id: vision.id,
-      title: vision.title,
-      pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
-      focused_goals: goals
-        .filter(g => g.life_vision_id === vision.id && g.is_focus)
-        .map(g => ({ id: g.id, title: g.title, goal_type: g.goal_type }))
-    }));
+    return focused.map(vision => {
+      const focusedGoalsCount = goals.filter(
+        g => g.life_vision_id === vision.id && g.is_focus
+      ).length;
+      return {
+        id: vision.id,
+        title: vision.title,
+        pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
+        focused_goals_count: focusedGoalsCount,
+      };
+    });
   }, [visions, goals, pillarsMap]);
 
-  // Fetch only weekly summary (page-specific data)
-  const fetchWeeklySummary = useCallback(async () => {
+  // Fetch weekly summary and next task
+  const fetchDashboardData = useCallback(async () => {
     if (!user) {
       setSummaryLoading(false);
       return;
@@ -56,10 +72,10 @@ const Dashboard = () => {
     try {
       const startDate = format(currentWeekStart, "yyyy-MM-dd");
       
-      const [commitmentsResult, checkinsResult] = await Promise.all([
+      const [commitmentsResult, checkinsResult, completionsResult] = await Promise.all([
         supabase
           .from("weekly_commitments")
-          .select("id, frequency_json")
+          .select("id, title, goal_id, frequency_json, recurrence_type, repeat_days_of_week, default_time_start, default_time_end")
           .eq("user_id", user.id)
           .eq("is_active", true)
           .or("is_deleted.is.null,is_deleted.eq.false"),
@@ -68,12 +84,20 @@ const Dashboard = () => {
           .select("planned_count, actual_count")
           .eq("user_id", user.id)
           .eq("period_start_date", startDate),
+        supabase
+          .from("commitment_completions")
+          .select("commitment_id")
+          .eq("user_id", user.id)
+          .eq("completed_date", todayKey)
+          .or("is_deleted.is.null,is_deleted.eq.false"),
       ]);
 
       const commitments = commitmentsResult.data || [];
       const checkins = checkinsResult.data || [];
+      const todayCompletions = completionsResult.data || [];
+      const completedIds = new Set(todayCompletions.map(c => c.commitment_id));
 
-      const totalCommitments = commitments.length;
+      // Weekly summary
       let completedCommitments = 0;
       let totalReps = 0;
       let completedReps = 0;
@@ -87,21 +111,85 @@ const Dashboard = () => {
       });
 
       setWeeklySummary({
-        total_commitments: totalCommitments,
+        total_commitments: commitments.length,
         completed_commitments: completedCommitments,
         total_reps: totalReps,
         completed_reps: completedReps
       });
+
+      // Find next task for today (first incomplete task scheduled for today)
+      let foundNextTask: NextTask | null = null;
+      
+      for (const commitment of commitments) {
+        if (completedIds.has(commitment.id)) continue;
+
+        const recurrenceType = commitment.recurrence_type || 'weekly';
+        const daysOfWeek: string[] = commitment.repeat_days_of_week || [];
+        
+        // Check if should appear today
+        let shouldShow = false;
+        if (recurrenceType === 'daily') {
+          shouldShow = true;
+        } else if (recurrenceType === 'weekly') {
+          if (daysOfWeek.length === 0) {
+            shouldShow = dayOfWeek >= 1 && dayOfWeek <= 5;
+          } else {
+            shouldShow = daysOfWeek.includes(dayName);
+          }
+        }
+
+        if (!shouldShow) continue;
+
+        // Calculate duration
+        let duration: string | null = null;
+        if (commitment.default_time_start && commitment.default_time_end) {
+          const [startH, startM] = commitment.default_time_start.split(":").map(Number);
+          const [endH, endM] = commitment.default_time_end.split(":").map(Number);
+          const durationMin = (endH * 60 + endM) - (startH * 60 + startM);
+          if (durationMin > 0) {
+            duration = durationMin >= 60 
+              ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}min`
+              : `${durationMin} min`;
+          }
+        }
+
+        // Get vision context
+        let visionContext: string | null = null;
+        let pillarName: string | null = null;
+        
+        if (commitment.goal_id) {
+          const goal = goals.find(g => g.id === commitment.goal_id);
+          if (goal?.life_vision_id) {
+            const vision = visions.find(v => v.id === goal.life_vision_id);
+            if (vision) {
+              visionContext = vision.title;
+              pillarName = pillarsMap.get(vision.pillar_id)?.name || null;
+            }
+          }
+        }
+
+        foundNextTask = {
+          id: commitment.id,
+          title: commitment.title,
+          duration,
+          visionContext,
+          pillarName,
+        };
+        break;
+      }
+
+      setNextTask(foundNextTask);
+
     } catch (error) {
-      console.error("Error fetching weekly summary:", error);
+      console.error("Error fetching dashboard data:", error);
     } finally {
       setSummaryLoading(false);
     }
-  }, [user, currentWeekStart]);
+  }, [user, currentWeekStart, todayKey, dayOfWeek, dayName, goals, visions, pillarsMap]);
 
   useEffect(() => {
-    fetchWeeklySummary();
-  }, [fetchWeeklySummary]);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const loading = appDataLoading || summaryLoading;
 
@@ -118,22 +206,14 @@ const Dashboard = () => {
     : 0;
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
-      {/* Welcome section */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Your focus areas and weekly progress at a glance.
-        </p>
-      </div>
-
-      {/* Weekly Summary Card */}
-      <Card className="mb-8 cursor-pointer hover:border-primary/50 transition-calm" onClick={() => navigate("/weekly")}>
-        <CardContent className="p-5">
+    <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in">
+      {/* ========== THIS WEEK - Primary Section ========== */}
+      <Card className="mb-6 border-primary/30 shadow-soft">
+        <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold text-foreground">This Week</h2>
+              <h1 className="text-lg font-semibold text-foreground">This Week</h1>
             </div>
             <span className="text-sm text-muted-foreground">
               {weekStartFormatted} – {weekEndFormatted}
@@ -142,32 +222,34 @@ const Dashboard = () => {
 
           {weeklySummary && weeklySummary.total_commitments > 0 ? (
             <>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-muted-foreground">
                   {weeklySummary.completed_commitments} of {weeklySummary.total_commitments} habits complete
                 </span>
                 <span className="text-lg font-semibold text-primary">{weeklyProgress}%</span>
               </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden mb-3">
+              <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-4">
                 <div
-                  className="h-full bg-primary transition-all duration-300 rounded-full"
+                  className="h-full bg-primary transition-all duration-500 rounded-full"
                   style={{ width: `${weeklyProgress}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {weeklySummary.completed_reps}/{weeklySummary.total_reps} total reps
-                </span>
-                <Button variant="ghost" size="sm" className="text-primary">
-                  View details
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
+              <p className="text-sm text-muted-foreground mb-5">
+                {weeklySummary.completed_reps} of {weeklySummary.total_reps} total reps completed
+              </p>
+              <Button 
+                size="lg" 
+                className="w-full" 
+                onClick={() => navigate("/daily")}
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Start now
+              </Button>
             </>
           ) : (
             <div className="text-center py-4">
-              <p className="text-muted-foreground text-sm mb-2">No active commitments this week</p>
-              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); navigate("/onboarding"); }}>
+              <p className="text-muted-foreground text-sm mb-4">No active commitments this week</p>
+              <Button onClick={() => navigate("/onboarding")}>
                 Set up your plan
               </Button>
             </div>
@@ -175,30 +257,77 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Focused Visions Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Star className="h-5 w-5 text-primary fill-primary" />
+      {/* ========== NEXT UP TODAY ========== */}
+      <div className="mb-6">
+        <h2 className="text-base font-semibold text-foreground mb-3">Next up today</h2>
+        
+        {nextTask ? (
+          <Card 
+            className="cursor-pointer hover:border-primary/40 transition-calm border-l-4 border-l-primary"
+            onClick={() => navigate("/daily")}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-foreground truncate">
+                    {nextTask.title}
+                    {nextTask.duration && (
+                      <span className="text-muted-foreground font-normal ml-2">
+                        – {nextTask.duration}
+                      </span>
+                    )}
+                  </h3>
+                  {nextTask.visionContext && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      From: {nextTask.visionContext}
+                      {nextTask.pillarName && ` · ${nextTask.pillarName}`}
+                    </p>
+                  )}
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-2" />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-dashed">
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground mb-4">You're clear for now</p>
+              <Button 
+                variant="outline"
+                onClick={() => navigate("/daily")}
+              >
+                <CalendarPlus className="h-4 w-4 mr-2" />
+                Plan today
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ========== FOCUSED VISIONS - Strategic Context ========== */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+            <Star className="h-4 w-4 text-primary fill-primary" />
             Focused Visions
           </h2>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate("/visions")}
+            className="text-muted-foreground hover:text-foreground"
           >
-            Manage
-            <ChevronRight className="h-4 w-4 ml-1" />
+            Change focus
           </Button>
         </div>
 
         {focusedVisions.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-6 text-center">
-              <Star className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-muted-foreground text-sm">No focused visions</p>
+              <Star className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground text-sm mb-3">No focused visions</p>
               <Button 
-                variant="link" 
+                variant="outline" 
                 size="sm"
                 onClick={() => navigate("/visions")}
               >
@@ -207,70 +336,35 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {focusedVisions.map((vision) => (
               <Card 
                 key={vision.id} 
-                className="border-primary/20 bg-primary/5 cursor-pointer hover:border-primary/40 transition-calm"
+                className="cursor-pointer hover:border-primary/40 transition-calm"
                 onClick={() => navigate(`/vision/${vision.id}`)}
               >
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <span className="text-xs text-primary font-medium">{vision.pillar_name}</span>
-                      <h3 className="font-medium text-foreground">{vision.title}</h3>
-                      {vision.focused_goals.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {vision.focused_goals.map((goal) => (
-                            <button
-                              key={goal.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/goal/${goal.id}`);
-                              }}
-                              className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full hover:bg-primary/20 transition-calm"
-                            >
-                              {goal.goal_type === "three_year" ? "3Y" : goal.goal_type === "one_year" ? "1Y" : "90D"}: {goal.title}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs text-primary font-medium">
+                        {vision.pillar_name}
+                      </span>
+                      <h3 className="font-medium text-foreground truncate">
+                        {vision.title}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {vision.focused_goals_count > 0 
+                          ? `${vision.focused_goals_count} goal${vision.focused_goals_count !== 1 ? 's' : ''} in focus`
+                          : 'No goals in focus'}
+                      </p>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-2" />
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
-      </div>
-
-      {/* Quick Links */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card 
-          className="cursor-pointer hover:border-primary/50 transition-calm"
-          onClick={() => navigate("/goals")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <Target className="h-8 w-8 text-primary" />
-            <div>
-              <h3 className="font-medium text-foreground">All Goals</h3>
-              <p className="text-xs text-muted-foreground">View by level</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card 
-          className="cursor-pointer hover:border-primary/50 transition-calm"
-          onClick={() => navigate("/weekly")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <Check className="h-8 w-8 text-primary" />
-            <div>
-              <h3 className="font-medium text-foreground">Weekly</h3>
-              <p className="text-xs text-muted-foreground">Track habits</p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
