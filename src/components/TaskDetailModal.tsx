@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Clock, RefreshCw, Calendar, Trash2, Unlink, Check } from "lucide-react";
+import { Clock, RefreshCw, Calendar, Trash2, Unlink, Check, ChevronDown, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppData, Goal } from "@/hooks/useAppData";
 import { formatDateWithDay } from "@/lib/formatPreferences";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -67,7 +67,7 @@ const TaskDetailModal = ({
   onUpdate,
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
-  const { preferences } = useAppData();
+  const { preferences, goals: allGoals, visionsMap } = useAppData();
   const { convertToRecurring, detachInstance, updateRecurrenceRules } =
     useTaskScheduling();
 
@@ -81,8 +81,33 @@ const TaskDetailModal = ({
   const [showRepetitionEditor, setShowRepetitionEditor] = useState(false);
   const [saving, setSaving] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [goalId, setGoalId] = useState<string>("");
+  const [originalGoalId, setOriginalGoalId] = useState<string>("");
+  const [relatedExpanded, setRelatedExpanded] = useState(false);
 
   const dateKey = format(date, "yyyy-MM-dd");
+
+  // Get filtered and sorted goals for "Related to" section
+  const relatedGoals = (() => {
+    let filtered = allGoals.filter(
+      (g) =>
+        !g.is_deleted &&
+        g.status !== "archived" &&
+        g.status !== "completed" &&
+        (g.goal_type === "ninety_day" || g.goal_type === "one_year")
+    );
+    return filtered.sort((a, b) => {
+      if (a.goal_type === "ninety_day" && b.goal_type !== "ninety_day") return -1;
+      if (a.goal_type !== "ninety_day" && b.goal_type === "ninety_day") return 1;
+      return a.title.localeCompare(b.title);
+    });
+  })();
+
+  const getVisionContext = (goal: Goal): string | null => {
+    if (!goal.life_vision_id) return null;
+    const vision = visionsMap.get(goal.life_vision_id);
+    return vision?.title || null;
+  };
 
   useEffect(() => {
     if (task) {
@@ -92,20 +117,25 @@ const TaskDetailModal = ({
       setIsCompleted(task.isCompleted);
       setShowRepetitionEditor(false);
       setJustCompleted(false);
+      setRelatedExpanded(false);
+      setGoalId("");
+      setOriginalGoalId("");
 
-      // Fetch recurrence rules if recurring
+      // Fetch recurrence rules and goal if recurring
       if (task.commitmentId) {
-        fetchRecurrenceRules(task.commitmentId);
+        fetchRecurrenceRulesAndGoal(task.commitmentId);
       } else {
         setRecurrenceType("none");
+        // For independent tasks, check if there's a linked weekly_commitment
+        fetchIndependentTaskGoal(task.id);
       }
     }
   }, [task]);
 
-  const fetchRecurrenceRules = async (commitmentId: string) => {
+  const fetchRecurrenceRulesAndGoal = async (commitmentId: string) => {
     const { data } = await supabase
       .from("weekly_commitments")
-      .select("recurrence_type, times_per_day, repeat_days_of_week")
+      .select("recurrence_type, times_per_day, repeat_days_of_week, goal_id")
       .eq("id", commitmentId)
       .maybeSingle();
 
@@ -113,6 +143,33 @@ const TaskDetailModal = ({
       setRecurrenceType((data.recurrence_type as RecurrenceType) || "weekly");
       setTimesPerDay((data.times_per_day || 1).toString());
       setSelectedDays((data.repeat_days_of_week as DayOfWeek[]) || []);
+      setGoalId(data.goal_id || "");
+      setOriginalGoalId(data.goal_id || "");
+    }
+  };
+
+  const fetchIndependentTaskGoal = async (taskId: string) => {
+    // For independent tasks, check if there's a linking weekly_commitment
+    const taskIdParts = taskId.split("-");
+    const actualId = taskIdParts[0];
+    
+    const { data: completion } = await supabase
+      .from("commitment_completions")
+      .select("commitment_id")
+      .eq("id", actualId)
+      .maybeSingle();
+
+    if (completion?.commitment_id) {
+      const { data: commitment } = await supabase
+        .from("weekly_commitments")
+        .select("goal_id")
+        .eq("id", completion.commitment_id)
+        .maybeSingle();
+
+      if (commitment?.goal_id) {
+        setGoalId(commitment.goal_id);
+        setOriginalGoalId(commitment.goal_id);
+      }
     }
   };
 
@@ -128,9 +185,10 @@ const TaskDetailModal = ({
 
     try {
       const isRecurring = task.commitmentId !== null;
+      const goalChanged = goalId !== originalGoalId;
 
       if (isRecurring && task.commitmentId) {
-        // Update default times on the weekly commitment
+        // Update weekly commitment (including goal_id if changed)
         await supabase
           .from("weekly_commitments")
           .update({
@@ -138,6 +196,7 @@ const TaskDetailModal = ({
             default_time_start: timeStart || null,
             default_time_end: timeEnd || null,
             flexible_time: !timeStart,
+            ...(goalChanged ? { goal_id: goalId || null } : {}),
           })
           .eq("id", task.commitmentId);
 
@@ -148,6 +207,55 @@ const TaskDetailModal = ({
             timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
             daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
           });
+        }
+      } else if (!isRecurring && goalChanged) {
+        // For independent tasks, handle goal linking via weekly_commitment
+        const taskIdParts = task.id.split("-");
+        const actualId = taskIdParts[0];
+        
+        // Get the completion record to check if it has a commitment_id
+        const { data: completion } = await supabase
+          .from("commitment_completions")
+          .select("commitment_id")
+          .eq("id", actualId)
+          .maybeSingle();
+
+        if (completion?.commitment_id) {
+          // Already has a linking commitment - update or remove goal_id
+          if (goalId) {
+            await supabase
+              .from("weekly_commitments")
+              .update({ goal_id: goalId })
+              .eq("id", completion.commitment_id);
+          } else {
+            // Clear goal_id
+            await supabase
+              .from("weekly_commitments")
+              .update({ goal_id: null })
+              .eq("id", completion.commitment_id);
+          }
+        } else if (goalId) {
+          // No linking commitment exists - create one to link the task to the goal
+          const { data: newCommitment } = await supabase
+            .from("weekly_commitments")
+            .insert({
+              user_id: user.id,
+              title: title,
+              goal_id: goalId,
+              is_active: false, // Mark as inactive since it's just for linking
+              recurrence_type: "none",
+              task_type: "independent",
+            })
+            .select("id")
+            .single();
+
+          if (newCommitment) {
+            // Link the completion to this new commitment
+            await supabase
+              .from("commitment_completions")
+              .update({ commitment_id: newCommitment.id })
+              .eq("id", actualId);
+          }
         }
       }
 
@@ -602,6 +710,65 @@ const TaskDetailModal = ({
               </div>
             </div>
           </div>
+
+          {/* 5. Related to (optional) - Collapsible */}
+          {relatedGoals.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setRelatedExpanded(!relatedExpanded)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {relatedExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+                <span>Related to (optional)</span>
+                {goalId && !relatedExpanded && (
+                  <span className="ml-1 text-foreground text-xs">
+                    — {relatedGoals.find(g => g.id === goalId)?.title || "..."}
+                  </span>
+                )}
+              </button>
+
+              {relatedExpanded && (
+                <div className="mt-2 space-y-2">
+                  <Select
+                    value={goalId || "none"}
+                    onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
+                  >
+                    <SelectTrigger className="w-full h-9 text-sm">
+                      <SelectValue placeholder="Select a plan or goal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        <span className="text-muted-foreground">None</span>
+                      </SelectItem>
+                      {relatedGoals.map((goal) => {
+                        const visionName = getVisionContext(goal);
+                        const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
+                        return (
+                          <SelectItem key={goal.id} value={goal.id}>
+                            <div className="flex flex-col">
+                              <span>{goal.title}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {typeLabel}
+                                {visionName && ` · ${visionName}`}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Used to organize your weekly plan.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Actions - Save primary, Delete as text link */}
