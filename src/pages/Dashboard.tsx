@@ -120,24 +120,34 @@ const Dashboard = () => {
           {focusedVisions.map((vision) => (
             <Card key={vision.id} className="border-muted">
               <CardContent className="p-5">
-                {/* Vision Header - No indentation, label top-right */}
-                <div 
-                  className="cursor-pointer mb-4"
-                  onClick={() => navigate(`/vision/${vision.id}`)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-foreground">
-                      {vision.title}
-                    </h2>
+                {/* Vision Header - Star toggle + label top-right */}
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <h2 
+                    className="text-lg font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => navigate(`/vision/${vision.id}`)}
+                  >
+                    {vision.title}
+                  </h2>
+                  <div className="flex items-center gap-2 shrink-0">
                     {vision.pillar_name && (
                       <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap">
                         {vision.pillar_name}
                       </span>
                     )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFocus(vision.id, true);
+                      }}
+                      className="p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
+                      title="Remove from focus"
+                    >
+                      <Star className="h-4 w-4 fill-current" />
+                    </button>
                   </div>
                 </div>
 
-                {/* 3-Year Direction - No indentation, stacked muted lines, no bullets */}
+                {/* 3-Year Direction - Lighter bullets for multiple items */}
                 {vision.threeYear.length > 0 && (
                   <div className="mb-4">
                     <span className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -145,8 +155,11 @@ const Dashboard = () => {
                     </span>
                     <div className="mt-1 space-y-0.5">
                       {vision.threeYear.map(goal => (
-                        <p key={goal.id} className="text-sm text-muted-foreground">
-                          {goal.title}
+                        <p key={goal.id} className="text-sm text-muted-foreground flex items-baseline gap-1.5">
+                          {vision.threeYear.length > 1 && (
+                            <span className="text-muted-foreground/40 text-[10px] leading-none">·</span>
+                          )}
+                          <span>{goal.title}</span>
                         </p>
                       ))}
                       {vision.hasMoreThreeYear && (
