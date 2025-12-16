@@ -130,8 +130,9 @@ const Dashboard = () => {
                     </span>
                     <ul className="mt-1 space-y-1">
                       {vision.oneYear.map(goal => (
-                        <li key={goal.id} className="text-sm text-foreground">
-                          {goal.title}
+                        <li key={goal.id} className="text-sm text-foreground flex items-baseline gap-2">
+                          <span className="text-muted-foreground/70 text-xs leading-none">•</span>
+                          <span>{goal.title}</span>
                         </li>
                       ))}
                     </ul>
@@ -157,16 +158,19 @@ const Dashboard = () => {
                       {vision.ninetyDay.map(goal => (
                         <li 
                           key={goal.id} 
-                          className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-md p-1.5 -ml-1.5 transition-colors"
+                          className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/50 rounded-md p-1.5 -ml-1.5 transition-colors"
                           onClick={() => navigate(`/goal/${goal.id}`)}
                         >
-                          <span className="text-sm font-medium text-foreground">
-                            {goal.title}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {goal.status === "in_progress" || goal.status === "active" 
-                              ? "Active" 
-                              : "Planned"}
+                          <span className="text-muted-foreground/70 text-xs leading-none">•</span>
+                          <span className="flex-1 flex items-center justify-between">
+                            <span className="text-sm font-medium text-foreground">
+                              {goal.title}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {goal.status === "in_progress" || goal.status === "active" 
+                                ? "Active" 
+                                : "Planned"}
+                            </span>
                           </span>
                         </li>
                       ))}
