@@ -3,7 +3,9 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -204,7 +206,10 @@ const TaskCreateModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <VisuallyHidden.Root>
+          <DialogTitle>Add Task</DialogTitle>
+        </VisuallyHidden.Root>
         <div className="space-y-5">
           {/* Title - Entry point, no header above */}
           <div>
@@ -357,7 +362,7 @@ const TaskCreateModal = ({
           </div>
 
           {/* Related to (optional) - Collapsible */}
-          {relatedGoals.length > 0 && recurrenceType !== "none" && (
+          {relatedGoals.length > 0 && (
             <div>
               <button
                 type="button"
@@ -370,7 +375,7 @@ const TaskCreateModal = ({
                   <ChevronRight className="h-4 w-4" />
                 )}
                 <span>Related to (optional)</span>
-                {selectedGoal && (
+                {selectedGoal && recurrenceType !== "none" && (
                   <span className="ml-1 text-foreground">
                     — {selectedGoal.title}
                   </span>
@@ -379,34 +384,40 @@ const TaskCreateModal = ({
 
               {relatedExpanded && (
                 <div className="mt-2">
-                  <Select
-                    value={goalId || "none"}
-                    onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select a plan or goal" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">
-                        <span className="text-muted-foreground">None</span>
-                      </SelectItem>
-                      {relatedGoals.map((goal) => {
-                        const visionName = getVisionContext(goal);
-                        const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
-                        return (
-                          <SelectItem key={goal.id} value={goal.id}>
-                            <div className="flex flex-col">
-                              <span>{goal.title}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {typeLabel}
-                                {visionName && ` · ${visionName}`}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                  {recurrenceType === "none" ? (
+                    <p className="text-xs text-muted-foreground">
+                      Goal linking is available for recurring tasks only
+                    </p>
+                  ) : (
+                    <Select
+                      value={goalId || "none"}
+                      onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a plan or goal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-muted-foreground">None</span>
+                        </SelectItem>
+                        {relatedGoals.map((goal) => {
+                          const visionName = getVisionContext(goal);
+                          const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
+                          return (
+                            <SelectItem key={goal.id} value={goal.id}>
+                              <div className="flex flex-col">
+                                <span>{goal.title}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {typeLabel}
+                                  {visionName && ` · ${visionName}`}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               )}
             </div>
