@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, ChevronRight } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FocusModal } from "@/components/FocusModal";
 
 /**
  * Dashboard Page - North Star Orientation
@@ -19,6 +20,7 @@ const MAX_NINETY_DAY_PER_VISION = 3;
 const Dashboard = () => {
   const navigate = useNavigate();
   const { visions, goals, pillarsMap, loading } = useAppData();
+  const [focusModalOpen, setFocusModalOpen] = useState(false);
 
   // Build focused visions with related goals (capped)
   const focusedVisions = useMemo(() => {
@@ -69,10 +71,10 @@ const Dashboard = () => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/visions")}
+          onClick={() => setFocusModalOpen(true)}
           className="text-muted-foreground hover:text-foreground"
         >
-          Change focus
+          Set your focus
         </Button>
       </div>
 
@@ -84,7 +86,7 @@ const Dashboard = () => {
             <p className="text-muted-foreground mb-4">No focused visions yet</p>
             <Button 
               variant="outline" 
-              onClick={() => navigate("/visions")}
+              onClick={() => setFocusModalOpen(true)}
             >
               Set your focus
             </Button>
@@ -95,7 +97,7 @@ const Dashboard = () => {
           {focusedVisions.map((vision) => (
             <Card key={vision.id} className="border-muted">
               <CardContent className="p-5">
-                {/* Vision Header */}
+                {/* Vision Header - No indentation */}
                 <div 
                   className="cursor-pointer mb-4"
                   onClick={() => navigate(`/vision/${vision.id}`)}
@@ -108,7 +110,7 @@ const Dashboard = () => {
                   </h2>
                 </div>
 
-                {/* 3-Year Direction (optional, max 1) */}
+                {/* 3-Year Direction - No indentation (aligned with vision) */}
                 {vision.threeYear.length > 0 && (
                   <div className="mb-4">
                     <span className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -120,9 +122,9 @@ const Dashboard = () => {
                   </div>
                 )}
 
-                {/* 1-Year Goals (max 2) */}
+                {/* 1-Year Goals - Single-level indent (~10px) */}
                 {vision.oneYear.length > 0 && (
-                  <div className="mb-4">
+                  <div className="mb-4 pl-2.5">
                     <span className="text-xs text-muted-foreground uppercase tracking-wide">
                       1-Year Goals
                     </span>
@@ -145,15 +147,19 @@ const Dashboard = () => {
                   </div>
                 )}
 
-                {/* 90-Day Commitments (primary emphasis, max 3) */}
+                {/* 90-Day Commitments - Two-level indent (~20px), primary emphasis, clickable */}
                 {vision.ninetyDay.length > 0 && (
-                  <div className="mb-4">
+                  <div className="mb-4 pl-5">
                     <span className="text-xs text-foreground font-medium uppercase tracking-wide">
                       90-Day Commitments
                     </span>
                     <ul className="mt-2 space-y-2">
                       {vision.ninetyDay.map(goal => (
-                        <li key={goal.id} className="flex items-center justify-between">
+                        <li 
+                          key={goal.id} 
+                          className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-md p-1.5 -ml-1.5 transition-colors"
+                          onClick={() => navigate(`/goal/${goal.id}`)}
+                        >
                           <span className="text-sm font-medium text-foreground">
                             {goal.title}
                           </span>
@@ -208,6 +214,9 @@ const Dashboard = () => {
           )}
         </div>
       )}
+
+      {/* Focus Modal */}
+      <FocusModal open={focusModalOpen} onOpenChange={setFocusModalOpen} />
     </div>
   );
 };
