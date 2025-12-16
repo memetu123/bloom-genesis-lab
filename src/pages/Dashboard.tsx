@@ -13,7 +13,7 @@ import { FocusModal } from "@/components/FocusModal";
  */
 
 const MAX_FOCUSED_VISIONS = 3;
-const MAX_THREE_YEAR_PER_VISION = 1;
+const MAX_THREE_YEAR_PER_VISION = 2;
 const MAX_ONE_YEAR_PER_VISION = 2;
 const MAX_NINETY_DAY_PER_VISION = 3;
 
@@ -43,8 +43,10 @@ const Dashboard = () => {
         threeYear: threeYearGoals.slice(0, MAX_THREE_YEAR_PER_VISION),
         oneYear: oneYearGoals.slice(0, MAX_ONE_YEAR_PER_VISION),
         ninetyDay: ninetyDayGoals.slice(0, MAX_NINETY_DAY_PER_VISION),
+        hasMoreThreeYear: threeYearGoals.length > MAX_THREE_YEAR_PER_VISION,
         hasMoreOneYear: oneYearGoals.length > MAX_ONE_YEAR_PER_VISION,
         hasMoreNinetyDay: ninetyDayGoals.length > MAX_NINETY_DAY_PER_VISION,
+        extraThreeYearCount: threeYearGoals.length - MAX_THREE_YEAR_PER_VISION,
       };
     });
   }, [visions, goals, pillarsMap]);
@@ -97,28 +99,47 @@ const Dashboard = () => {
           {focusedVisions.map((vision) => (
             <Card key={vision.id} className="border-muted">
               <CardContent className="p-5">
-                {/* Vision Header - No indentation */}
+                {/* Vision Header - No indentation, label top-right */}
                 <div 
                   className="cursor-pointer mb-4"
                   onClick={() => navigate(`/vision/${vision.id}`)}
                 >
-                  <span className="text-xs text-primary font-medium uppercase tracking-wide">
-                    {vision.pillar_name}
-                  </span>
-                  <h2 className="text-lg font-semibold text-foreground mt-0.5">
-                    {vision.title}
-                  </h2>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      {vision.title}
+                    </h2>
+                    {vision.pillar_name && (
+                      <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        {vision.pillar_name}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* 3-Year Direction - No indentation (aligned with vision) */}
+                {/* 3-Year Direction - No indentation, stacked muted lines, no bullets */}
                 {vision.threeYear.length > 0 && (
                   <div className="mb-4">
                     <span className="text-xs text-muted-foreground uppercase tracking-wide">
                       3-Year Direction
                     </span>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {vision.threeYear[0].title}
-                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      {vision.threeYear.map(goal => (
+                        <p key={goal.id} className="text-sm text-muted-foreground">
+                          {goal.title}
+                        </p>
+                      ))}
+                      {vision.hasMoreThreeYear && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/goals?vision=${vision.id}&type=three_year`);
+                          }}
+                          className="text-xs text-muted-foreground/70 hover:text-muted-foreground mt-0.5"
+                        >
+                          +{vision.extraThreeYearCount} more long-term direction{vision.extraThreeYearCount !== 1 ? 's' : ''}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
