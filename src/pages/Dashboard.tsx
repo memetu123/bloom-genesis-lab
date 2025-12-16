@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
+import { Star, ChevronRight, ChevronDown, MoreHorizontal } from "lucide-react";
 import { useAppData, Vision as GlobalVision } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FocusModal } from "@/components/FocusModal";
+import AddIconButton from "@/components/AddIconButton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -166,15 +167,10 @@ const Dashboard = () => {
           >
             Set your focus
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
+          <AddIconButton
             onClick={() => setAddDialogOpen(true)}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            title="Add vision"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+            tooltip="Add vision"
+          />
         </div>
       </div>
 
