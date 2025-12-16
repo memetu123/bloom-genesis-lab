@@ -207,8 +207,8 @@ const Dashboard = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in">
-      {/* ========== THIS WEEK - Primary Section ========== */}
-      <Card className="mb-6 border-primary/30 shadow-soft">
+      {/* ========== THIS WEEK - Contextual Overview ========== */}
+      <Card className="mb-6 border-muted">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -224,7 +224,7 @@ const Dashboard = () => {
             <>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-muted-foreground">
-                  {weeklySummary.completed_commitments} of {weeklySummary.total_commitments} habits complete
+                  {weeklySummary.completed_commitments} of {weeklySummary.total_commitments} habits completed
                 </span>
                 <span className="text-lg font-semibold text-primary">{weeklyProgress}%</span>
               </div>
@@ -235,7 +235,7 @@ const Dashboard = () => {
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                {weeklySummary.completed_reps} of {weeklySummary.total_reps} total reps completed
+                {weeklySummary.completed_reps} of {weeklySummary.total_reps} reps completed
               </p>
             </>
           ) : (
@@ -252,10 +252,10 @@ const Dashboard = () => {
         
         {nextTask ? (
           <Card 
-            className="cursor-pointer hover:border-primary/40 transition-calm border-l-4 border-l-primary"
+            className="cursor-pointer hover:border-primary/50 transition-calm border-l-4 border-l-primary shadow-sm hover:shadow-md"
             onClick={() => navigate("/daily")}
           >
-            <CardContent className="p-4">
+            <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-foreground truncate">
@@ -329,7 +329,7 @@ const Dashboard = () => {
             {focusedVisions.map((vision) => (
               <Card 
                 key={vision.id} 
-                className="cursor-pointer hover:border-primary/40 transition-calm"
+                className="cursor-pointer hover:bg-muted/30 transition-calm border-muted"
                 onClick={() => navigate(`/vision/${vision.id}`)}
               >
                 <CardContent className="p-4">
