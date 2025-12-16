@@ -355,7 +355,7 @@ const Dashboard = () => {
                       <p className="text-sm text-muted-foreground mt-0.5">
                         {vision.focused_goals_count > 0 
                           ? `${vision.focused_goals_count} goal${vision.focused_goals_count !== 1 ? 's' : ''} in focus`
-                          : 'No goals in focus'}
+                          : 'Add a goal when it feels right'}
                       </p>
                     </div>
                     <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-2" />
