@@ -274,9 +274,38 @@ const Weekly = () => {
     );
   }
 
+  // Shared dropdown content for plan selection
+  const PlanDropdownContent = () => (
+    <DropdownMenuContent align="end" className="w-64 bg-popover border border-border shadow-md">
+      <DropdownMenuItem 
+        onClick={clearPlanContext}
+        className="cursor-pointer flex items-center gap-2"
+      >
+        <Check className={`h-3 w-3 ${!activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+        <span>All tasks</span>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      {goalOptions.map((plan) => (
+        <DropdownMenuItem 
+          key={plan.id}
+          onClick={() => setSearchParams({ plan: plan.id })}
+          className="cursor-pointer flex items-start gap-2"
+        >
+          <Check className={`h-3 w-3 mt-0.5 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+          <div className="flex flex-col min-w-0">
+            <span className="truncate">{plan.title}</span>
+            {plan.visionLabel && (
+              <span className="text-xs text-muted-foreground truncate">{plan.visionLabel}</span>
+            )}
+          </div>
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuContent>
+  );
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      {/* 90-Day Plan Context Header */}
+      {/* 90-Day Plan Context Header - Active Plan */}
       {activePlan && (
         <div className="mb-4 flex items-center justify-between py-2 px-3 bg-muted/30 border border-border rounded-lg">
           <div className="flex items-center gap-2 min-w-0">
@@ -299,31 +328,7 @@ const Weekly = () => {
                   <ChevronDown className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 bg-popover border border-border shadow-md">
-                <DropdownMenuItem 
-                  onClick={clearPlanContext}
-                  className="cursor-pointer flex items-center gap-2"
-                >
-                  <Check className={`h-3 w-3 ${!activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-                  <span>All tasks</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {goalOptions.map((plan) => (
-                  <DropdownMenuItem 
-                    key={plan.id}
-                    onClick={() => setSearchParams({ plan: plan.id })}
-                    className="cursor-pointer flex items-start gap-2"
-                  >
-                    <Check className={`h-3 w-3 mt-0.5 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-                    <div className="flex flex-col min-w-0">
-                      <span className="truncate">{plan.title}</span>
-                      {plan.visionLabel && (
-                        <span className="text-xs text-muted-foreground truncate">{plan.visionLabel}</span>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
+              <PlanDropdownContent />
             </DropdownMenu>
             <button
               onClick={clearPlanContext}
@@ -333,6 +338,27 @@ const Weekly = () => {
               Clear plan
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 90-Day Plan Context Header - No Plan Selected */}
+      {!activePlan && goalOptions.length > 0 && (
+        <div className="mb-4 flex items-center justify-between py-2 px-3 border border-border/50 rounded-lg">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs text-muted-foreground/70 uppercase tracking-wide shrink-0">90-Day Plan</span>
+            <span className="text-sm text-muted-foreground">No plan selected</span>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button 
+                className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              >
+                Choose a plan
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <PlanDropdownContent />
+          </DropdownMenu>
         </div>
       )}
 
