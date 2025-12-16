@@ -400,7 +400,9 @@ const Goals = () => {
                         {/* Goal content */}
                         <div 
                           className="flex-1 cursor-pointer min-w-0"
-                          onClick={() => navigate(`/goal/${goal.id}`)}
+                          onClick={() => goal.goal_type === "ninety_day" 
+                            ? navigate(`/weekly?plan=${goal.id}`) 
+                            : navigate(`/goal/${goal.id}`)}
                         >
                           <div className="flex items-center gap-2 flex-wrap">
                             {goal.status !== "active" && (

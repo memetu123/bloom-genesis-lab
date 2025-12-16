@@ -22,6 +22,8 @@ export interface DayTask {
   instanceNumber?: number;
   totalInstances?: number;
   isDetached?: boolean;
+  /** Goal ID linked to this task (via weekly_commitment) */
+  goalId: string | null;
 }
 
 export interface CommitmentData {
@@ -289,6 +291,7 @@ export function useWeeklyData(
               taskType: "recurring",
               instanceNumber: inst,
               totalInstances: instanceCount,
+              goalId: commitment.goal_id,
             });
           }
         }
@@ -297,6 +300,10 @@ export function useWeeklyData(
         const dateTasks = independentByDate.get(dateKey) || [];
         for (const task of dateTasks) {
           const taskInstance = taskInstanceMap.get(task.id);
+          // Look up goal_id from the associated weekly_commitment
+          const linkedCommitment = task.commitment_id 
+            ? enrichedCommitments.find(c => c.id === task.commitment_id) 
+            : null;
           tasksMap[dateKey].push({
             id: task.id,
             commitmentId: task.is_detached ? task.commitment_id : null,
@@ -306,6 +313,7 @@ export function useWeeklyData(
             timeEnd: task.time_end,
             taskType: "independent",
             isDetached: task.is_detached ?? false,
+            goalId: linkedCommitment?.goal_id || null,
           });
         }
       }
