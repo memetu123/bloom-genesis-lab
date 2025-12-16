@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
+import { useAppData, Goal, Vision } from "@/hooks/useAppData";
 import type { RecurrenceType, DayOfWeek } from "@/types/scheduling";
 
 /**
@@ -38,6 +37,8 @@ interface TaskCreateModalProps {
   goals?: { id: string; title: string }[];
   onSuccess: () => void;
   weekStart?: Date;
+  /** Optional: filter goals to a specific vision context */
+  contextVisionId?: string;
 }
 
 const DAYS_OF_WEEK: { value: DayOfWeek; label: string }[] = [
@@ -54,11 +55,14 @@ const TaskCreateModal = ({
   open,
   onOpenChange,
   defaultDate = new Date(),
-  goals = [],
+  goals: legacyGoals = [],
   onSuccess,
   weekStart,
+  contextVisionId,
 }: TaskCreateModalProps) => {
   const { createRecurringTask, createIndependentTask } = useTaskScheduling();
+  const { goals: allGoals, visions, visionsMap } = useAppData();
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("none");
@@ -71,6 +75,38 @@ const TaskCreateModal = ({
     format(defaultDate, "yyyy-MM-dd")
   );
   const [saving, setSaving] = useState(false);
+  const [relatedExpanded, setRelatedExpanded] = useState(false);
+
+  // Get filtered and sorted goals for "Related to" section
+  const relatedGoals = (() => {
+    // Filter to active 90-day and 1-year goals only
+    let filtered = allGoals.filter(
+      (g) =>
+        !g.is_deleted &&
+        g.status !== "archived" &&
+        g.status !== "completed" &&
+        (g.goal_type === "ninety_day" || g.goal_type === "one_year")
+    );
+
+    // If we have a vision context, filter to that vision's goals
+    if (contextVisionId) {
+      filtered = filtered.filter((g) => g.life_vision_id === contextVisionId);
+    }
+
+    // Sort: 90-day first, then 1-year
+    return filtered.sort((a, b) => {
+      if (a.goal_type === "ninety_day" && b.goal_type !== "ninety_day") return -1;
+      if (a.goal_type !== "ninety_day" && b.goal_type === "ninety_day") return 1;
+      return a.title.localeCompare(b.title);
+    });
+  })();
+
+  // Get vision name for a goal
+  const getVisionContext = (goal: Goal): string | null => {
+    if (!goal.life_vision_id) return null;
+    const vision = visionsMap.get(goal.life_vision_id);
+    return vision?.title || null;
+  };
 
   // Reset form when modal opens or defaultDate changes
   useEffect(() => {
@@ -84,6 +120,12 @@ const TaskCreateModal = ({
       setGoalId("");
       setTimeStart("");
       setTimeEnd("");
+      setRelatedExpanded(false);
+      
+      // Auto-focus the title input
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 50);
     }
   }, [open, defaultDate]);
 
@@ -102,6 +144,7 @@ const TaskCreateModal = ({
     setTimeStart("");
     setTimeEnd("");
     setScheduledDate(format(defaultDate, "yyyy-MM-dd"));
+    setRelatedExpanded(false);
   };
 
   const handleSubmit = async () => {
@@ -121,6 +164,7 @@ const TaskCreateModal = ({
     try {
       if (recurrenceType === "none") {
         // Create independent (one-time) task
+        // Note: Independent tasks don't support goal linking (schema limitation)
         await createIndependentTask({
           title: title.trim(),
           scheduledDate,
@@ -129,7 +173,7 @@ const TaskCreateModal = ({
         });
         toast.success("Task created");
       } else {
-        // Create recurring task
+        // Create recurring task - supports goal linking
         await createRecurringTask({
           title: title.trim(),
           goalId: goalId || null,
@@ -156,32 +200,34 @@ const TaskCreateModal = ({
     }
   };
 
+  const selectedGoal = goalId ? relatedGoals.find((g) => g.id === goalId) : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-base font-medium">
-            <Plus className="h-4 w-4 inline mr-2" />
-            Add Task
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-5 mt-2">
-          {/* Title */}
+        <div className="space-y-5">
+          {/* Title - Entry point, no header above */}
           <div>
-            <Label htmlFor="task-title">Task Title</Label>
+            <Label htmlFor="task-title" className="sr-only">Task Title</Label>
             <Input
+              ref={titleInputRef}
               id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Meditate, Study Spanish"
-              className="mt-1"
+              placeholder="Task title"
+              className="text-base"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && title.trim()) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
             />
           </div>
 
            {/* Recurrence Type */}
           <div>
-            <Label className="mb-2 block">Task Type</Label>
+            <Label className="mb-2 block text-sm text-muted-foreground">Task Type</Label>
             <RadioGroup
               value={recurrenceType}
               onValueChange={(val) => setRecurrenceType(val as RecurrenceType)}
@@ -268,7 +314,7 @@ const TaskCreateModal = ({
           {/* Date for one-time tasks */}
           {recurrenceType === "none" && (
             <div>
-              <Label htmlFor="scheduled-date">Date</Label>
+              <Label htmlFor="scheduled-date" className="text-sm text-muted-foreground">Date</Label>
               <Input
                 id="scheduled-date"
                 type="date"
@@ -279,32 +325,9 @@ const TaskCreateModal = ({
             </div>
           )}
 
-          {/* Link to goal (only for recurring tasks) */}
-          {recurrenceType !== "none" && goals.length > 0 && (
-            <div>
-              <Label>Link to goal (optional)</Label>
-              <Select
-                value={goalId || "none"}
-                onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="No goal linked" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No goal linked</SelectItem>
-                  {goals.map((goal) => (
-                    <SelectItem key={goal.id} value={goal.id}>
-                      {goal.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           {/* Time slot (optional) */}
           <div>
-            <Label className="mb-2 block">Time slot (optional)</Label>
+            <Label className="mb-2 block text-sm text-muted-foreground">Time slot (optional)</Label>
             <div className="flex gap-2 items-center">
               <div className="flex-1">
                 <Label htmlFor="time-start" className="text-xs text-muted-foreground">
@@ -332,6 +355,62 @@ const TaskCreateModal = ({
               </div>
             </div>
           </div>
+
+          {/* Related to (optional) - Collapsible */}
+          {relatedGoals.length > 0 && recurrenceType !== "none" && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setRelatedExpanded(!relatedExpanded)}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {relatedExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                <span>Related to (optional)</span>
+                {selectedGoal && (
+                  <span className="ml-1 text-foreground">
+                    — {selectedGoal.title}
+                  </span>
+                )}
+              </button>
+
+              {relatedExpanded && (
+                <div className="mt-2">
+                  <Select
+                    value={goalId || "none"}
+                    onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a plan or goal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        <span className="text-muted-foreground">None</span>
+                      </SelectItem>
+                      {relatedGoals.map((goal) => {
+                        const visionName = getVisionContext(goal);
+                        const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
+                        return (
+                          <SelectItem key={goal.id} value={goal.id}>
+                            <div className="flex flex-col">
+                              <span>{goal.title}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {typeLabel}
+                                {visionName && ` · ${visionName}`}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Submit */}
           <Button
