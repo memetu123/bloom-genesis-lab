@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Star, X, Plus, Pencil, Archive } from "lucide-react";
+import { Star, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -13,6 +14,7 @@ interface FocusModalProps {
 }
 
 export const FocusModal = ({ open, onOpenChange }: FocusModalProps) => {
+  const navigate = useNavigate();
   const { visions, pillarsMap, refetchVisions } = useAppData();
   const [updating, setUpdating] = useState<string | null>(null);
 
@@ -49,9 +51,22 @@ export const FocusModal = ({ open, onOpenChange }: FocusModalProps) => {
 
         <div className="py-4">
           {activeVisions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No visions yet. Create one to get started.
-            </p>
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground mb-4">
+                No visions yet. Create one to get started.
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  onOpenChange(false);
+                  // The Dashboard will handle vision creation
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add a vision
+              </Button>
+            </div>
           ) : (
             <div className="space-y-3">
               {activeVisions.map((vision) => (
