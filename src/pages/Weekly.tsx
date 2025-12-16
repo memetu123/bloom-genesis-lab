@@ -1,11 +1,18 @@
 import { useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronRight, ChevronLeft, X, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronLeft, X, ChevronDown, Eye, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useWeeklyData, DayTask, CommitmentData } from "@/hooks/useWeeklyData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "date-fns";
 import { formatWeekRange } from "@/lib/formatPreferences";
@@ -278,13 +285,54 @@ const Weekly = () => {
               </span>
             )}
           </div>
-          <button
-            onClick={clearPlanContext}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            title="Clear plan context"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => navigate(`/goals?focusId=${activePlanId}`)}
+              className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              title="View plan details"
+            >
+              <Eye className="h-3 w-3" />
+              View plan
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  title="Change plan"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Change plan
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-popover border border-border shadow-md">
+                {goalOptions.filter(g => g.id !== activePlanId).map((plan) => (
+                  <DropdownMenuItem 
+                    key={plan.id}
+                    onClick={() => setSearchParams({ plan: plan.id })}
+                    className="cursor-pointer"
+                  >
+                    {plan.title}
+                  </DropdownMenuItem>
+                ))}
+                {goalOptions.filter(g => g.id !== activePlanId).length > 0 && (
+                  <DropdownMenuSeparator />
+                )}
+                <DropdownMenuItem 
+                  onClick={clearPlanContext}
+                  className="cursor-pointer text-muted-foreground"
+                >
+                  Show all tasks
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button
+              onClick={clearPlanContext}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              title="Clear plan context"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
