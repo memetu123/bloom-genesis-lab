@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight } from "lucide-react";
+import { Star, ChevronRight, ChevronDown } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FocusModal } from "@/components/FocusModal";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 /**
  * Dashboard Page - North Star Orientation
@@ -12,24 +14,21 @@ import { FocusModal } from "@/components/FocusModal";
  * Read-first, navigate-second. No planning, no execution.
  */
 
-const MAX_FOCUSED_VISIONS = 3;
 const MAX_THREE_YEAR_PER_VISION = 2;
 const MAX_ONE_YEAR_PER_VISION = 2;
 const MAX_NINETY_DAY_PER_VISION = 3;
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { visions, goals, pillarsMap, loading } = useAppData();
+  const { visions, goals, pillarsMap, loading, refetchVisions } = useAppData();
   const [focusModalOpen, setFocusModalOpen] = useState(false);
+  const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
 
-  // Build focused visions with related goals (capped)
+  // Build focused visions with related goals (no cap)
   const focusedVisions = useMemo(() => {
-    const focused = visions
-      .filter(v => v.is_focus && v.status === "active")
-      .slice(0, MAX_FOCUSED_VISIONS);
+    const focused = visions.filter(v => v.is_focus && v.status === "active");
 
     return focused.map(vision => {
-      // Get goals for this vision
       const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived");
 
       const threeYearGoals = visionGoals.filter(g => g.goal_type === "three_year");
@@ -51,8 +50,30 @@ const Dashboard = () => {
     });
   }, [visions, goals, pillarsMap]);
 
-  const totalFocusedVisions = visions.filter(v => v.is_focus && v.status === "active").length;
-  const extraVisionCount = totalFocusedVisions - MAX_FOCUSED_VISIONS;
+  // Non-focused active visions
+  const nonFocusedVisions = useMemo(() => {
+    return visions
+      .filter(v => !v.is_focus && v.status === "active")
+      .map(vision => ({
+        id: vision.id,
+        title: vision.title,
+        pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
+      }));
+  }, [visions, pillarsMap]);
+
+  const handleToggleFocus = async (visionId: string, currentFocus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ is_focus: !currentFocus })
+        .eq("id", visionId);
+
+      if (error) throw error;
+      refetchVisions();
+    } catch (err) {
+      toast.error("Failed to update focus");
+    }
+  };
 
   if (loading) {
     return (
@@ -230,12 +251,58 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
 
-          {/* Extra visions indicator */}
-          {extraVisionCount > 0 && (
-            <p className="text-center text-sm text-muted-foreground">
-              +{extraVisionCount} more focused vision{extraVisionCount !== 1 ? 's' : ''}
-            </p>
+      {/* ========== NON-FOCUSED VISIONS (Collapsible) ========== */}
+      {nonFocusedVisions.length > 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setOtherVisionsExpanded(!otherVisionsExpanded)}
+            className="w-full text-center text-sm text-muted-foreground hover:text-foreground py-3 flex items-center justify-center gap-1 transition-colors"
+          >
+            <ChevronDown 
+              className={`h-4 w-4 transition-transform ${otherVisionsExpanded ? 'rotate-180' : ''}`} 
+            />
+            +{nonFocusedVisions.length} more vision{nonFocusedVisions.length !== 1 ? 's' : ''}
+          </button>
+
+          {otherVisionsExpanded && (
+            <div className="mt-4 space-y-3">
+              <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-3">
+                Other visions
+              </h3>
+              {nonFocusedVisions.map((vision) => (
+                <Card 
+                  key={vision.id} 
+                  className="border-muted/50 bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/vision/${vision.id}`)}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="text-sm text-muted-foreground truncate">
+                        {vision.title}
+                      </span>
+                      {vision.pillar_name && (
+                        <span className="text-xs text-muted-foreground/70 bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                          {vision.pillar_name}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFocus(vision.id, false);
+                      }}
+                      className="ml-3 p-1 text-muted-foreground/50 hover:text-primary transition-colors shrink-0"
+                      title="Add to focus"
+                    >
+                      <Star className="h-4 w-4" />
+                    </button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </div>
       )}
