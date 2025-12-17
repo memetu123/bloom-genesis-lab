@@ -306,6 +306,18 @@ const Weekly = () => {
     return planCommitmentIds?.has(task.commitmentId || "") || false;
   }, [activePlanId, planCommitmentIds]);
 
+  // Helper to select a plan (works for both mobile sheet and desktop dropdown)
+  // MUST be defined before early return to maintain hooks order
+  const selectPlan = useCallback((planId: string | null) => {
+    if (planId) {
+      setSearchParams({ plan: planId });
+    } else {
+      setSearchParams({});
+    }
+    setMobilePlanSheetOpen(false);
+    setOtherTasksExpanded(false);
+  }, [setSearchParams]);
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -367,16 +379,6 @@ const Weekly = () => {
     </DropdownMenuContent>
   );
 
-  // Helper to select a plan (works for both mobile sheet and desktop dropdown)
-  const selectPlan = useCallback((planId: string | null) => {
-    if (planId) {
-      setSearchParams({ plan: planId });
-    } else {
-      setSearchParams({});
-    }
-    setMobilePlanSheetOpen(false);
-    setOtherTasksExpanded(false);
-  }, [setSearchParams]);
 
   return (
     <div className="container mx-auto px-4 py-6 md:py-8 max-w-4xl overflow-x-hidden">
