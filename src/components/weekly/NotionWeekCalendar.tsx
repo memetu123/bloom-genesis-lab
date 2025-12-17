@@ -21,6 +21,7 @@ interface DayTask {
   instanceNumber?: number;
   totalInstances?: number;
   isDetached?: boolean;
+  goalId?: string | null;
 }
 
 interface WeekDay {
@@ -38,6 +39,7 @@ interface NotionWeekCalendarProps {
   weekStartsOn: 0 | 1;
   timeFormat: UserPreferences["timeFormat"];
   dateFormat: UserPreferences["dateFormat"];
+  activePlanId?: string | null;
 }
 
 const NotionWeekCalendar = ({
@@ -50,6 +52,7 @@ const NotionWeekCalendar = ({
   weekStartsOn,
   timeFormat,
   dateFormat,
+  activePlanId,
 }: NotionWeekCalendarProps) => {
   const navigate = useNavigate();
 
@@ -156,15 +159,22 @@ const NotionWeekCalendar = ({
                     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
                     : "";
                   
-                  return (
-                    <div
-                      key={task.id}
-                      className={`
-                        w-full text-left text-xs py-0.5 px-1 
-                        hover:bg-muted transition-calm
-                        ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                      `}
-                    >
+                    // Subtle left border indicator for tasks belonging to active plan
+                    const isPlanTask = activePlanId && (
+                      task.goalId === activePlanId || 
+                      (task.taskType !== 'independent' && task.commitmentId)
+                    );
+                    
+                    return (
+                      <div
+                        key={task.id}
+                        className={`
+                          w-full text-left text-xs py-0.5 px-1 
+                          hover:bg-muted transition-calm
+                          ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
+                          ${isPlanTask ? "border-l-2 border-l-primary/40 pl-2" : ""}
+                        `}
+                      >
                       <div className="flex items-start gap-1">
                         <button
                           onClick={(e) => handleToggleComplete(e, task, date)}
