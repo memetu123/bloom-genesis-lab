@@ -257,14 +257,42 @@ const Weekly = () => {
     [filteredCommitments]
   );
 
-  // Goals for dropdown - memoized with vision labels
+  // Goals for dropdown - memoized with vision labels, grouped by vision
   const goalOptions = useMemo(() => 
     goals.filter(g => g.goal_type === "ninety_day").map(g => {
       const vision = g.life_vision_id ? visionsMap.get(g.life_vision_id) : null;
-      return { id: g.id, title: g.title, visionLabel: vision?.title || null };
+      return { id: g.id, title: g.title, visionId: g.life_vision_id, visionLabel: vision?.title || null };
     }),
     [goals, visionsMap]
   );
+
+  // Group plans by vision for dropdown
+  const groupedPlanOptions = useMemo(() => {
+    const groups: Record<string, { visionLabel: string; plans: typeof goalOptions }> = {};
+    const noVisionPlans: typeof goalOptions = [];
+    
+    goalOptions.forEach(plan => {
+      if (plan.visionId && plan.visionLabel) {
+        if (!groups[plan.visionId]) {
+          groups[plan.visionId] = { visionLabel: plan.visionLabel, plans: [] };
+        }
+        groups[plan.visionId].plans.push(plan);
+      } else {
+        noVisionPlans.push(plan);
+      }
+    });
+    
+    return { groups, noVisionPlans };
+  }, [goalOptions]);
+
+  // Get plan commitment IDs for visual indicators
+  const getPlanIndicator = useCallback((task: DayTask) => {
+    if (!activePlanId) return false;
+    if (task.taskType === "independent") {
+      return task.goalId === activePlanId;
+    }
+    return planCommitmentIds?.has(task.commitmentId || "") || false;
+  }, [activePlanId, planCommitmentIds]);
 
   if (loading) {
     return (
@@ -274,32 +302,56 @@ const Weekly = () => {
     );
   }
 
-  // Shared dropdown content for plan selection
+  // Shared dropdown content for plan selection - grouped by vision
   const PlanDropdownContent = () => (
-    <DropdownMenuContent align="end" className="w-64 bg-popover border border-border shadow-md">
+    <DropdownMenuContent align="end" className="w-72 bg-popover border border-border shadow-md max-h-80 overflow-y-auto">
       <DropdownMenuItem 
         onClick={clearPlanContext}
         className="cursor-pointer flex items-center gap-2"
       >
         <Check className={`h-3 w-3 ${!activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-        <span>All tasks</span>
+        <span>No plan (All tasks)</span>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      {goalOptions.map((plan) => (
-        <DropdownMenuItem 
-          key={plan.id}
-          onClick={() => setSearchParams({ plan: plan.id })}
-          className="cursor-pointer flex items-start gap-2"
-        >
-          <Check className={`h-3 w-3 mt-0.5 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-          <div className="flex flex-col min-w-0">
-            <span className="truncate">{plan.title}</span>
-            {plan.visionLabel && (
-              <span className="text-xs text-muted-foreground truncate">{plan.visionLabel}</span>
-            )}
+      
+      {/* Plans grouped by vision */}
+      {Object.entries(groupedPlanOptions.groups).map(([visionId, group]) => (
+        <div key={visionId}>
+          <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+            {group.visionLabel}
           </div>
-        </DropdownMenuItem>
+          {group.plans.map((plan) => (
+            <DropdownMenuItem 
+              key={plan.id}
+              onClick={() => setSearchParams({ plan: plan.id })}
+              className="cursor-pointer flex items-center gap-2 pl-4"
+            >
+              <Check className={`h-3 w-3 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+              <span className="truncate">{plan.title}</span>
+            </DropdownMenuItem>
+          ))}
+        </div>
       ))}
+      
+      {/* Plans without a vision */}
+      {groupedPlanOptions.noVisionPlans.length > 0 && (
+        <>
+          {Object.keys(groupedPlanOptions.groups).length > 0 && <DropdownMenuSeparator />}
+          <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+            Other Plans
+          </div>
+          {groupedPlanOptions.noVisionPlans.map((plan) => (
+            <DropdownMenuItem 
+              key={plan.id}
+              onClick={() => setSearchParams({ plan: plan.id })}
+              className="cursor-pointer flex items-center gap-2 pl-4"
+            >
+              <Check className={`h-3 w-3 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+              <span className="truncate">{plan.title}</span>
+            </DropdownMenuItem>
+          ))}
+        </>
+      )}
     </DropdownMenuContent>
   );
 
@@ -332,10 +384,10 @@ const Weekly = () => {
             </DropdownMenu>
             <button
               onClick={clearPlanContext}
-              className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="px-2 py-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
               title="Show all tasks"
             >
-              Clear plan
+              Clear
             </button>
           </div>
         </div>
@@ -417,6 +469,16 @@ const Weekly = () => {
         </button>
       </div>
 
+      {/* Weekly Summary - Above calendar when plan is active */}
+      {activePlan && commitmentTotals.length > 0 && (
+        <div className="mb-6">
+          <div className="text-xs text-muted-foreground mb-2">
+            Weekly Summary · {activePlan.title}
+          </div>
+          <MemoizedWeeklyTotals commitments={commitmentTotals} />
+        </div>
+      )}
+
       {/* Calendar grid */}
       <MemoizedCalendar
         weekStart={currentWeekStart}
@@ -428,14 +490,15 @@ const Weekly = () => {
         weekStartsOn={weekStartsOn}
         timeFormat={preferences.timeFormat}
         dateFormat={preferences.dateFormat}
+        activePlanId={activePlanId}
       />
 
-      {/* Other tasks section (when plan is active) */}
+      {/* Other tasks section (when plan is active) - simplified list */}
       {activePlanId && otherTasksCount > 0 && (
-        <div className="mt-6">
+        <div className="mt-6 border-t border-border/50 pt-4">
           <button
             onClick={() => setOtherTasksExpanded(!otherTasksExpanded)}
-            className="w-full text-center text-sm text-muted-foreground hover:text-foreground py-2 flex items-center justify-center gap-1 transition-colors"
+            className="w-full text-left text-sm text-muted-foreground hover:text-foreground py-2 flex items-center gap-1 transition-colors"
           >
             <ChevronDown 
               className={`h-4 w-4 transition-transform ${otherTasksExpanded ? 'rotate-180' : ''}`} 
@@ -444,25 +507,39 @@ const Weekly = () => {
           </button>
           
           {otherTasksExpanded && (
-            <div className="mt-4 opacity-60">
-              <MemoizedCalendar
-                weekStart={currentWeekStart}
-                tasksByDate={otherTasksByDate}
-                selectedDate={selectedDate}
-                onDateSelect={setSelectedDate}
-                onTaskClick={handleTaskClick}
-                onToggleComplete={handleToggleComplete}
-                weekStartsOn={weekStartsOn}
-                timeFormat={preferences.timeFormat}
-                dateFormat={preferences.dateFormat}
-              />
+            <div className="mt-2 space-y-1 pl-5">
+              {Object.entries(otherTasksByDate).map(([dateKey, tasks]) => 
+                tasks.map(task => (
+                  <div 
+                    key={task.id}
+                    className="flex items-center justify-between text-sm py-1 cursor-pointer hover:bg-muted/30 rounded px-2 -mx-2"
+                    onClick={() => handleTaskClick(task, new Date(dateKey))}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span 
+                        className={`w-3 h-3 rounded-full border shrink-0 ${task.isCompleted ? 'bg-primary border-primary' : 'border-border'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleComplete(task, new Date(dateKey));
+                        }}
+                      />
+                      <span className={`truncate ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+                        {task.title}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                      {format(new Date(dateKey), "EEE")}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Weekly totals */}
-      {commitmentTotals.length > 0 && (
+      {/* Weekly totals - Below calendar when no plan is active */}
+      {!activePlan && commitmentTotals.length > 0 && (
         <MemoizedWeeklyTotals commitments={commitmentTotals} />
       )}
 
