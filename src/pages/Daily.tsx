@@ -20,7 +20,7 @@ import TaskCreateModal from "@/components/TaskCreateModal";
  * OPTIMIZED: Uses useDailyData hook for single-batch fetching
  */
 
-// Memoized task item component
+// Memoized task item component with plan border indicator
 const TaskItem = memo(({ 
   task, 
   timeFormat, 
@@ -40,8 +40,17 @@ const TaskItem = memo(({
     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
     : "";
 
+  // Border logic (Calendar view - Interaction-based reveal):
+  // Daily view always shows borders for plan-linked tasks (no "plan selection" mode)
+  // Tasks with a plan: subtle neutral left border
+  // Tasks without a plan: no border
+  const showPlanBorder = !!task.goalId;
+
   return (
-    <div className="flex items-start gap-3 py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm">
+    <div className={`
+      flex items-start gap-3 py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
+      ${showPlanBorder ? "border-l border-l-muted-foreground/30 ml-0 pl-3" : ""}
+    `}>
       <button
         onClick={(e) => { e.stopPropagation(); onToggle(); }}
         className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}

@@ -23,6 +23,8 @@ export interface DailyTask {
   totalInstances?: number;
   goalIsFocus: boolean | null;
   isDetached?: boolean;
+  /** Goal ID linked to this task (via weekly_commitment) */
+  goalId: string | null;
   // For TaskDetailModal - avoid extra fetch
   recurrenceType?: string;
   timesPerDay?: number;
@@ -172,6 +174,7 @@ export function useDailyData(
           instanceNumber: completion?.instance_number || 1,
           totalInstances: timesPerDay,
           goalIsFocus,
+          goalId: commitment.goal_id,
           // Include for TaskDetailModal
           recurrenceType,
           timesPerDay,
@@ -186,6 +189,10 @@ export function useDailyData(
       
       for (const task of independentTasks) {
         const taskInstance = taskInstanceMap.get(task.id);
+        // For detached tasks, lookup the original commitment's goal_id
+        const originalCommitment = task.is_detached && task.commitment_id
+          ? rawCommitments.find(c => c.id === task.commitment_id)
+          : null;
         dailyTasks.push({
           id: task.id,
           commitmentId: task.is_detached ? task.commitment_id : null,
@@ -195,6 +202,7 @@ export function useDailyData(
           isCompleted: taskInstance?.is_completed ?? false,
           taskType: "independent",
           goalIsFocus: null,
+          goalId: originalCommitment?.goal_id || null,
           isDetached: task.is_detached ?? false,
         });
       }
