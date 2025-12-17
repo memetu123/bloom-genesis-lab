@@ -3,15 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Unlink } from "lucide-react";
 import { formatTime, formatDateShort } from "@/lib/formatPreferences";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getPlanBgStyle } from "@/lib/planColors";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * NotionWeekCalendar - Notion-style 7-day calendar grid
  * Shows tasks inside each day cell, respects user preferences
  * 
- * Plan tinting: When in "All tasks" mode (no activePlanId), tasks are
- * subtly tinted based on their linked 90-day plan for visual grouping
+ * Plan differentiation: When a specific plan is active, tasks from that plan
+ * show an olive left border; tasks from other plans show a muted neutral border.
+ * In "All tasks" mode, no borders are shown.
  */
 
 interface DayTask {
@@ -184,24 +184,24 @@ const NotionWeekCalendar = ({
                   const taskPlanId = getTaskPlanId(task);
                   const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
                   
-                  // Only apply tinting in "All tasks" mode (no active plan selected)
-                  const showPlanTint = !activePlanId && taskPlanId;
-                  const bgStyle = showPlanTint ? { backgroundColor: getPlanBgStyle(taskPlanId) } : {};
+                  // Border logic: Only show borders when a plan is active
+                  // - Active plan tasks: olive border
+                  // - Other plan tasks: muted neutral border
+                  // - No plan selected ("All tasks"): no borders
+                  const isActivePlanTask = activePlanId && taskPlanId === activePlanId;
+                  const isOtherPlanTask = activePlanId && taskPlanId && taskPlanId !== activePlanId;
                   
-                  // Left border indicator when a specific plan IS active
-                  const isPlanTask = activePlanId && taskPlanId === activePlanId;
-                  
-                  // Show tooltip with plan name on hover (only in "All tasks" mode)
-                  const showPlanTooltip = showPlanTint && planTitle;
+                  // Show tooltip with plan name on hover (only when plan is active and task belongs to a plan)
+                  const showPlanTooltip = activePlanId && taskPlanId && planTitle;
                     
                   const taskElement = (
                     <div
-                      style={bgStyle}
                       className={`
                         w-full text-left text-xs py-0.5 px-1 rounded-sm
-                        hover:bg-muted transition-calm
+                        hover:bg-muted/50 transition-calm
                         ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                        ${isPlanTask ? "border-l-2 border-l-primary/40 pl-2" : ""}
+                        ${isActivePlanTask ? "border-l-2 border-l-primary/30 pl-2" : ""}
+                        ${isOtherPlanTask ? "border-l border-l-muted-foreground/20 pl-2" : ""}
                       `}
                     >
                       <div className="flex items-start gap-1">

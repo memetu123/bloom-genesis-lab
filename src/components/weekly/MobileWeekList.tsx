@@ -3,15 +3,15 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Unlink, ChevronRight } from "lucide-react";
 import { formatTime } from "@/lib/formatPreferences";
-import { getPlanBgStyleMobile } from "@/lib/planColors";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * MobileWeekList - Mobile-optimized vertical list for weekly tasks
  * Displays days as collapsible sections with compact task rows
  * 
- * Plan tinting: When in "All tasks" mode (no activePlanId), tasks are
- * subtly tinted based on their linked 90-day plan (6% opacity on mobile)
+ * Plan differentiation: When a specific plan is active, tasks from that plan
+ * show an olive left border; tasks from other plans show a muted neutral border.
+ * In "All tasks" mode, no borders are shown.
  */
 
 interface DayTask {
@@ -163,15 +163,15 @@ const MobileWeekList = ({
                   const taskPlanId = getTaskPlanId(task);
                   const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
                   
-                  // Only apply tinting in "All tasks" mode (no active plan selected)
-                  const showPlanTint = !activePlanId && taskPlanId;
-                  const bgStyle = showPlanTint ? { backgroundColor: getPlanBgStyleMobile(taskPlanId) } : {};
+                  // Border logic: Only show borders when a plan is active
+                  // - Active plan tasks: olive border
+                  // - Other plan tasks: muted neutral border
+                  // - No plan selected ("All tasks"): no borders
+                  const isActivePlanTask = activePlanId && taskPlanId === activePlanId;
+                  const isOtherPlanTask = activePlanId && taskPlanId && taskPlanId !== activePlanId;
                   
-                  // Left border indicator when a specific plan IS active
-                  const isPlanTask = activePlanId && taskPlanId === activePlanId;
-                  
-                  // Show plan name on long press
-                  const showPlanLabel = longPressedTaskId === task.id && showPlanTint && planTitle;
+                  // Show plan name on long press (only when plan is active)
+                  const showPlanLabel = longPressedTaskId === task.id && activePlanId && taskPlanId && planTitle;
                   
                   return (
                     <div
@@ -179,11 +179,11 @@ const MobileWeekList = ({
                       onClick={() => onTaskClick(task, date)}
                       onTouchStart={() => handleTouchStart(task.id)}
                       onTouchEnd={handleTouchEnd}
-                      style={bgStyle}
                       className={`
                         flex items-center gap-3 px-4 py-3 min-h-[48px] relative
                         hover:bg-muted/20 active:bg-muted/30 transition-colors cursor-pointer
-                        ${isPlanTask ? "border-l-2 border-l-primary/40" : ""}
+                        ${isActivePlanTask ? "border-l-2 border-l-primary/30" : ""}
+                        ${isOtherPlanTask ? "border-l border-l-muted-foreground/20" : ""}
                       `}
                     >
                       {/* Plan label popup on long press */}
