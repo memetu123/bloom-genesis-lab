@@ -3,11 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Unlink } from "lucide-react";
 import { formatTime, formatDateShort } from "@/lib/formatPreferences";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getPlanBgStyle } from "@/lib/planColors";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * NotionWeekCalendar - Notion-style 7-day calendar grid
  * Shows tasks inside each day cell, respects user preferences
+ * 
+ * Plan tinting: When in "All tasks" mode (no activePlanId), tasks are
+ * subtly tinted based on their linked 90-day plan for visual grouping
  */
 
 interface DayTask {
@@ -40,6 +44,10 @@ interface NotionWeekCalendarProps {
   timeFormat: UserPreferences["timeFormat"];
   dateFormat: UserPreferences["dateFormat"];
   activePlanId?: string | null;
+  /** Map of plan IDs to plan titles for tooltip display */
+  planTitles?: Map<string, string>;
+  /** Map of commitment IDs to their linked goal IDs */
+  commitmentGoalMap?: Map<string, string>;
 }
 
 const NotionWeekCalendar = ({
@@ -53,8 +61,21 @@ const NotionWeekCalendar = ({
   timeFormat,
   dateFormat,
   activePlanId,
+  planTitles = new Map(),
+  commitmentGoalMap = new Map(),
 }: NotionWeekCalendarProps) => {
   const navigate = useNavigate();
+
+  /**
+   * Get the linked plan ID for a task
+   * For independent tasks: use goalId directly
+   * For recurring tasks: lookup via commitmentGoalMap
+   */
+  const getTaskPlanId = (task: DayTask): string | null => {
+    if (task.goalId) return task.goalId;
+    if (task.commitmentId) return commitmentGoalMap.get(task.commitmentId) || null;
+    return null;
+  };
 
   // Generate 7 days starting from weekStart
   const weekDays: WeekDay[] = Array.from({ length: 7 }, (_, i) => {
@@ -159,22 +180,30 @@ const NotionWeekCalendar = ({
                     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
                     : "";
                   
-                    // Subtle left border indicator for tasks belonging to active plan
-                    const isPlanTask = activePlanId && (
-                      task.goalId === activePlanId || 
-                      (task.taskType !== 'independent' && task.commitmentId)
-                    );
+                  // Get linked plan ID for this task
+                  const taskPlanId = getTaskPlanId(task);
+                  const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
+                  
+                  // Only apply tinting in "All tasks" mode (no active plan selected)
+                  const showPlanTint = !activePlanId && taskPlanId;
+                  const bgStyle = showPlanTint ? { backgroundColor: getPlanBgStyle(taskPlanId) } : {};
+                  
+                  // Left border indicator when a specific plan IS active
+                  const isPlanTask = activePlanId && taskPlanId === activePlanId;
+                  
+                  // Show tooltip with plan name on hover (only in "All tasks" mode)
+                  const showPlanTooltip = showPlanTint && planTitle;
                     
-                    return (
-                      <div
-                        key={task.id}
-                        className={`
-                          w-full text-left text-xs py-0.5 px-1 
-                          hover:bg-muted transition-calm
-                          ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                          ${isPlanTask ? "border-l-2 border-l-primary/40 pl-2" : ""}
-                        `}
-                      >
+                  const taskElement = (
+                    <div
+                      style={bgStyle}
+                      className={`
+                        w-full text-left text-xs py-0.5 px-1 rounded-sm
+                        hover:bg-muted transition-calm
+                        ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
+                        ${isPlanTask ? "border-l-2 border-l-primary/40 pl-2" : ""}
+                      `}
+                    >
                       <div className="flex items-start gap-1">
                         <button
                           onClick={(e) => handleToggleComplete(e, task, date)}
@@ -219,6 +248,22 @@ const NotionWeekCalendar = ({
                       )}
                     </div>
                   );
+
+                  // Wrap in tooltip if showing plan tint
+                  if (showPlanTooltip) {
+                    return (
+                      <Tooltip key={task.id}>
+                        <TooltipTrigger asChild>
+                          {taskElement}
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          Plan: {planTitle}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return <div key={task.id}>{taskElement}</div>;
                 })}
                 {remainingCount > 0 && (
                   <button

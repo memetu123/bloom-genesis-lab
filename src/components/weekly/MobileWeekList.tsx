@@ -1,12 +1,17 @@
 import { format, addDays, isSameDay } from "date-fns";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Unlink, ChevronRight } from "lucide-react";
 import { formatTime } from "@/lib/formatPreferences";
+import { getPlanBgStyleMobile } from "@/lib/planColors";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * MobileWeekList - Mobile-optimized vertical list for weekly tasks
  * Displays days as collapsible sections with compact task rows
+ * 
+ * Plan tinting: When in "All tasks" mode (no activePlanId), tasks are
+ * subtly tinted based on their linked 90-day plan (6% opacity on mobile)
  */
 
 interface DayTask {
@@ -32,6 +37,10 @@ interface MobileWeekListProps {
   onToggleComplete: (task: DayTask, date: Date) => void;
   timeFormat: UserPreferences["timeFormat"];
   activePlanId?: string | null;
+  /** Map of plan IDs to plan titles for tooltip display */
+  planTitles?: Map<string, string>;
+  /** Map of commitment IDs to their linked goal IDs */
+  commitmentGoalMap?: Map<string, string>;
 }
 
 const MobileWeekList = ({
@@ -43,8 +52,20 @@ const MobileWeekList = ({
   onToggleComplete,
   timeFormat,
   activePlanId,
+  planTitles = new Map(),
+  commitmentGoalMap = new Map(),
 }: MobileWeekListProps) => {
   const navigate = useNavigate();
+  const [longPressedTaskId, setLongPressedTaskId] = useState<string | null>(null);
+
+  /**
+   * Get the linked plan ID for a task
+   */
+  const getTaskPlanId = (task: DayTask): string | null => {
+    if (task.goalId) return task.goalId;
+    if (task.commitmentId) return commitmentGoalMap.get(task.commitmentId) || null;
+    return null;
+  };
 
   // Generate 7 days starting from weekStart
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -66,6 +87,18 @@ const MobileWeekList = ({
   const handleTaskToggle = (e: React.MouseEvent, task: DayTask, date: Date) => {
     e.stopPropagation();
     onToggleComplete(task, date);
+  };
+
+  // Long press handler for mobile plan tooltip
+  const handleTouchStart = (taskId: string) => {
+    const timer = setTimeout(() => {
+      setLongPressedTaskId(taskId);
+    }, 500);
+    return () => clearTimeout(timer);
+  };
+
+  const handleTouchEnd = () => {
+    setTimeout(() => setLongPressedTaskId(null), 2000);
   };
 
   return (
@@ -125,21 +158,41 @@ const MobileWeekList = ({
               <div className="divide-y divide-border/50">
                 {sortedTasks.map((task) => {
                   const timeDisplay = task.timeStart ? formatTime(task.timeStart, timeFormat) : null;
-                  const isPlanTask = activePlanId && (
-                    task.goalId === activePlanId || 
-                    (task.taskType !== 'independent' && task.commitmentId)
-                  );
+                  
+                  // Get linked plan ID for this task
+                  const taskPlanId = getTaskPlanId(task);
+                  const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
+                  
+                  // Only apply tinting in "All tasks" mode (no active plan selected)
+                  const showPlanTint = !activePlanId && taskPlanId;
+                  const bgStyle = showPlanTint ? { backgroundColor: getPlanBgStyleMobile(taskPlanId) } : {};
+                  
+                  // Left border indicator when a specific plan IS active
+                  const isPlanTask = activePlanId && taskPlanId === activePlanId;
+                  
+                  // Show plan name on long press
+                  const showPlanLabel = longPressedTaskId === task.id && showPlanTint && planTitle;
                   
                   return (
                     <div
                       key={task.id}
                       onClick={() => onTaskClick(task, date)}
+                      onTouchStart={() => handleTouchStart(task.id)}
+                      onTouchEnd={handleTouchEnd}
+                      style={bgStyle}
                       className={`
-                        flex items-center gap-3 px-4 py-3 min-h-[48px]
+                        flex items-center gap-3 px-4 py-3 min-h-[48px] relative
                         hover:bg-muted/20 active:bg-muted/30 transition-colors cursor-pointer
                         ${isPlanTask ? "border-l-2 border-l-primary/40" : ""}
                       `}
                     >
+                      {/* Plan label popup on long press */}
+                      {showPlanLabel && (
+                        <div className="absolute top-0 left-4 -translate-y-full bg-popover border border-border shadow-md px-2 py-1 rounded text-xs text-foreground z-10">
+                          Plan: {planTitle}
+                        </div>
+                      )}
+                      
                       {/* Completion toggle - 44px tap target */}
                       <button
                         onClick={(e) => handleTaskToggle(e, task, date)}
