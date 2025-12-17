@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Compass, Calendar, CalendarDays, User, Settings, Trash2, LogOut } from "lucide-react";
+import { Calendar, CalendarDays, User, Settings, Trash2, LogOut } from "lucide-react";
+import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import GlobalSearch from "@/components/GlobalSearch";
@@ -22,7 +23,7 @@ interface AppLayoutProps {
 }
 
 const navItems = [
-  { label: "North Star", path: "/dashboard", icon: Compass },
+  { label: "North Star", path: "/dashboard", icon: NorthStarIcon },
   { label: "Weekly", path: "/weekly", icon: Calendar },
   { label: "Daily", path: "/daily", icon: CalendarDays },
 ];
