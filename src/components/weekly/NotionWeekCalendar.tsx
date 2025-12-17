@@ -200,8 +200,8 @@ const NotionWeekCalendar = ({
                         w-full text-left text-xs py-0.5 px-1 rounded-sm
                         hover:bg-muted/50 transition-calm
                         ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                        ${isActivePlanTask ? "border-l-2 border-l-primary/30 pl-2" : ""}
-                        ${isOtherPlanTask ? "border-l border-l-muted-foreground/20 pl-2" : ""}
+                        ${isActivePlanTask ? "border-l-2 border-l-primary/60 pl-2" : ""}
+                        ${isOtherPlanTask ? "border-l-2 border-l-muted-foreground/40 pl-2" : ""}
                       `}
                     >
                       <div className="flex items-start gap-1">

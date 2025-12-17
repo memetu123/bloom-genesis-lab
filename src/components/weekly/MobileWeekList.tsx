@@ -182,8 +182,8 @@ const MobileWeekList = ({
                       className={`
                         flex items-center gap-3 px-4 py-3 min-h-[48px] relative
                         hover:bg-muted/20 active:bg-muted/30 transition-colors cursor-pointer
-                        ${isActivePlanTask ? "border-l-2 border-l-primary/30" : ""}
-                        ${isOtherPlanTask ? "border-l border-l-muted-foreground/20" : ""}
+                        ${isActivePlanTask ? "border-l-2 border-l-primary/60" : ""}
+                        ${isOtherPlanTask ? "border-l-2 border-l-muted-foreground/40" : ""}
                       `}
                     >
                       {/* Plan label popup on long press */}
