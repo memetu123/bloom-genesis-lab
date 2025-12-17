@@ -256,6 +256,29 @@ const Dashboard = () => {
                   {vision.pillar_name}
                 </span>
               )}
+              {/* Per-vision add dropdown (desktop) */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1 text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer"
+                    aria-label={`Add to ${vision.title}`}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover border border-border shadow-md">
+                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=three_year&vision=${vision.id}`)}>
+                    Add 3-Year Goal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=one_year&vision=${vision.id}`)}>
+                    Add 1-Year Goal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=ninety_day&vision=${vision.id}`)}>
+                    Add 90-Day Plan
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -455,7 +478,7 @@ const Dashboard = () => {
               <button
                 onClick={(e) => openVisionScopedAddSheet(vision, e)}
                 className="p-1.5 text-muted-foreground/60 hover:text-primary transition-colors"
-                aria-label="Add goal to this vision"
+                aria-label={`Add to ${vision.title}`}
               >
                 <Plus className="h-4 w-4" />
               </button>
