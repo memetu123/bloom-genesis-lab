@@ -150,8 +150,9 @@ const TaskDetailModal = ({
 
   const fetchIndependentTaskGoal = async (taskId: string) => {
     // For independent tasks, check if there's a linking weekly_commitment
-    const taskIdParts = taskId.split("-");
-    const actualId = taskIdParts[0];
+    // UUIDs have 5 parts, recurring task IDs have 8 parts ({uuid}-{dateKey})
+    const parts = taskId.split("-");
+    const actualId = parts.length === 5 ? taskId : parts.slice(0, 5).join("-");
     
     const { data: completion } = await supabase
       .from("commitment_completions")
@@ -210,8 +211,9 @@ const TaskDetailModal = ({
         }
       } else if (!isRecurring && goalChanged) {
         // For independent tasks, handle goal linking via weekly_commitment
-        const taskIdParts = task.id.split("-");
-        const actualId = taskIdParts[0];
+        // UUIDs have 5 parts, recurring task IDs have 8 parts ({uuid}-{dateKey})
+        const parts = task.id.split("-");
+        const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
         
         // Get the completion record to check if it has a commitment_id
         const { data: completion } = await supabase
@@ -260,10 +262,12 @@ const TaskDetailModal = ({
       }
 
       // Handle completion status
+      const idParts = task.id.split("-");
+      const completionId = idParts.length === 5 ? task.id : idParts.slice(0, 5).join("-");
       const { data: existingCompletion } = await supabase
         .from("commitment_completions")
         .select("*")
-        .eq(isRecurring ? "commitment_id" : "id", isRecurring ? task.commitmentId : task.id.split("-")[0])
+        .eq(isRecurring ? "commitment_id" : "id", isRecurring ? task.commitmentId : completionId)
         .eq("completed_date", dateKey)
         .maybeSingle();
 
@@ -303,8 +307,8 @@ const TaskDetailModal = ({
           .eq("id", existingCompletion.id);
       } else if (!isRecurring && !existingCompletion) {
         // Independent task - just update it
-        const taskIdParts = task.id.split("-");
-        const actualId = taskIdParts[0];
+        const updateParts = task.id.split("-");
+        const updateId = updateParts.length === 5 ? task.id : updateParts.slice(0, 5).join("-");
         
         await supabase
           .from("commitment_completions")
@@ -314,7 +318,7 @@ const TaskDetailModal = ({
             time_end: timeEnd || null,
             is_flexible_time: !timeStart,
           })
-          .eq("id", actualId);
+          .eq("id", updateId);
       }
 
       toast.success("Task updated");
@@ -400,10 +404,11 @@ const TaskDetailModal = ({
         }
         
         // Now actually convert with the configured rules
-        const taskIdParts = task.id.split("-");
-        const actualId = taskIdParts[0];
+        // UUIDs have 5 parts, recurring task IDs have 8 parts ({uuid}-{dateKey})
+        const convertParts = task.id.split("-");
+        const convertId = convertParts.length === 5 ? task.id : convertParts.slice(0, 5).join("-");
         
-        await convertToRecurring(actualId, {
+        await convertToRecurring(convertId, {
           recurrenceType,
           timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
           daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
@@ -455,8 +460,9 @@ const TaskDetailModal = ({
         toast.success("Recurring task deleted");
       } else {
         // For independent/detached tasks, soft delete the completion record
-        const taskIdParts = task.id.split("-");
-        const actualId = taskIdParts[0];
+        // Independent task IDs are raw UUIDs (5 parts), recurring have format {uuid}-{dateKey} (8 parts)
+        const parts = task.id.split("-");
+        const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
         
         await supabase
           .from("commitment_completions")
