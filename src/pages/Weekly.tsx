@@ -258,15 +258,20 @@ const Weekly = () => {
     [filteredTasksByDate]
   );
 
-  // Commitment totals for WeeklyTotals - memoized
+  // Commitment totals for WeeklyTotals - memoized with goal info for grouping
   const commitmentTotals = useMemo(() => 
-    filteredCommitments.map(c => ({
-      id: c.id,
-      title: c.title,
-      planned: c.checkin?.planned_count || 0,
-      actual: c.checkin?.actual_count || 0,
-    })),
-    [filteredCommitments]
+    filteredCommitments.map(c => {
+      const goal = c.goal_id ? goals.find(g => g.id === c.goal_id) : null;
+      return {
+        id: c.id,
+        title: c.title,
+        planned: c.checkin?.planned_count || 0,
+        actual: c.checkin?.actual_count || 0,
+        goalId: c.goal_id,
+        goalTitle: goal?.title || null,
+      };
+    }),
+    [filteredCommitments, goals]
   );
 
   // Goals for dropdown - memoized with vision labels, grouped by vision
@@ -615,7 +620,7 @@ const Weekly = () => {
         />
       )}
 
-      {/* Other tasks section (when plan is active) - collapsed by default, simplified list */}
+      {/* Other tasks section (when plan is active) - grouped by plan */}
       {activePlanId && otherTasksCount > 0 && (
         <div className="mt-6 border-t border-border/50 pt-4">
           <button
@@ -628,48 +633,94 @@ const Weekly = () => {
             Other tasks this week ({otherTasksCount})
           </button>
           
-          {otherTasksExpanded && (
-            <div className="mt-2 space-y-1 pl-5">
-              {Object.entries(otherTasksByDate).map(([dateKey, tasks]) => 
-                tasks.map(task => (
-                  <div 
-                    key={task.id}
+          {otherTasksExpanded && (() => {
+            // Group other tasks by plan for list-based display
+            const groupedByPlan: Record<string, { title: string; tasks: { task: DayTask; dateKey: string }[] }> = {};
+            const independentTasks: { task: DayTask; dateKey: string }[] = [];
+
+            Object.entries(otherTasksByDate).forEach(([dateKey, tasks]) => {
+              tasks.forEach(task => {
+                const taskGoalId = task.goalId || (task.commitmentId ? commitmentGoalMap.get(task.commitmentId) : null);
+                const planTitle = taskGoalId ? planTitles.get(taskGoalId) : null;
+                
+                if (taskGoalId && planTitle) {
+                  if (!groupedByPlan[taskGoalId]) {
+                    groupedByPlan[taskGoalId] = { title: planTitle, tasks: [] };
+                  }
+                  groupedByPlan[taskGoalId].tasks.push({ task, dateKey });
+                } else {
+                  independentTasks.push({ task, dateKey });
+                }
+              });
+            });
+
+            const planGroups = Object.entries(groupedByPlan);
+
+            const renderTask = (task: DayTask, dateKey: string) => (
+              <div 
+                key={task.id}
+                className={`
+                  flex items-center justify-between py-2 cursor-pointer hover:bg-muted/30 rounded px-2 -mx-2
+                  ${isMobile ? 'min-h-[44px] text-sm' : 'text-sm py-1'}
+                `}
+                onClick={() => handleTaskClick(task, new Date(dateKey))}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <button 
                     className={`
-                      flex items-center justify-between py-2 cursor-pointer hover:bg-muted/30 rounded px-2 -mx-2
-                      ${isMobile ? 'min-h-[44px] text-sm' : 'text-sm py-1'}
+                      shrink-0 rounded-full border-2 flex items-center justify-center
+                      ${isMobile ? 'w-5 h-5' : 'w-3 h-3'}
+                      ${task.isCompleted ? 'bg-primary border-primary' : 'border-border'}
                     `}
-                    onClick={() => handleTaskClick(task, new Date(dateKey))}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleComplete(task, new Date(dateKey));
+                    }}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <button 
-                        className={`
-                          shrink-0 rounded-full border-2 flex items-center justify-center
-                          ${isMobile ? 'w-5 h-5' : 'w-3 h-3'}
-                          ${task.isCompleted ? 'bg-primary border-primary' : 'border-border'}
-                        `}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleComplete(task, new Date(dateKey));
-                        }}
-                      >
-                        {task.isCompleted && isMobile && (
-                          <svg className="w-2.5 h-2.5 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </button>
-                      <span className={`truncate ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>
-                        {task.title}
-                      </span>
+                    {task.isCompleted && isMobile && (
+                      <svg className="w-2.5 h-2.5 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className={`truncate ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+                    {task.title}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                  {format(new Date(dateKey), "EEE")}
+                </span>
+              </div>
+            );
+
+            return (
+              <div className="mt-2 space-y-4 pl-5">
+                {/* Plan groups */}
+                {planGroups.map(([planId, group]) => (
+                  <div key={planId}>
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 truncate">
+                      {group.title}
+                    </h4>
+                    <div className="space-y-1">
+                      {group.tasks.map(({ task, dateKey }) => renderTask(task, dateKey))}
                     </div>
-                    <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                      {format(new Date(dateKey), "EEE")}
-                    </span>
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                ))}
+
+                {/* Independent tasks */}
+                {independentTasks.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                      Independent tasks
+                    </h4>
+                    <div className="space-y-1">
+                      {independentTasks.map(({ task, dateKey }) => renderTask(task, dateKey))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -9,9 +9,11 @@ import type { UserPreferences } from "@/hooks/useAppData";
  * NotionWeekCalendar - Notion-style 7-day calendar grid
  * Shows tasks inside each day cell, respects user preferences
  * 
- * Plan differentiation: When a specific plan is active, tasks from that plan
- * show an olive left border; tasks from other plans show a muted neutral border.
- * In "All tasks" mode, no borders are shown.
+ * Plan differentiation (Calendar views - Interaction-based reveal):
+ * - "All tasks" mode: tasks linked to ANY plan get a subtle neutral left border
+ * - Tasks without a plan: no border
+ * - When a specific plan is selected: NO borders shown (uniform appearance)
+ * - Plan identity revealed via hover tooltip (desktop) or long-press (mobile)
  */
 
 interface DayTask {
@@ -184,15 +186,14 @@ const NotionWeekCalendar = ({
                   const taskPlanId = getTaskPlanId(task);
                   const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
                   
-                  // Border logic: Only show borders when a plan is active
-                  // - Active plan tasks: olive border
-                  // - Other plan tasks: muted neutral border
-                  // - No plan selected ("All tasks"): no borders
-                  const isActivePlanTask = activePlanId && taskPlanId === activePlanId;
-                  const isOtherPlanTask = activePlanId && taskPlanId && taskPlanId !== activePlanId;
+                  // Border logic (Calendar view - Interaction-based reveal):
+                  // - "All tasks" mode (no plan selected): tasks with ANY plan get subtle neutral border
+                  // - Tasks without a plan: no border
+                  // - Specific plan selected: NO borders (uniform appearance)
+                  const showPlanBorder = !activePlanId && taskPlanId;
                   
-                  // Show tooltip with plan name on hover (only when plan is active and task belongs to a plan)
-                  const showPlanTooltip = activePlanId && taskPlanId && planTitle;
+                  // Show tooltip with plan name on hover (only in "All tasks" mode when task has a plan)
+                  const showPlanTooltip = !activePlanId && taskPlanId && planTitle;
                     
                   const taskElement = (
                     <div
@@ -200,8 +201,7 @@ const NotionWeekCalendar = ({
                         w-full text-left text-xs py-0.5 px-1 rounded-sm
                         hover:bg-muted/50 transition-calm
                         ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                        ${isActivePlanTask ? "border-l-2 border-l-primary/60 pl-2" : ""}
-                        ${isOtherPlanTask ? "border-l-2 border-l-muted-foreground/40 pl-2" : ""}
+                        ${showPlanBorder ? "border-l border-l-muted-foreground/30 pl-2" : ""}
                       `}
                     >
                       <div className="flex items-start gap-1">
