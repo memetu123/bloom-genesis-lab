@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronRight, ChevronDown, MoreHorizontal } from "lucide-react";
-import { useAppData, Vision as GlobalVision } from "@/hooks/useAppData";
+import { Star, ChevronRight, ChevronDown, MoreHorizontal, ArrowRight } from "lucide-react";
+import { useAppData, Vision as GlobalVision, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,28 +14,33 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FocusModal } from "@/components/FocusModal";
 import AddIconButton from "@/components/AddIconButton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 /**
- * Dashboard Page - North Star Orientation
- * Answers: "What am I building my life around right now?"
- * Read-first, navigate-second. No planning, no execution.
+ * Dashboard Page - My North Star
+ * The single strategy surface where users define direction, see hierarchy, and navigate into execution.
+ * Direction. Clarity. Intent.
  */
 
-const MAX_THREE_YEAR_PER_VISION = 2;
-const MAX_ONE_YEAR_PER_VISION = 2;
-const MAX_NINETY_DAY_PER_VISION = 3;
+interface VisionWithHierarchy {
+  id: string;
+  title: string;
+  pillar_name: string;
+  is_focus: boolean;
+  threeYear: GlobalGoal[];
+  oneYear: GlobalGoal[];
+  ninetyDay: GlobalGoal[];
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { visions, goals, pillars, pillarsMap, loading, refetchVisions } = useAppData();
-  const [focusModalOpen, setFocusModalOpen] = useState(false);
+  const { visions, goals, pillars, pillarsMap, loading, refetchVisions, refetchGoals } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
   
   // Add vision dialog state
@@ -45,42 +50,42 @@ const Dashboard = () => {
   const [selectedPillarId, setSelectedPillarId] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Build focused visions with related goals (no cap)
-  const focusedVisions = useMemo(() => {
+  // Build focused visions with full hierarchy (no caps)
+  const focusedVisions = useMemo((): VisionWithHierarchy[] => {
     const focused = visions.filter(v => v.is_focus && v.status === "active");
 
     return focused.map(vision => {
-      const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived");
-
-      const threeYearGoals = visionGoals.filter(g => g.goal_type === "three_year");
-      const oneYearGoals = visionGoals.filter(g => g.goal_type === "one_year");
-      const ninetyDayGoals = visionGoals.filter(g => g.goal_type === "ninety_day");
+      const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived" && !g.is_deleted);
 
       return {
         id: vision.id,
         title: vision.title,
         pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
-        threeYear: threeYearGoals.slice(0, MAX_THREE_YEAR_PER_VISION),
-        oneYear: oneYearGoals.slice(0, MAX_ONE_YEAR_PER_VISION),
-        ninetyDay: ninetyDayGoals.slice(0, MAX_NINETY_DAY_PER_VISION),
-        hasMoreThreeYear: threeYearGoals.length > MAX_THREE_YEAR_PER_VISION,
-        hasMoreOneYear: oneYearGoals.length > MAX_ONE_YEAR_PER_VISION,
-        hasMoreNinetyDay: ninetyDayGoals.length > MAX_NINETY_DAY_PER_VISION,
-        extraThreeYearCount: threeYearGoals.length - MAX_THREE_YEAR_PER_VISION,
+        is_focus: true,
+        threeYear: visionGoals.filter(g => g.goal_type === "three_year"),
+        oneYear: visionGoals.filter(g => g.goal_type === "one_year"),
+        ninetyDay: visionGoals.filter(g => g.goal_type === "ninety_day"),
       };
     });
   }, [visions, goals, pillarsMap]);
 
-  // Non-focused active visions
-  const nonFocusedVisions = useMemo(() => {
+  // Non-focused active visions with hierarchy
+  const nonFocusedVisions = useMemo((): VisionWithHierarchy[] => {
     return visions
       .filter(v => !v.is_focus && v.status === "active")
-      .map(vision => ({
-        id: vision.id,
-        title: vision.title,
-        pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
-      }));
-  }, [visions, pillarsMap]);
+      .map(vision => {
+        const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived" && !g.is_deleted);
+        return {
+          id: vision.id,
+          title: vision.title,
+          pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
+          is_focus: false,
+          threeYear: visionGoals.filter(g => g.goal_type === "three_year"),
+          oneYear: visionGoals.filter(g => g.goal_type === "one_year"),
+          ninetyDay: visionGoals.filter(g => g.goal_type === "ninety_day"),
+        };
+      });
+  }, [visions, goals, pillarsMap]);
 
   const handleToggleFocus = async (visionId: string, currentFocus: boolean) => {
     try {
@@ -109,6 +114,7 @@ const Dashboard = () => {
           title: newTitle.trim(),
           description: newDescription.trim() || null,
           status: "active",
+          is_focus: true, // New visions are focused by default
         });
 
       if (error) throw error;
@@ -142,6 +148,211 @@ const Dashboard = () => {
     }
   };
 
+  const handleDeleteVision = async (visionId: string) => {
+    try {
+      const { error } = await supabase
+        .from("life_visions")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", visionId);
+
+      if (error) throw error;
+      refetchVisions();
+      toast.success("Vision deleted");
+    } catch (err) {
+      toast.error("Failed to delete vision");
+    }
+  };
+
+  // Get status label for 90-day goals
+  const getGoalStatusLabel = (status: string | null) => {
+    if (status === "in_progress" || status === "active") return "Active";
+    if (status === "not_started") return "Planned";
+    return "Inactive";
+  };
+
+  // Get first active 90-day plan for navigation
+  const getActive90DayPlan = (ninetyDayGoals: GlobalGoal[]) => {
+    const active = ninetyDayGoals.find(g => g.status === "active" || g.status === "in_progress");
+    return active || ninetyDayGoals[0];
+  };
+
+  // Render vision card (shared between focused and non-focused)
+  const renderVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
+    const activePlan = getActive90DayPlan(vision.ninetyDay);
+
+    return (
+      <Card 
+        key={vision.id} 
+        className={isMuted ? "border-muted/50 bg-muted/10" : "border-muted"}
+      >
+        <CardContent className="p-5">
+          {/* Vision Header */}
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <h2 
+              className={`text-lg font-semibold cursor-pointer hover:text-primary transition-colors ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
+              onClick={() => navigate(`/vision/${vision.id}`)}
+            >
+              {vision.title}
+            </h2>
+            <div className="flex items-center gap-1 shrink-0">
+              {vision.pillar_name && (
+                <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full whitespace-nowrap mr-1">
+                  {vision.pillar_name}
+                </span>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleFocus(vision.id, vision.is_focus);
+                }}
+                className={`p-1 transition-colors cursor-pointer ${
+                  vision.is_focus 
+                    ? "text-primary hover:text-primary/70" 
+                    : "text-muted-foreground/50 hover:text-primary"
+                }`}
+                title={vision.is_focus ? "Remove from focus" : "Add to focus"}
+              >
+                <Star className={`h-4 w-4 ${vision.is_focus ? "fill-current" : ""}`} />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover border border-border shadow-md">
+                  <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
+                    Edit vision
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleArchiveVision(vision.id)}
+                    className="text-muted-foreground"
+                  >
+                    Archive
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => handleDeleteVision(vision.id)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    Delete vision
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* 3-Year Direction - Light arrowhead bullets */}
+          {vision.threeYear.length > 0 && (
+            <div className="mb-4">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                3-Year Direction
+              </span>
+              <div className="mt-1 space-y-0.5">
+                {vision.threeYear.map(goal => (
+                  <p 
+                    key={goal.id} 
+                    className={`text-sm flex items-baseline gap-1.5 ${isMuted ? "text-muted-foreground/70" : "text-muted-foreground"}`}
+                  >
+                    <span className="text-muted-foreground/40 text-xs">→</span>
+                    <span 
+                      className="hover:text-foreground cursor-pointer transition-colors"
+                      onClick={() => navigate(`/goal/${goal.id}`)}
+                    >
+                      {goal.title}
+                    </span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 1-Year Goals - Single-level indent, dot bullets */}
+          {vision.oneYear.length > 0 && (
+            <div className="mb-4 pl-2.5">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                1-Year Goals
+              </span>
+              <ul className="mt-1 space-y-1">
+                {vision.oneYear.map(goal => (
+                  <li 
+                    key={goal.id} 
+                    className={`text-sm flex items-baseline gap-2 ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
+                  >
+                    <span className="text-muted-foreground/70 text-xs leading-none">•</span>
+                    <span 
+                      className="hover:text-primary cursor-pointer transition-colors"
+                      onClick={() => navigate(`/goal/${goal.id}`)}
+                    >
+                      {goal.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 90-Day Commitments - Two-level indent, dot bullets, status on right */}
+          {vision.ninetyDay.length > 0 && (
+            <div className="mb-4 pl-5">
+              <span className="text-xs text-foreground font-medium uppercase tracking-wide">
+                90-Day Commitments
+              </span>
+              <ul className="mt-2 space-y-2">
+                {vision.ninetyDay.map(goal => (
+                  <li 
+                    key={goal.id} 
+                    className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/50 rounded-md p-1.5 -ml-1.5 transition-colors"
+                    onClick={() => navigate(`/weekly?plan=${goal.id}`)}
+                  >
+                    <span className="text-muted-foreground/70 text-xs leading-none">•</span>
+                    <span className="flex-1 flex items-center justify-between">
+                      <span className={`text-sm font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
+                        {goal.title}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {getGoalStatusLabel(goal.status)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Empty state for vision with no goals */}
+          {vision.threeYear.length === 0 && 
+           vision.oneYear.length === 0 && 
+           vision.ninetyDay.length === 0 && (
+            <p className="text-sm text-muted-foreground mb-4">
+              Add a goal when it feels right
+            </p>
+          )}
+
+          {/* Vision Footer - Navigate to Weekly with 90-day plan context */}
+          <div className="pt-3 border-t border-muted">
+            <button
+              onClick={() => {
+                if (activePlan) {
+                  navigate(`/weekly?plan=${activePlan.id}`);
+                } else {
+                  navigate("/weekly");
+                }
+              }}
+              className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+            >
+              Plan this week
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -154,24 +365,13 @@ const Dashboard = () => {
     <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in">
       {/* ========== HEADER ========== */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-foreground flex items-center gap-2">
-          <Star className="h-5 w-5 text-primary fill-primary" />
-          What I'm building
+        <h1 className="text-xl font-semibold text-foreground">
+          My North Star
         </h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setFocusModalOpen(true)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            Set your focus
-          </Button>
-          <AddIconButton
-            onClick={() => setAddDialogOpen(true)}
-            tooltip="Add vision"
-          />
-        </div>
+        <AddIconButton
+          onClick={() => setAddDialogOpen(true)}
+          tooltip="Add vision"
+        />
       </div>
 
       {/* ========== FOCUSED VISIONS ========== */}
@@ -182,182 +382,15 @@ const Dashboard = () => {
             <p className="text-muted-foreground mb-4">No focused visions yet</p>
             <Button 
               variant="outline" 
-              onClick={() => setFocusModalOpen(true)}
+              onClick={() => setAddDialogOpen(true)}
             >
-              Set your focus
+              Add your first vision
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
-          {focusedVisions.map((vision) => (
-            <Card key={vision.id} className="border-muted">
-              <CardContent className="p-5">
-                {/* Vision Header - Star toggle + menu + label top-right */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <h2 
-                    className="text-lg font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => navigate(`/vision/${vision.id}`)}
-                  >
-                    {vision.title}
-                  </h2>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {vision.pillar_name && (
-                      <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap mr-1">
-                        {vision.pillar_name}
-                      </span>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleFocus(vision.id, true);
-                      }}
-                      className="p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
-                      title="Remove from focus"
-                    >
-                      <Star className="h-4 w-4 fill-current" />
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
-                          Edit vision
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleArchiveVision(vision.id)}
-                          className="text-muted-foreground"
-                        >
-                          Archive
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
-                {/* 3-Year Direction - Lighter bullets for multiple items */}
-                {vision.threeYear.length > 0 && (
-                  <div className="mb-4">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                      3-Year Direction
-                    </span>
-                    <div className="mt-1 space-y-0.5">
-                      {vision.threeYear.map(goal => (
-                        <p key={goal.id} className="text-sm text-muted-foreground flex items-baseline gap-1.5">
-                          {vision.threeYear.length > 1 && (
-                            <span className="text-muted-foreground/40 text-[10px] leading-none">·</span>
-                          )}
-                          <span>{goal.title}</span>
-                        </p>
-                      ))}
-                      {vision.hasMoreThreeYear && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/goals?vision=${vision.id}&type=three_year`);
-                          }}
-                          className="text-xs text-muted-foreground/70 hover:text-muted-foreground mt-0.5"
-                        >
-                          +{vision.extraThreeYearCount} more long-term direction{vision.extraThreeYearCount !== 1 ? 's' : ''}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* 1-Year Goals - Single-level indent (~10px) */}
-                {vision.oneYear.length > 0 && (
-                  <div className="mb-4 pl-2.5">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                      1-Year Goals
-                    </span>
-                    <ul className="mt-1 space-y-1">
-                      {vision.oneYear.map(goal => (
-                        <li key={goal.id} className="text-sm text-foreground flex items-baseline gap-2">
-                          <span className="text-muted-foreground/70 text-xs leading-none">•</span>
-                          <span>{goal.title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {vision.hasMoreOneYear && (
-                      <button
-                        onClick={() => navigate(`/goals?vision=${vision.id}&type=one_year`)}
-                        className="text-xs text-muted-foreground hover:text-primary mt-1 inline-flex items-center gap-1"
-                      >
-                        View all 1-year goals
-                        <ChevronRight className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* 90-Day Commitments - Two-level indent (~20px), primary emphasis, clickable */}
-                {vision.ninetyDay.length > 0 && (
-                  <div className="mb-4 pl-5">
-                    <span className="text-xs text-foreground font-medium uppercase tracking-wide">
-                      90-Day Commitments
-                    </span>
-                    <ul className="mt-2 space-y-2">
-                      {vision.ninetyDay.map(goal => (
-                        <li 
-                          key={goal.id} 
-                          className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/50 rounded-md p-1.5 -ml-1.5 transition-colors"
-                          onClick={() => navigate(`/weekly?plan=${goal.id}`)}
-                        >
-                          <span className="text-muted-foreground/70 text-xs leading-none">•</span>
-                          <span className="flex-1 flex items-center justify-between">
-                            <span className="text-sm font-medium text-foreground">
-                              {goal.title}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {goal.status === "in_progress" || goal.status === "active" 
-                                ? "Active" 
-                                : "Planned"}
-                            </span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    {vision.hasMoreNinetyDay && (
-                      <button
-                        onClick={() => navigate(`/goals?vision=${vision.id}&type=ninety_day`)}
-                        className="text-xs text-muted-foreground hover:text-primary mt-2 inline-flex items-center gap-1"
-                      >
-                        View all 90-day plans
-                        <ChevronRight className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Empty state for vision with no goals */}
-                {vision.threeYear.length === 0 && 
-                 vision.oneYear.length === 0 && 
-                 vision.ninetyDay.length === 0 && (
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Add a goal when it feels right
-                  </p>
-                )}
-
-                {/* Vision Footer - Single bridge to action */}
-                <div className="pt-3 border-t border-muted">
-                  <button
-                    onClick={() => navigate("/weekly")}
-                    className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-                  >
-                    Plan this week
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {focusedVisions.map((vision) => renderVisionCard(vision, false))}
         </div>
       )}
 
@@ -375,70 +408,15 @@ const Dashboard = () => {
           </button>
 
           {otherVisionsExpanded && (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-4">
               <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-3">
                 Other visions
               </h3>
-              {nonFocusedVisions.map((vision) => (
-                <Card 
-                  key={vision.id} 
-                  className="border-muted/50 bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/vision/${vision.id}`)}
-                >
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className="text-sm text-muted-foreground truncate">
-                        {vision.title}
-                      </span>
-                      {vision.pillar_name && (
-                        <span className="text-xs text-muted-foreground/70 bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
-                          {vision.pillar_name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleFocus(vision.id, false);
-                        }}
-                        className="p-1 text-muted-foreground/50 hover:text-primary transition-colors"
-                        title="Add to focus"
-                      >
-                        <Star className="h-4 w-4" />
-                      </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
-                            Edit vision
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleArchiveVision(vision.id)}
-                            className="text-muted-foreground"
-                          >
-                            Archive
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {nonFocusedVisions.map((vision) => renderVisionCard(vision, true))}
             </div>
           )}
         </div>
       )}
-
-      {/* Focus Modal */}
-      <FocusModal open={focusModalOpen} onOpenChange={setFocusModalOpen} />
 
       {/* Add Vision Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
