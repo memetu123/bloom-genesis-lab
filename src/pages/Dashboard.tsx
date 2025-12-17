@@ -473,78 +473,78 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Mobile: Expanded hierarchy */}
+          {/* Mobile: Expanded hierarchy with tinted section blocks */}
           {isExpanded && (
-            <div className="mt-4 space-y-3">
-              {/* 3-Year Direction */}
+            <div className="mt-4 space-y-2">
+              {/* 3-Year Direction - Tinted block */}
               {vision.threeYear.length > 0 && (
-                <div>
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                <div className="bg-muted/30 rounded-md p-3">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
                     3-Year Direction
                   </span>
-                  <div className="mt-1 space-y-1">
+                  <div className="space-y-2">
                     {vision.threeYear.map(goal => (
                       <p 
                         key={goal.id} 
-                        className="text-sm text-muted-foreground pl-2"
+                        className="text-sm text-muted-foreground"
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/goal/${goal.id}`);
                         }}
                       >
-                        → {goal.title}
+                        {goal.title}
                       </p>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* 1-Year Goals */}
+              {/* 1-Year Goals - Tinted block */}
               {vision.oneYear.length > 0 && (
-                <div className="pl-2">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                <div className="bg-muted/30 rounded-md p-3 ml-2">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
                     1-Year Goals
                   </span>
-                  <ul className="mt-1 space-y-1">
+                  <div className="space-y-2">
                     {vision.oneYear.map(goal => (
-                      <li 
+                      <p 
                         key={goal.id} 
-                        className="text-sm text-foreground pl-2"
+                        className="text-sm text-foreground"
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/goal/${goal.id}`);
                         }}
                       >
-                        • {goal.title}
-                      </li>
+                        {goal.title}
+                      </p>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
 
-              {/* 90-Day Commitments */}
+              {/* 90-Day Commitments - Tinted block */}
               {vision.ninetyDay.length > 0 && (
-                <div className="pl-4">
-                  <span className="text-xs text-foreground font-medium uppercase tracking-wide">
+                <div className="bg-muted/30 rounded-md p-3 ml-4">
+                  <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-2">
                     90-Day Commitments
                   </span>
-                  <ul className="mt-1 space-y-1">
+                  <div className="space-y-2">
                     {vision.ninetyDay.map(goal => (
-                      <li 
+                      <div 
                         key={goal.id} 
-                        className="flex items-center justify-between text-sm pl-2"
+                        className="flex items-center justify-between text-sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/weekly?plan=${goal.id}`);
                         }}
                       >
-                        <span className="font-medium">• {goal.title}</span>
+                        <span className="font-medium">{goal.title}</span>
                         <span className="text-xs text-muted-foreground">
                           {getGoalStatusLabel(goal.status)}
                         </span>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
             </div>
