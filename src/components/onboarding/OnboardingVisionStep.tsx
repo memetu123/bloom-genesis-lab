@@ -19,6 +19,7 @@ interface Props {
   onSetVision: (vision: { title: string; description: string }) => void;
   onNext: () => void;
   onBack: () => void;
+  onExit?: () => void;
 }
 
 export function OnboardingVisionStep({
@@ -28,7 +29,8 @@ export function OnboardingVisionStep({
   onSelectPillar,
   onSetVision,
   onNext,
-  onBack
+  onBack,
+  onExit
 }: Props) {
   const [title, setTitle] = useState(vision?.title || "");
   const [description, setDescription] = useState(vision?.description || "");
@@ -87,6 +89,7 @@ export function OnboardingVisionStep({
       title="Define your vision"
       subtitle="Choose one pillar to focus on first, then describe who you want to become in that area."
       onBack={onBack}
+      onExit={onExit}
     >
       <div className="space-y-6">
         {/* Pillar selection */}
