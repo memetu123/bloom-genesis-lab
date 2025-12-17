@@ -293,13 +293,13 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* 3-Year Direction - Tinted section block */}
+          {/* 3-Year Direction - NO tint, neutral */}
           {limited3Year.length > 0 && (
-            <div className="mb-4 bg-section-tint/[0.03] rounded-md p-3">
+            <div className="mb-4">
               <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
                 3-Year Direction
               </span>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {limited3Year.map(goal => (
                   <p 
                     key={goal.id} 
@@ -323,56 +323,62 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* 1-Year Goals - Tinted section block */}
+          {/* 1-Year Goals - Tinted with top divider */}
           {active1Year.length > 0 && (
-            <div className="mb-4 bg-section-tint/[0.03] rounded-md p-3">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
-                1-Year Goals
-              </span>
-              <ul className="space-y-1">
-                {active1Year.map(goal => (
-                  <li 
-                    key={goal.id} 
-                    className={`text-sm flex items-baseline gap-2 ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
-                  >
-                    <span className="text-muted-foreground/70 text-xs leading-none">•</span>
-                    <span 
-                      className="hover:text-primary cursor-pointer transition-colors"
-                      onClick={() => navigate(`/goal/${goal.id}`)}
+            <div className="mb-4 bg-section-tint/[0.06] rounded-md pt-0 overflow-hidden">
+              <div className="border-t border-muted-foreground/10" />
+              <div className="p-3 pt-2.5">
+                <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
+                  1-Year Goals
+                </span>
+                <ul className="space-y-1.5">
+                  {active1Year.map(goal => (
+                    <li 
+                      key={goal.id} 
+                      className={`text-sm flex items-baseline gap-2 ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
                     >
-                      {goal.title}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <span className="text-muted-foreground/50 text-xs leading-none">•</span>
+                      <span 
+                        className="hover:text-primary cursor-pointer transition-colors"
+                        onClick={() => navigate(`/goal/${goal.id}`)}
+                      >
+                        {goal.title}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
 
-          {/* 90-Day Commitments - Tinted section block */}
+          {/* 90-Day Commitments - Stronger tint with top divider */}
           {active90Day.length > 0 && (
-            <div className="mb-4 bg-section-tint/[0.03] rounded-md p-3">
-              <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-2">
-                90-Day Commitments
-              </span>
-              <ul className="space-y-2">
-                {active90Day.map(goal => (
-                  <li 
-                    key={goal.id} 
-                    className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/30 rounded-md p-1.5 -ml-1.5 transition-colors"
-                    onClick={() => navigate(`/weekly?plan=${goal.id}`)}
-                  >
-                    <span className="text-muted-foreground/70 text-xs leading-none">•</span>
-                    <span className="flex-1 flex items-center justify-between">
-                      <span className={`text-sm font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
-                        {goal.title}
+            <div className="mb-3 bg-section-tint/[0.10] rounded-md pt-0 overflow-hidden">
+              <div className="border-t border-muted-foreground/10" />
+              <div className="p-3 pt-2.5">
+                <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-2">
+                  90-Day Commitments
+                </span>
+                <ul className="space-y-1.5">
+                  {active90Day.map(goal => (
+                    <li 
+                      key={goal.id} 
+                      className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/30 rounded-md p-1.5 -ml-1.5 transition-colors"
+                      onClick={() => navigate(`/weekly?plan=${goal.id}`)}
+                    >
+                      <span className="text-muted-foreground/50 text-xs leading-none">•</span>
+                      <span className="flex-1 flex items-center justify-between">
+                        <span className={`text-sm font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
+                          {goal.title}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {getGoalStatusLabel(goal.status)}
+                        </span>
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {getGoalStatusLabel(goal.status)}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
 
@@ -473,16 +479,16 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Mobile: Expanded hierarchy with tinted section blocks (5% opacity, no bullets) */}
+          {/* Mobile: Expanded hierarchy - refined tinting and spacing */}
           {isExpanded && (
-            <div className="mt-4 space-y-3">
-              {/* 3-Year Direction - Tinted block, no bullets on mobile */}
+            <div className="mt-3 space-y-3">
+              {/* 3-Year Direction - NO tint, neutral on mobile */}
               {vision.threeYear.length > 0 && (
-                <div className="bg-section-tint/[0.05] rounded-md p-3">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
+                <div className="px-1">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
                     3-Year Direction
                   </span>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {vision.threeYear.map(goal => (
                       <p 
                         key={goal.id} 
@@ -499,51 +505,57 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* 1-Year Goals - Tinted block, no bullets on mobile */}
+              {/* 1-Year Goals - Tinted with top divider, no bullets on mobile */}
               {vision.oneYear.length > 0 && (
-                <div className="bg-section-tint/[0.05] rounded-md p-3">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
-                    1-Year Goals
-                  </span>
-                  <div className="space-y-2">
-                    {vision.oneYear.map(goal => (
-                      <p 
-                        key={goal.id} 
-                        className="text-sm text-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/goal/${goal.id}`);
-                        }}
-                      >
-                        {goal.title}
-                      </p>
-                    ))}
+                <div className="bg-section-tint/[0.08] rounded-md pt-0 overflow-hidden">
+                  <div className="border-t border-muted-foreground/10" />
+                  <div className="p-3 pt-2">
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
+                      1-Year Goals
+                    </span>
+                    <div className="space-y-1.5">
+                      {vision.oneYear.map(goal => (
+                        <p 
+                          key={goal.id} 
+                          className="text-sm text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/goal/${goal.id}`);
+                          }}
+                        >
+                          {goal.title}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* 90-Day Commitments - Tinted block, no bullets on mobile */}
+              {/* 90-Day Commitments - Stronger tint with top divider, no bullets on mobile */}
               {vision.ninetyDay.length > 0 && (
-                <div className="bg-section-tint/[0.05] rounded-md p-3">
-                  <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-2">
-                    90-Day Commitments
-                  </span>
-                  <div className="space-y-2">
-                    {vision.ninetyDay.map(goal => (
-                      <div 
-                        key={goal.id} 
-                        className="flex items-center justify-between text-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/weekly?plan=${goal.id}`);
-                        }}
-                      >
-                        <span className="font-medium">{goal.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {getGoalStatusLabel(goal.status)}
-                        </span>
-                      </div>
-                    ))}
+                <div className="bg-section-tint/[0.12] rounded-md pt-0 overflow-hidden">
+                  <div className="border-t border-muted-foreground/10" />
+                  <div className="p-3 pt-2">
+                    <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-1.5">
+                      90-Day Commitments
+                    </span>
+                    <div className="space-y-1.5">
+                      {vision.ninetyDay.map(goal => (
+                        <div 
+                          key={goal.id} 
+                          className="flex items-center justify-between text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/weekly?plan=${goal.id}`);
+                          }}
+                        >
+                          <span className="font-medium">{goal.title}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {getGoalStatusLabel(goal.status)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
