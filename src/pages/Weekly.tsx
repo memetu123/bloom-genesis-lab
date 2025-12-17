@@ -398,7 +398,7 @@ const Weekly = () => {
         <div className="mb-4 flex items-center justify-between py-2 px-3 border border-border/50 rounded-lg">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs text-muted-foreground/70 uppercase tracking-wide shrink-0">90-Day Plan</span>
-            <span className="text-sm text-muted-foreground">No plan selected</span>
+            <span className="text-sm text-muted-foreground">All tasks</span>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -469,15 +469,6 @@ const Weekly = () => {
         </button>
       </div>
 
-      {/* Weekly Summary - Above calendar when plan is active */}
-      {activePlan && commitmentTotals.length > 0 && (
-        <div className="mb-6">
-          <div className="text-xs text-muted-foreground mb-2">
-            Weekly Summary · {activePlan.title}
-          </div>
-          <MemoizedWeeklyTotals commitments={commitmentTotals} />
-        </div>
-      )}
 
       {/* Calendar grid */}
       <MemoizedCalendar
@@ -538,8 +529,8 @@ const Weekly = () => {
         </div>
       )}
 
-      {/* Weekly totals - Below calendar when no plan is active */}
-      {!activePlan && commitmentTotals.length > 0 && (
+      {/* Weekly totals - Always below calendar */}
+      {commitmentTotals.length > 0 && (
         <MemoizedWeeklyTotals commitments={commitmentTotals} />
       )}
 
