@@ -71,6 +71,8 @@ export default {
         sand: "hsl(var(--sand))",
         "warm-gray": "hsl(var(--warm-gray))",
         "off-white": "hsl(var(--off-white))",
+        /* Section tint for Dashboard hierarchy grouping */
+        "section-tint": "hsl(var(--section-tint))",
       },
       borderRadius: {
         lg: "var(--radius)",
