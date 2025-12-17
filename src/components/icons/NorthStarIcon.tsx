@@ -10,26 +10,42 @@ interface NorthStarIconProps extends SVGProps<SVGSVGElement> {
  * Compass-like navigational feel
  */
 const NorthStarIcon = ({ size = 24, className, ...props }: NorthStarIconProps) => {
-  const center = 12;
-  const primaryLength = 10; // Length of main cardinal points
-  const secondaryLength = 6; // Length of diagonal points
+  // 8-point star with elongated vertical axis like the reference
+  // Using a filled polygon path for the star shape
+  const cx = 12;
+  const cy = 12;
   
-  // Primary points (N, E, S, W) - thicker stroke
-  const primaryPoints = [
-    { x1: center, y1: center, x2: center, y2: center - primaryLength }, // North
-    { x1: center, y1: center, x2: center + primaryLength, y2: center }, // East
-    { x1: center, y1: center, x2: center, y2: center + primaryLength }, // South
-    { x1: center, y1: center, x2: center - primaryLength, y2: center }, // West
-  ];
+  // Lengths: vertical (N/S) longest, horizontal (E/W) medium, diagonals shortest
+  const verticalLength = 11;   // North and South points
+  const horizontalLength = 7;  // East and West points
+  const diagonalLength = 5;    // Diagonal points
+  const diagonalOffset = diagonalLength * 0.707;
   
-  // Secondary points (NE, SE, SW, NW) - thinner stroke
-  const diagonalOffset = secondaryLength * 0.707; // cos(45°) ≈ 0.707
-  const secondaryPoints = [
-    { x1: center, y1: center, x2: center + diagonalOffset, y2: center - diagonalOffset }, // NE
-    { x1: center, y1: center, x2: center + diagonalOffset, y2: center + diagonalOffset }, // SE
-    { x1: center, y1: center, x2: center - diagonalOffset, y2: center + diagonalOffset }, // SW
-    { x1: center, y1: center, x2: center - diagonalOffset, y2: center - diagonalOffset }, // NW
-  ];
+  // Inner radius for the "pinch" between points
+  const innerRadius = 1.5;
+  const innerDiagonal = innerRadius * 0.707;
+
+  // Build path: alternating outer points and inner points
+  // Going clockwise from North
+  const pathData = `
+    M ${cx} ${cy - verticalLength}
+    L ${cx + innerDiagonal} ${cy - innerDiagonal}
+    L ${cx + diagonalOffset} ${cy - diagonalOffset}
+    L ${cx + innerRadius} ${cy}
+    L ${cx + horizontalLength} ${cy}
+    L ${cx + innerRadius} ${cy}
+    L ${cx + diagonalOffset} ${cy + diagonalOffset}
+    L ${cx + innerDiagonal} ${cy + innerDiagonal}
+    L ${cx} ${cy + verticalLength}
+    L ${cx - innerDiagonal} ${cy + innerDiagonal}
+    L ${cx - diagonalOffset} ${cy + diagonalOffset}
+    L ${cx - innerRadius} ${cy}
+    L ${cx - horizontalLength} ${cy}
+    L ${cx - innerRadius} ${cy}
+    L ${cx - diagonalOffset} ${cy - diagonalOffset}
+    L ${cx - innerDiagonal} ${cy - innerDiagonal}
+    Z
+  `;
 
   return (
     <svg
@@ -41,39 +57,8 @@ const NorthStarIcon = ({ size = 24, className, ...props }: NorthStarIconProps) =
       className={className}
       {...props}
     >
-      {/* Primary cardinal points - thicker */}
-      {primaryPoints.map((point, i) => (
-        <line
-          key={`primary-${i}`}
-          x1={point.x1}
-          y1={point.y1}
-          x2={point.x2}
-          y2={point.y2}
-          stroke="currentColor"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-        />
-      ))}
-      
-      {/* Secondary diagonal points - thinner */}
-      {secondaryPoints.map((point, i) => (
-        <line
-          key={`secondary-${i}`}
-          x1={point.x1}
-          y1={point.y1}
-          x2={point.x2}
-          y2={point.y2}
-          stroke="currentColor"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-        />
-      ))}
-      
-      {/* Center dot for compass feel */}
-      <circle
-        cx={center}
-        cy={center}
-        r={1.5}
+      <path
+        d={pathData}
         fill="currentColor"
       />
     </svg>
