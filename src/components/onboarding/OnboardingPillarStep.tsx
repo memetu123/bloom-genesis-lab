@@ -14,9 +14,11 @@ interface Props {
   selectedPillars: { name: string; description: string }[];
   onSelect: (pillars: { name: string; description: string }[]) => void;
   onNext: () => void;
+  onExit?: () => void;
+  isPlanningGuide?: boolean;
 }
 
-export function OnboardingPillarStep({ selectedPillars, onSelect, onNext }: Props) {
+export function OnboardingPillarStep({ selectedPillars, onSelect, onNext, onExit, isPlanningGuide }: Props) {
   const [customPillar, setCustomPillar] = useState("");
 
   const togglePillar = (pillar: { name: string; description: string }) => {
@@ -41,9 +43,13 @@ export function OnboardingPillarStep({ selectedPillars, onSelect, onNext }: Prop
     <OnboardingLayout
       step={1}
       totalSteps={6}
-      title="Choose your life pillars"
-      subtitle="Select the areas of life that matter most to you. You can always change these later."
+      title={isPlanningGuide ? "Add new pillars" : "Choose your life pillars"}
+      subtitle={isPlanningGuide 
+        ? "Select additional areas of life to plan for." 
+        : "Select the areas of life that matter most to you. You can always change these later."
+      }
       showBack={false}
+      onExit={onExit}
     >
       <div className="space-y-6">
         {/* Suggested pillars grid */}

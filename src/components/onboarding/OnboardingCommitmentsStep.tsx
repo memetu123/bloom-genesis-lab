@@ -29,6 +29,7 @@ interface Props {
   onComplete: () => void;
   onBack: () => void;
   loading?: boolean;
+  onExit?: () => void;
 }
 
 export function OnboardingCommitmentsStep({
@@ -38,7 +39,8 @@ export function OnboardingCommitmentsStep({
   onSetCommitments,
   onComplete,
   onBack,
-  loading
+  loading,
+  onExit
 }: Props) {
   const [newTitle, setNewTitle] = useState("");
   const [newDays, setNewDays] = useState<DayOfWeek[]>(['mon', 'wed', 'fri']);
@@ -95,6 +97,7 @@ export function OnboardingCommitmentsStep({
       title="Set weekly commitments"
       subtitle="What small, repeatable actions will move you toward your goal? Add 1-3 habits."
       onBack={onBack}
+      onExit={onExit}
     >
       <div className="space-y-6">
         {/* Context */}

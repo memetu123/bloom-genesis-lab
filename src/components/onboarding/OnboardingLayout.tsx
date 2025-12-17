@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
  * OnboardingLayout - Consistent wrapper for all onboarding steps
  * Shows progress, title, and navigation
+ * Supports "Planning Guide" mode with exit button
  */
 interface OnboardingLayoutProps {
   step: number;
@@ -14,6 +15,7 @@ interface OnboardingLayoutProps {
   children: ReactNode;
   onBack?: () => void;
   showBack?: boolean;
+  onExit?: () => void;
 }
 
 export function OnboardingLayout({
@@ -23,7 +25,8 @@ export function OnboardingLayout({
   subtitle,
   children,
   onBack,
-  showBack = true
+  showBack = true,
+  onExit
 }: OnboardingLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
@@ -39,9 +42,22 @@ export function OnboardingLayout({
             ) : (
               <div />
             )}
-            <span className="text-sm text-muted-foreground">
-              Step {step} of {totalSteps}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                Step {step} of {totalSteps}
+              </span>
+              {onExit && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={onExit}
+                  className="gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                  Exit
+                </Button>
+              )}
+            </div>
           </div>
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div

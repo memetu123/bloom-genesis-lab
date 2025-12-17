@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Calendar, CalendarDays, User, Settings, Trash2, LogOut } from "lucide-react";
+import { Calendar, CalendarDays, User, Settings, Trash2, LogOut, Compass } from "lucide-react";
 import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -90,7 +90,12 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     {getUserInitials()}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="end" className="w-48 bg-popover border border-border shadow-md">
+                  <DropdownMenuItem onClick={() => navigate("/onboarding?guide=true")} className="cursor-pointer">
+                    <Compass className="h-4 w-4 mr-2" />
+                    Planning Guide
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/profile")} className="cursor-pointer">
                     <User className="h-4 w-4 mr-2" />
                     Profile

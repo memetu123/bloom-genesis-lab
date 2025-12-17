@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,13 +13,19 @@ import { OnboardingData } from "@/types/todayoum";
 /**
  * Onboarding Page - Multi-step onboarding flow
  * Guides new users through setting up pillars, vision, goals, and commitments
+ * Also serves as "Planning Guide" for returning users (accessed via ?guide=true)
  */
 const Onboarding = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { refetchAll } = useAppData();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  
+  // Check if this is Planning Guide mode (returning user)
+  const isPlanningGuide = searchParams.get("guide") === "true";
+  
   const [data, setData] = useState<OnboardingData>({
     selectedPillars: [],
     selectedPillarForVision: null,
@@ -29,6 +35,11 @@ const Onboarding = () => {
     ninetyDayGoal: null,
     commitments: []
   });
+
+  // Exit Planning Guide and return to dashboard
+  const handleExit = () => {
+    navigate("/dashboard");
+  };
 
   // Save all onboarding data to database
   const saveOnboardingData = async () => {
@@ -140,18 +151,20 @@ const Onboarding = () => {
 
       if (commitmentError) throw commitmentError;
 
-      // 7. Mark onboarding complete
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ onboarding_completed: true })
-        .eq("id", user.id);
+      // 7. Mark onboarding complete (only for first-time users)
+      if (!isPlanningGuide) {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({ onboarding_completed: true })
+          .eq("id", user.id);
 
-      if (profileError) throw profileError;
+        if (profileError) throw profileError;
+      }
 
       // Refresh global cache so new data appears immediately
       await refetchAll();
       
-      toast.success("Your life plan is ready!");
+      toast.success(isPlanningGuide ? "Plan added successfully!" : "Your life plan is ready!");
       navigate("/dashboard");
     } catch (error: any) {
       console.error("Onboarding save error:", error);
@@ -169,6 +182,8 @@ const Onboarding = () => {
           selectedPillars={data.selectedPillars}
           onSelect={(pillars) => setData({ ...data, selectedPillars: pillars })}
           onNext={() => setStep(2)}
+          onExit={isPlanningGuide ? handleExit : undefined}
+          isPlanningGuide={isPlanningGuide}
         />
       );
     case 2:
@@ -181,6 +196,7 @@ const Onboarding = () => {
           onSetVision={(vision) => setData({ ...data, vision })}
           onNext={() => setStep(3)}
           onBack={() => setStep(1)}
+          onExit={isPlanningGuide ? handleExit : undefined}
         />
       );
     case 3:
@@ -194,6 +210,7 @@ const Onboarding = () => {
           onSetGoal={(goal) => setData({ ...data, threeYearGoal: goal })}
           onNext={() => setStep(4)}
           onBack={() => setStep(2)}
+          onExit={isPlanningGuide ? handleExit : undefined}
         />
       );
     case 4:
@@ -208,6 +225,7 @@ const Onboarding = () => {
           onSetGoal={(goal) => setData({ ...data, oneYearGoal: goal })}
           onNext={() => setStep(5)}
           onBack={() => setStep(3)}
+          onExit={isPlanningGuide ? handleExit : undefined}
         />
       );
     case 5:
@@ -222,6 +240,7 @@ const Onboarding = () => {
           onSetGoal={(goal) => setData({ ...data, ninetyDayGoal: goal })}
           onNext={() => setStep(6)}
           onBack={() => setStep(4)}
+          onExit={isPlanningGuide ? handleExit : undefined}
         />
       );
     case 6:
@@ -234,6 +253,7 @@ const Onboarding = () => {
           onComplete={saveOnboardingData}
           onBack={() => setStep(5)}
           loading={saving}
+          onExit={isPlanningGuide ? handleExit : undefined}
         />
       );
     default:

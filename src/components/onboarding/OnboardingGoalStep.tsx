@@ -20,6 +20,7 @@ interface Props {
   onSetGoal: (goal: { title: string; description: string }) => void;
   onNext: () => void;
   onBack: () => void;
+  onExit?: () => void;
 }
 
 const GOAL_CONFIG = {
@@ -56,7 +57,8 @@ export function OnboardingGoalStep({
   goal,
   onSetGoal,
   onNext,
-  onBack
+  onBack,
+  onExit
 }: Props) {
   const [title, setTitle] = useState(goal?.title || "");
   const [description, setDescription] = useState(goal?.description || "");
@@ -123,6 +125,7 @@ export function OnboardingGoalStep({
       title={config.title}
       subtitle={config.subtitle}
       onBack={onBack}
+      onExit={onExit}
     >
       <div className="space-y-6">
         {/* Context from previous steps */}
