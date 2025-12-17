@@ -4,6 +4,7 @@ import { ChevronRight, ChevronLeft, ChevronDown, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useWeeklyData, DayTask, CommitmentData } from "@/hooks/useWeeklyData";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,12 +14,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "date-fns";
 import { formatWeekRange } from "@/lib/formatPreferences";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
 import NotionWeekCalendar from "@/components/weekly/NotionWeekCalendar";
+import MobileWeekList from "@/components/weekly/MobileWeekList";
 import WeeklyTotals from "@/components/weekly/WeeklyTotals";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
@@ -43,6 +51,7 @@ const Weekly = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { preferences, goals, visionsMap } = useAppData();
+  const isMobile = useIsMobile();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
   
   // Get active 90-day plan from URL
@@ -58,6 +67,9 @@ const Weekly = () => {
 
   // State for "other tasks" section when plan is active
   const [otherTasksExpanded, setOtherTasksExpanded] = useState(false);
+  
+  // Mobile plan selector sheet
+  const [mobilePlanSheetOpen, setMobilePlanSheetOpen] = useState(false);
   
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => 
     startOfWeek(new Date(), { weekStartsOn })
@@ -355,10 +367,75 @@ const Weekly = () => {
     </DropdownMenuContent>
   );
 
+  // Helper to select a plan (works for both mobile sheet and desktop dropdown)
+  const selectPlan = useCallback((planId: string | null) => {
+    if (planId) {
+      setSearchParams({ plan: planId });
+    } else {
+      setSearchParams({});
+    }
+    setMobilePlanSheetOpen(false);
+    setOtherTasksExpanded(false);
+  }, [setSearchParams]);
+
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      {/* 90-Day Plan Context Header - Active Plan */}
-      {activePlan && (
+    <div className="container mx-auto px-4 py-6 md:py-8 max-w-4xl overflow-x-hidden">
+      {/* Mobile Plan Selector Sheet */}
+      <Sheet open={mobilePlanSheetOpen} onOpenChange={setMobilePlanSheetOpen}>
+        <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto">
+          <SheetHeader className="text-left">
+            <SheetTitle>Select 90-Day Plan</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-1">
+            <button
+              onClick={() => selectPlan(null)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${!activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
+            >
+              <Check className={`h-4 w-4 ${!activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
+              <span className="text-sm font-medium">No plan (All tasks)</span>
+            </button>
+            
+            {Object.entries(groupedPlanOptions.groups).map(([visionId, group]) => (
+              <div key={visionId} className="pt-2">
+                <div className="px-4 py-2 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  {group.visionLabel}
+                </div>
+                {group.plans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => selectPlan(plan.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${plan.id === activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
+                  >
+                    <Check className={`h-4 w-4 ${plan.id === activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
+                    <span className="text-sm">{plan.title}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+            
+            {groupedPlanOptions.noVisionPlans.length > 0 && (
+              <div className="pt-2">
+                <div className="px-4 py-2 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  Other Plans
+                </div>
+                {groupedPlanOptions.noVisionPlans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => selectPlan(plan.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${plan.id === activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
+                  >
+                    <Check className={`h-4 w-4 ${plan.id === activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
+                    <span className="text-sm">{plan.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* 90-Day Plan Context Header - Desktop */}
+      {!isMobile && activePlan && (
         <div className="mb-4 flex items-center justify-between py-2 px-3 bg-muted/30 border border-border rounded-lg">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">90-Day Plan</span>
@@ -393,8 +470,8 @@ const Weekly = () => {
         </div>
       )}
 
-      {/* 90-Day Plan Context Header - No Plan Selected */}
-      {!activePlan && goalOptions.length > 0 && (
+      {/* 90-Day Plan Context Header - Desktop No Plan */}
+      {!isMobile && !activePlan && goalOptions.length > 0 && (
         <div className="mb-4 flex items-center justify-between py-2 px-3 border border-border/50 rounded-lg">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs text-muted-foreground/70 uppercase tracking-wide shrink-0">90-Day Plan</span>
@@ -414,18 +491,34 @@ const Weekly = () => {
         </div>
       )}
 
+      {/* Mobile Plan Selector Bar */}
+      {isMobile && goalOptions.length > 0 && (
+        <button
+          onClick={() => setMobilePlanSheetOpen(true)}
+          className="w-full mb-4 flex items-center justify-between py-3 px-4 bg-muted/30 border border-border rounded-lg min-h-[48px]"
+        >
+          <div className="flex flex-col items-start min-w-0">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">90-Day Plan</span>
+            <span className="text-sm font-medium text-foreground truncate">
+              {activePlan?.title || "All tasks"}
+            </span>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        </button>
+      )}
+
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-medium text-foreground">Weekly</h1>
+      <div className="mb-4 md:mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2 md:gap-4">
+          <h1 className={`font-medium text-foreground ${isMobile ? 'text-base' : 'text-lg'}`}>Weekly</h1>
           {weeklyProgress.total > 0 && (
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              {weeklyProgress.completed}/{weeklyProgress.total} completed
+              {weeklyProgress.completed}/{weeklyProgress.total}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!activePlanId && (
+          {!activePlanId && !isMobile && (
             <FocusFilter
               showFocusedOnly={showFocusedOnly}
               onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
@@ -439,16 +532,16 @@ const Weekly = () => {
       </div>
 
       {/* Week navigation */}
-      <div className="flex items-center justify-between mb-6 border-b border-border pb-4">
+      <div className="flex items-center justify-between mb-4 md:mb-6 border-b border-border pb-3 md:pb-4">
         <button
           onClick={goToPreviousWeek}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-calm"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-calm min-h-[44px] px-2 -ml-2"
         >
           <ChevronLeft className="h-4 w-4" />
-          Prev
+          {!isMobile && "Prev"}
         </button>
         <div className="text-center">
-          <h2 className="text-base font-medium text-foreground">
+          <h2 className={`font-medium text-foreground ${isMobile ? 'text-sm' : 'text-base'}`}>
             {weekRange}
           </h2>
           {!isCurrentWeek && (
@@ -456,40 +549,56 @@ const Weekly = () => {
               onClick={goToCurrentWeek}
               className="text-xs text-primary hover:underline mt-1"
             >
-              Go to current week
+              {isMobile ? "Today" : "Go to current week"}
             </button>
           )}
         </div>
         <button
           onClick={goToNextWeek}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-calm"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-calm min-h-[44px] px-2 -mr-2"
         >
-          Next
+          {!isMobile && "Next"}
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
 
-      {/* Calendar grid */}
-      <MemoizedCalendar
-        weekStart={currentWeekStart}
-        tasksByDate={filteredTasksByDate}
-        selectedDate={selectedDate}
-        onDateSelect={setSelectedDate}
-        onTaskClick={handleTaskClick}
-        onToggleComplete={handleToggleComplete}
-        weekStartsOn={weekStartsOn}
-        timeFormat={preferences.timeFormat}
-        dateFormat={preferences.dateFormat}
-        activePlanId={activePlanId}
-      />
+      {/* Calendar grid - Desktop */}
+      {!isMobile && (
+        <MemoizedCalendar
+          weekStart={currentWeekStart}
+          tasksByDate={filteredTasksByDate}
+          selectedDate={selectedDate}
+          onDateSelect={setSelectedDate}
+          onTaskClick={handleTaskClick}
+          onToggleComplete={handleToggleComplete}
+          weekStartsOn={weekStartsOn}
+          timeFormat={preferences.timeFormat}
+          dateFormat={preferences.dateFormat}
+          activePlanId={activePlanId}
+        />
+      )}
 
-      {/* Other tasks section (when plan is active) - simplified list */}
+      {/* Mobile Week List */}
+      {isMobile && (
+        <MobileWeekList
+          weekStart={currentWeekStart}
+          tasksByDate={filteredTasksByDate}
+          selectedDate={selectedDate}
+          onDateSelect={setSelectedDate}
+          onTaskClick={handleTaskClick}
+          onToggleComplete={handleToggleComplete}
+          timeFormat={preferences.timeFormat}
+          activePlanId={activePlanId}
+        />
+      )}
+
+      {/* Other tasks section (when plan is active) - collapsed by default, simplified list */}
       {activePlanId && otherTasksCount > 0 && (
         <div className="mt-6 border-t border-border/50 pt-4">
           <button
             onClick={() => setOtherTasksExpanded(!otherTasksExpanded)}
-            className="w-full text-left text-sm text-muted-foreground hover:text-foreground py-2 flex items-center gap-1 transition-colors"
+            className="w-full text-left text-sm text-muted-foreground hover:text-foreground py-2 flex items-center gap-1 transition-colors min-h-[44px]"
           >
             <ChevronDown 
               className={`h-4 w-4 transition-transform ${otherTasksExpanded ? 'rotate-180' : ''}`} 
@@ -503,17 +612,30 @@ const Weekly = () => {
                 tasks.map(task => (
                   <div 
                     key={task.id}
-                    className="flex items-center justify-between text-sm py-1 cursor-pointer hover:bg-muted/30 rounded px-2 -mx-2"
+                    className={`
+                      flex items-center justify-between py-2 cursor-pointer hover:bg-muted/30 rounded px-2 -mx-2
+                      ${isMobile ? 'min-h-[44px] text-sm' : 'text-sm py-1'}
+                    `}
                     onClick={() => handleTaskClick(task, new Date(dateKey))}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span 
-                        className={`w-3 h-3 rounded-full border shrink-0 ${task.isCompleted ? 'bg-primary border-primary' : 'border-border'}`}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <button 
+                        className={`
+                          shrink-0 rounded-full border-2 flex items-center justify-center
+                          ${isMobile ? 'w-5 h-5' : 'w-3 h-3'}
+                          ${task.isCompleted ? 'bg-primary border-primary' : 'border-border'}
+                        `}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleToggleComplete(task, new Date(dateKey));
                         }}
-                      />
+                      >
+                        {task.isCompleted && isMobile && (
+                          <svg className="w-2.5 h-2.5 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </button>
                       <span className={`truncate ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>
                         {task.title}
                       </span>
