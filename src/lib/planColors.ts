@@ -40,19 +40,19 @@ export function getPlanColor(planId: string): string {
 }
 
 /**
- * Get the background style for a plan (desktop - 4% opacity)
+ * Get the background style for a plan (desktop - 8% opacity for visibility)
  */
 export function getPlanBgStyle(planId: string): string {
   const color = getPlanColor(planId);
-  return `hsla(${color}, 0.04)`;
+  return `hsl(${color} / 0.08)`;
 }
 
 /**
- * Get the background style for a plan (mobile - 6% opacity)
+ * Get the background style for a plan (mobile - 12% opacity for visibility)
  */
 export function getPlanBgStyleMobile(planId: string): string {
   const color = getPlanColor(planId);
-  return `hsla(${color}, 0.06)`;
+  return `hsl(${color} / 0.12)`;
 }
 
 /**
