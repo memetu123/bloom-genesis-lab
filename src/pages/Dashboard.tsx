@@ -63,8 +63,16 @@ const Dashboard = () => {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [mobileSheetVision, setMobileSheetVision] = useState<VisionWithHierarchy | null>(null);
   
-  // Mobile FAB action sheet state
+  // Mobile FAB action sheet state - now vision-scoped
   const [fabSheetOpen, setFabSheetOpen] = useState(false);
+  const [fabScopedVision, setFabScopedVision] = useState<VisionWithHierarchy | null>(null);
+  
+  // Open vision-scoped add sheet
+  const openVisionScopedAddSheet = (vision: VisionWithHierarchy, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFabScopedVision(vision);
+    setFabSheetOpen(true);
+  };
 
   // Build focused visions with full hierarchy (no caps)
   const focusedVisions = useMemo((): VisionWithHierarchy[] => {
@@ -412,83 +420,100 @@ const Dashboard = () => {
     );
   };
 
-  // Mobile Vision Card - compact by default, expandable
+  // Mobile Vision Card - compact, focused, scannable
   const renderMobileVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
     const activePlan = getActive90DayPlan(vision.ninetyDay);
     const isExpanded = expandedVisionIds.has(vision.id);
     const active90Day = getActiveGoals(vision.ninetyDay);
+    const hasStrategy = vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 1;
+    const hasAnyGoals = vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 0;
 
     return (
       <Card 
         key={vision.id} 
         className={isMuted ? "border-muted/50 bg-muted/10" : "border-muted"}
       >
-        <CardContent className="p-4">
-          {/* Mobile Vision Header - Tappable */}
-          <div 
-            className="flex items-start justify-between gap-2"
-            onClick={(e) => openMobileVisionActions(vision, e)}
-          >
-            <div className="flex-1 min-w-0">
+        <CardContent className="p-3">
+          {/* Mobile Vision Header */}
+          <div className="flex items-start justify-between gap-2">
+            <div 
+              className="flex-1 min-w-0"
+              onClick={(e) => openMobileVisionActions(vision, e)}
+            >
               <h2 
                 className={`text-base font-semibold truncate ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
               >
                 {vision.title}
               </h2>
               {vision.pillar_name && (
-                <span className="text-xs text-muted-foreground mt-0.5 block">
+                <span className="text-[11px] text-muted-foreground/70 mt-0.5 block">
                   {vision.pillar_name}
                 </span>
               )}
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleToggleFocus(vision.id, vision.is_focus);
-              }}
-              className={`p-1 transition-colors cursor-pointer shrink-0 ${
-                vision.is_focus 
-                  ? "text-primary" 
-                  : "text-muted-foreground/50"
-              }`}
-            >
-              <Star className={`h-4 w-4 ${vision.is_focus ? "fill-current" : ""}`} />
-            </button>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                onClick={(e) => openVisionScopedAddSheet(vision, e)}
+                className="p-1.5 text-muted-foreground/60 hover:text-primary transition-colors"
+                aria-label="Add goal to this vision"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleFocus(vision.id, vision.is_focus);
+                }}
+                className={`p-1 transition-colors cursor-pointer ${
+                  vision.is_focus 
+                    ? "text-primary" 
+                    : "text-muted-foreground/40"
+                }`}
+              >
+                <Star className={`h-4 w-4 ${vision.is_focus ? "fill-current" : ""}`} />
+              </button>
+            </div>
           </div>
 
-          {/* Mobile: Show only active 90-day by default */}
+          {/* Mobile: Active 90-day plan (default collapsed view) */}
           {!isExpanded && active90Day.length > 0 && (
-            <div className="mt-3 pl-0">
-              {active90Day.slice(0, 1).map(goal => (
-                <div 
-                  key={goal.id}
-                  className="flex items-center justify-between text-sm border-l-2 border-primary/30 pl-2 py-1"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/weekly?plan=${goal.id}`);
-                  }}
-                >
-                  <span className={`font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
-                    {goal.title}
-                  </span>
-                  <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted/50 rounded">
-                    {getGoalStatusLabel(goal.status)}
-                  </span>
-                </div>
-              ))}
+            <div 
+              className="mt-2.5 border-l-2 border-primary/40 pl-2.5 py-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/weekly?plan=${active90Day[0].id}`);
+              }}
+            >
+              <span className={`text-sm font-medium block ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
+                {active90Day[0].title}
+              </span>
+              <span className="text-[11px] text-muted-foreground/70">
+                {getGoalStatusLabel(active90Day[0].status)} · 90-day plan
+              </span>
             </div>
           )}
 
-          {/* Mobile: Expanded hierarchy - refined tinting and spacing */}
+          {/* Mobile: Empty state - directional copy */}
+          {!isExpanded && !hasAnyGoals && (
+            <button
+              onClick={(e) => openVisionScopedAddSheet(vision, e)}
+              className="mt-2.5 text-sm text-muted-foreground/70 hover:text-primary inline-flex items-center gap-1 transition-colors"
+            >
+              Add your first goal
+              <ArrowRight className="h-3 w-3" />
+            </button>
+          )}
+
+          {/* Mobile: Expanded hierarchy - clean, no tints */}
           {isExpanded && (
-            <div className="mt-3 space-y-3">
-              {/* 3-Year Direction - NO tint, neutral on mobile */}
+            <div className="mt-2.5 space-y-2.5">
+              {/* 3-Year Direction */}
               {vision.threeYear.length > 0 && (
-                <div className="px-1">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
+                <div>
+                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
                     3-Year Direction
                   </span>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {vision.threeYear.map(goal => (
                       <p 
                         key={goal.id} 
@@ -505,97 +530,75 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* 1-Year Goals - Tinted with top divider, no bullets on mobile */}
+              {/* 1-Year Goals */}
               {vision.oneYear.length > 0 && (
-                <div className="bg-section-tint/[0.08] rounded-md pt-0 overflow-hidden">
-                  <div className="border-t border-muted-foreground/10" />
-                  <div className="p-3 pt-2">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
-                      1-Year Goals
-                    </span>
-                    <div className="space-y-1.5">
-                      {vision.oneYear.map(goal => (
-                        <p 
-                          key={goal.id} 
-                          className="text-sm text-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/goal/${goal.id}`);
-                          }}
-                        >
-                          {goal.title}
-                        </p>
-                      ))}
-                    </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
+                    1-Year Goals
+                  </span>
+                  <div className="space-y-1">
+                    {vision.oneYear.map(goal => (
+                      <p 
+                        key={goal.id} 
+                        className="text-sm text-foreground/80"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/goal/${goal.id}`);
+                        }}
+                      >
+                        {goal.title}
+                      </p>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* 90-Day Commitments - Stronger tint with top divider, no bullets on mobile */}
+              {/* 90-Day Commitments */}
               {vision.ninetyDay.length > 0 && (
-                <div className="bg-section-tint/[0.12] rounded-md pt-0 overflow-hidden">
-                  <div className="border-t border-muted-foreground/10" />
-                  <div className="p-3 pt-2">
-                    <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-1.5">
-                      90-Day Commitments
-                    </span>
-                    <div className="space-y-1.5">
-                      {vision.ninetyDay.map(goal => (
-                        <div 
-                          key={goal.id} 
-                          className="flex items-center justify-between text-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/weekly?plan=${goal.id}`);
-                          }}
-                        >
-                          <span className="font-medium">{goal.title}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {getGoalStatusLabel(goal.status)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
+                    90-Day Plans
+                  </span>
+                  <div className="space-y-1">
+                    {vision.ninetyDay.map(goal => (
+                      <div 
+                        key={goal.id} 
+                        className="flex items-center justify-between text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/weekly?plan=${goal.id}`);
+                        }}
+                      >
+                        <span className="text-foreground/90">{goal.title}</span>
+                        <span className="text-[10px] text-muted-foreground/60">
+                          {getGoalStatusLabel(goal.status)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Mobile: View strategy toggle */}
-          {(vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 1) && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleVisionExpanded(vision.id);
-              }}
-              className="mt-3 text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-            >
-              {isExpanded ? (
-                <>
-                  Hide strategy
-                  <ChevronDown className="h-3 w-3 rotate-180" />
-                </>
-              ) : (
-                <>
-                  View strategy
-                  <ChevronRight className="h-3 w-3" />
-                </>
-              )}
-            </button>
-          )}
+          {/* Mobile: Actions row - tighter spacing */}
+          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-muted/50">
+            {/* Secondary: View full strategy */}
+            {hasStrategy && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleVisionExpanded(vision.id);
+                }}
+                className="text-xs text-muted-foreground/60 hover:text-muted-foreground inline-flex items-center gap-0.5 transition-colors"
+              >
+                {isExpanded ? "Hide strategy" : "View full strategy"}
+                <ChevronRight className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+              </button>
+            )}
+            {!hasStrategy && <span />}
 
-          {/* Empty state */}
-          {vision.threeYear.length === 0 && 
-           vision.oneYear.length === 0 && 
-           vision.ninetyDay.length === 0 && (
-            <p className="text-sm text-muted-foreground mt-3">
-              Add a goal when it feels right
-            </p>
-          )}
-
-          {/* Mobile: Plan this week action */}
-          <div className="pt-3 mt-3 border-t border-muted">
+            {/* Primary: Plan this week */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -605,10 +608,10 @@ const Dashboard = () => {
                   navigate("/weekly");
                 }
               }}
-              className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+              className="text-sm font-medium text-primary hover:text-primary/80 inline-flex items-center gap-1 transition-colors"
             >
               Plan this week
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </CardContent>
@@ -691,59 +694,52 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* ========== MOBILE FAB ========== */}
+      {/* ========== MOBILE GLOBAL FAB (for adding new vision only) ========== */}
       {isMobile && (
         <button
-          onClick={() => setFabSheetOpen(true)}
-          className="fixed bottom-20 right-4 w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center z-40 hover:bg-primary/90 transition-colors"
-          aria-label="Add new item"
+          onClick={() => setAddDialogOpen(true)}
+          className="fixed bottom-20 right-4 w-12 h-12 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center z-40 hover:bg-primary/90 transition-colors"
+          aria-label="Add new vision"
         >
-          <Plus className="h-6 w-6" />
+          <Plus className="h-5 w-5" />
         </button>
       )}
 
-      {/* ========== MOBILE FAB ACTION SHEET ========== */}
+      {/* ========== MOBILE VISION-SCOPED ADD SHEET ========== */}
       <Sheet open={fabSheetOpen} onOpenChange={setFabSheetOpen}>
         <SheetContent side="bottom" className="rounded-t-xl">
           <SheetHeader>
-            <SheetTitle>Add new</SheetTitle>
+            <SheetTitle className="truncate text-left">
+              Add to "{fabScopedVision?.title}"
+            </SheetTitle>
           </SheetHeader>
-          <div className="py-4 space-y-1">
+          <div className="py-3 space-y-0.5">
             <button
               onClick={() => {
                 setFabSheetOpen(false);
-                setAddDialogOpen(true);
+                navigate(`/goal/new?type=three_year&vision=${fabScopedVision?.id}`);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
-              Add vision
+              Add 3-Year Goal
             </button>
             <button
               onClick={() => {
                 setFabSheetOpen(false);
-                navigate("/goal/new?type=three_year");
+                navigate(`/goal/new?type=one_year&vision=${fabScopedVision?.id}`);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
-              Add 3-Year goal
+              Add 1-Year Goal
             </button>
             <button
               onClick={() => {
                 setFabSheetOpen(false);
-                navigate("/goal/new?type=one_year");
+                navigate(`/goal/new?type=ninety_day&vision=${fabScopedVision?.id}`);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
-              Add 1-Year goal
-            </button>
-            <button
-              onClick={() => {
-                setFabSheetOpen(false);
-                navigate("/goal/new?type=ninety_day");
-              }}
-              className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
-            >
-              Add 90-Day plan
+              Add 90-Day Plan
             </button>
           </div>
         </SheetContent>
