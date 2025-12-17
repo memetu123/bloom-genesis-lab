@@ -297,6 +297,22 @@ const Weekly = () => {
     return { groups, noVisionPlans };
   }, [goalOptions]);
 
+  // Map of 90-day plan IDs to their titles (for tooltips)
+  const planTitles = useMemo(() => {
+    const map = new Map<string, string>();
+    goalOptions.forEach(plan => map.set(plan.id, plan.title));
+    return map;
+  }, [goalOptions]);
+
+  // Map of commitment IDs to their linked goal IDs (for plan tinting)
+  const commitmentGoalMap = useMemo(() => {
+    const map = new Map<string, string>();
+    commitments.forEach(c => {
+      if (c.goal_id) map.set(c.id, c.goal_id);
+    });
+    return map;
+  }, [commitments]);
+
   // Get plan commitment IDs for visual indicators
   const getPlanIndicator = useCallback((task: DayTask) => {
     if (!activePlanId) return false;
@@ -565,7 +581,7 @@ const Weekly = () => {
       </div>
 
 
-      {/* Calendar grid - Desktop */}
+       {/* Calendar grid - Desktop */}
       {!isMobile && (
         <MemoizedCalendar
           weekStart={currentWeekStart}
@@ -578,6 +594,8 @@ const Weekly = () => {
           timeFormat={preferences.timeFormat}
           dateFormat={preferences.dateFormat}
           activePlanId={activePlanId}
+          planTitles={planTitles}
+          commitmentGoalMap={commitmentGoalMap}
         />
       )}
 
@@ -592,6 +610,8 @@ const Weekly = () => {
           onToggleComplete={handleToggleComplete}
           timeFormat={preferences.timeFormat}
           activePlanId={activePlanId}
+          planTitles={planTitles}
+          commitmentGoalMap={commitmentGoalMap}
         />
       )}
 
