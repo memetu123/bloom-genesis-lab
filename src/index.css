@@ -69,6 +69,9 @@
     --sand: 35 25% 90%;
     --warm-gray: 30 8% 60%;
     --off-white: 40 20% 98%;
+    
+    /* Section tint for Dashboard hierarchy - warm stone/sand neutral #F3F1ED */
+    --section-tint: 40 18% 94%;
   }
 
   .dark {
@@ -116,6 +119,9 @@
     --sand: 30 8% 20%;
     --warm-gray: 30 10% 45%;
     --off-white: 30 10% 12%;
+    
+    /* Section tint for Dashboard hierarchy - darker for dark mode */
+    --section-tint: 30 10% 15%;
   }
 }
 
