@@ -22,7 +22,7 @@ interface AppLayoutProps {
 }
 
 const navItems = [
-  { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  { label: "North Star", path: "/dashboard", icon: LayoutDashboard },
   { label: "Weekly", path: "/weekly", icon: Calendar },
   { label: "Daily", path: "/daily", icon: CalendarDays },
 ];
