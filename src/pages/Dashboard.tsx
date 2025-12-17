@@ -324,19 +324,18 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* 3-Year Direction - NO tint, neutral */}
+          {/* 3-Year Direction - NO tint, neutral context */}
           {limited3Year.length > 0 && (
-            <div className="mb-4">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
+            <div className="mb-3">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
                 3-Year Direction
               </span>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {limited3Year.map(goal => (
                   <p 
                     key={goal.id} 
-                    className={`text-sm flex items-baseline gap-1.5 ${isMuted ? "text-muted-foreground/70" : "text-muted-foreground"}`}
+                    className={`text-sm ${isMuted ? "text-muted-foreground/70" : "text-muted-foreground"}`}
                   >
-                    <span className="text-muted-foreground/40 text-xs">→</span>
                     <span 
                       className="hover:text-foreground cursor-pointer transition-colors"
                       onClick={() => navigate(`/goal/${goal.id}`)}
@@ -346,7 +345,7 @@ const Dashboard = () => {
                   </p>
                 ))}
                 {hasMore3Year && (
-                  <p className="text-xs text-muted-foreground/60 ml-4">
+                  <p className="text-xs text-muted-foreground/60">
                     +{more3YearCount} more
                   </p>
                 )}
@@ -354,62 +353,52 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* 1-Year Goals - Tinted with top divider */}
+          {/* 1-Year Goals - Light tint */}
           {active1Year.length > 0 && (
-            <div className="mb-4 bg-section-tint/[0.06] rounded-md pt-0 overflow-hidden">
-              <div className="border-t border-muted-foreground/10" />
-              <div className="p-3 pt-2.5">
-                <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
-                  1-Year Goals
-                </span>
-                <ul className="space-y-1.5">
-                  {active1Year.map(goal => (
-                    <li 
-                      key={goal.id} 
-                      className={`text-sm flex items-baseline gap-2 ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
+            <div className="mb-3 bg-muted/40 rounded-lg p-3">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
+                1-Year Goals
+              </span>
+              <ul className="space-y-1">
+                {active1Year.map(goal => (
+                  <li 
+                    key={goal.id} 
+                    className={`text-sm ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
+                  >
+                    <span 
+                      className="hover:text-primary cursor-pointer transition-colors"
+                      onClick={() => navigate(`/goal/${goal.id}`)}
                     >
-                      <span className="text-muted-foreground/50 text-xs leading-none">•</span>
-                      <span 
-                        className="hover:text-primary cursor-pointer transition-colors"
-                        onClick={() => navigate(`/goal/${goal.id}`)}
-                      >
-                        {goal.title}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                      {goal.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          {/* 90-Day Commitments - Stronger tint with top divider */}
+          {/* 90-Day Commitments - Stronger tint */}
           {active90Day.length > 0 && (
-            <div className="mb-3 bg-section-tint/[0.10] rounded-md pt-0 overflow-hidden">
-              <div className="border-t border-muted-foreground/10" />
-              <div className="p-3 pt-2.5">
-                <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-2">
-                  90-Day Commitments
-                </span>
-                <ul className="space-y-1.5">
-                  {active90Day.map(goal => (
-                    <li 
-                      key={goal.id} 
-                      className="flex items-baseline gap-2 cursor-pointer hover:bg-muted/30 rounded-md p-1.5 -ml-1.5 transition-colors"
-                      onClick={() => navigate(`/weekly?plan=${goal.id}`)}
-                    >
-                      <span className="text-muted-foreground/50 text-xs leading-none">•</span>
-                      <span className="flex-1 flex items-center justify-between">
-                        <span className={`text-sm font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
-                          {goal.title}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {getGoalStatusLabel(goal.status)}
-                        </span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            <div className="mb-2 bg-muted/60 rounded-lg p-3">
+              <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-1.5">
+                90-Day Commitments
+              </span>
+              <ul className="space-y-1">
+                {active90Day.map(goal => (
+                  <li 
+                    key={goal.id} 
+                    className="flex items-center justify-between cursor-pointer hover:bg-background/50 rounded p-1 -m-1 transition-colors"
+                    onClick={() => navigate(`/weekly?plan=${goal.id}`)}
+                  >
+                    <span className={`text-sm font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
+                      {goal.title}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {getGoalStatusLabel(goal.status)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -527,16 +516,16 @@ const Dashboard = () => {
             </button>
           )}
 
-          {/* Mobile: Expanded hierarchy - clean, no tints */}
+          {/* Mobile: Expanded hierarchy - selective tints */}
           {isExpanded && (
-            <div className="mt-2.5 space-y-2.5">
-              {/* 3-Year Direction */}
+            <div className="mt-2 space-y-2">
+              {/* 3-Year Direction - NO tint */}
               {vision.threeYear.length > 0 && (
                 <div>
                   <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
                     3-Year Direction
                   </span>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {vision.threeYear.map(goal => (
                       <p 
                         key={goal.id} 
@@ -553,13 +542,13 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* 1-Year Goals */}
+              {/* 1-Year Goals - Light tint */}
               {vision.oneYear.length > 0 && (
-                <div>
+                <div className="bg-muted/40 rounded-lg p-2.5">
                   <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
                     1-Year Goals
                   </span>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {vision.oneYear.map(goal => (
                       <p 
                         key={goal.id} 
@@ -576,13 +565,13 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* 90-Day Commitments */}
+              {/* 90-Day Commitments - Stronger tint */}
               {vision.ninetyDay.length > 0 && (
-                <div>
+                <div className="bg-muted/60 rounded-lg p-2.5">
                   <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
                     90-Day Plans
                   </span>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {vision.ninetyDay.map(goal => (
                       <div 
                         key={goal.id} 
