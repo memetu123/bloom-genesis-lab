@@ -5,8 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { OnboardingLayout } from "./OnboardingLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, RefreshCw, Sparkles, AlertCircle, Check } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Loader2, RefreshCw, ChevronRight } from "lucide-react";
 
 /**
  * OnboardingVisionStep - Step 2: Select a pillar and create a vision
@@ -23,24 +22,15 @@ interface Props {
   onExit?: () => void;
 }
 
-interface VisionOption {
-  text: string;
-  style: "aspirational" | "balanced" | "concrete";
-  why_it_works: string;
-}
-
-interface CoachSuggestions {
-  clarifying_question: string | null;
-  recommended: { text: string; rationale: string };
-  options: VisionOption[];
-  do_not_do?: string[];
-}
-
-const styleLabels: Record<string, { label: string; className: string }> = {
-  aspirational: { label: "Aspirational", className: "bg-primary/10 text-primary border-primary/20" },
-  balanced: { label: "Balanced", className: "bg-accent text-accent-foreground border-accent" },
-  concrete: { label: "Concrete", className: "bg-muted text-muted-foreground border-muted" },
-};
+// Reflective prompts for the coaching flow - rotated one at a time
+const coachPrompts = [
+  "Who do you want to become in this area over the long term?",
+  "What would 'doing well' here look like in everyday life?",
+  "What feels missing today that you'd like to change?",
+  "What would future-you thank you for building here?",
+  "What small shifts would make a real difference over time?",
+  "If this area were thriving, how would you know?",
+];
 
 export function OnboardingVisionStep({
   pillars,
@@ -57,10 +47,9 @@ export function OnboardingVisionStep({
   const [aiExample, setAiExample] = useState<string | null>(null);
   const [isLoadingExample, setIsLoadingExample] = useState(false);
 
-  // Coach state
-  const [isLoadingCoach, setIsLoadingCoach] = useState(false);
-  const [coachError, setCoachError] = useState<string | null>(null);
-  const [coachSuggestions, setCoachSuggestions] = useState<CoachSuggestions | null>(null);
+  // Coach state - simple prompt cycling
+  const [showCoach, setShowCoach] = useState(false);
+  const [promptIndex, setPromptIndex] = useState(0);
 
   // Function to fetch AI-generated example
   const fetchExample = useCallback(async () => {
@@ -96,10 +85,10 @@ export function OnboardingVisionStep({
     }
   }, [selectedPillar, fetchExample]);
 
-  // Clear coach suggestions when pillar changes
+  // Reset coach when pillar changes
   useEffect(() => {
-    setCoachSuggestions(null);
-    setCoachError(null);
+    setShowCoach(false);
+    setPromptIndex(0);
   }, [selectedPillar]);
 
   const handleNext = () => {
@@ -109,51 +98,13 @@ export function OnboardingVisionStep({
     }
   };
 
-  const fetchCoachSuggestions = async () => {
-    if (!title.trim()) return;
-
-    setIsLoadingCoach(true);
-    setCoachError(null);
-    setCoachSuggestions(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("coach-vision-phrasing", {
-        body: {
-          draft: title.trim(),
-          pillar: selectedPillar,
-        }
-      });
-
-      if (error) {
-        console.error("Coach error:", error);
-        setCoachError(error.message || "Failed to get suggestions");
-        return;
-      }
-
-      if (data?.error) {
-        setCoachError(data.error);
-        return;
-      }
-
-      setCoachSuggestions(data);
-    } catch (err) {
-      console.error("Failed to fetch coach suggestions:", err);
-      setCoachError("Something went wrong. Please try again.");
-    } finally {
-      setIsLoadingCoach(false);
-    }
-  };
-
-  const handleSelectSuggestion = (text: string) => {
-    setTitle(text);
-    setCoachSuggestions(null);
+  const handleNextPrompt = () => {
+    setPromptIndex((prev) => (prev + 1) % coachPrompts.length);
   };
 
   const placeholder = aiExample 
     ? `e.g., ${aiExample}` 
     : "e.g., Become fluent in a new language";
-
-  const canUseCoach = title.trim().length > 0;
 
   return (
     <OnboardingLayout
@@ -164,10 +115,10 @@ export function OnboardingVisionStep({
       onBack={onBack}
       onExit={onExit}
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Pillar selection */}
         <div>
-          <label className="text-sm font-medium text-foreground mb-3 block">
+          <label className="text-sm font-medium text-foreground mb-2 block">
             Which pillar would you like to start with?
           </label>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -191,8 +142,8 @@ export function OnboardingVisionStep({
 
         {/* Vision form - only shown when pillar selected */}
         {selectedPillar && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="space-y-2">
+          <div className="space-y-3 animate-fade-in">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label htmlFor="visionTitle" className="text-sm font-medium text-foreground">
                   Your vision for {selectedPillar}
@@ -219,150 +170,46 @@ export function OnboardingVisionStep({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Describe who you want to become in this area of life
-                </p>
-                {/* Planning Coach Button */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={fetchCoachSuggestions}
-                  disabled={!canUseCoach || isLoadingCoach}
-                  className="h-7 text-xs text-primary hover:text-primary/80 hover:bg-primary/5"
-                >
-                  {isLoadingCoach ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  ) : (
-                    <Sparkles className="h-3 w-3 mr-1" />
-                  )}
-                  Rewrite with Planning Coach
-                </Button>
-              </div>
-              {!canUseCoach && !coachSuggestions && (
-                <p className="text-xs text-muted-foreground/60 text-right">
-                  Write a rough draft first
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                Describe who you want to become in this area of life
+              </p>
             </div>
 
-            {/* Coach Error State */}
-            {coachError && (
-              <Card className="border-destructive/50 bg-destructive/5">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm text-destructive">{coachError}</p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={fetchCoachSuggestions}
-                        className="mt-2 h-7 text-xs"
-                      >
-                        <RefreshCw className="h-3 w-3 mr-1" />
-                        Retry
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Coach Suggestions Panel */}
-            {coachSuggestions && (
-              <div className="space-y-4 animate-fade-in">
-                {/* Clarifying Question */}
-                {coachSuggestions.clarifying_question && (
-                  <Card className="border-primary/20 bg-primary/5">
-                    <CardContent className="p-4">
-                      <p className="text-sm text-foreground">
-                        💭 {coachSuggestions.clarifying_question}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Recommended Option */}
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-                    Recommended
-                  </p>
-                  <Card
-                    className="cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/50 transition-calm"
-                    onClick={() => handleSelectSuggestion(coachSuggestions.recommended.text)}
+            {/* Lightweight Coach - optional guidance */}
+            {!showCoach ? (
+              <button
+                type="button"
+                onClick={() => setShowCoach(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Need help phrasing this?
+              </button>
+            ) : (
+              <div className="rounded-md bg-muted/50 px-3 py-2.5 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {coachPrompts[promptIndex]}
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleNextPrompt}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
                   >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-foreground">
-                            {coachSuggestions.recommended.text}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {coachSuggestions.recommended.rationale}
-                          </p>
-                        </div>
-                        <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                      </div>
-                    </CardContent>
-                  </Card>
+                    Next question
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCoach(false)}
+                    className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                  >
+                    Hide
+                  </button>
                 </div>
-
-                {/* Other Options */}
-                {coachSuggestions.options.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-                      Other options
-                    </p>
-                    <div className="space-y-2">
-                      {coachSuggestions.options.map((option, index) => (
-                        <Card
-                          key={index}
-                          className="cursor-pointer hover:border-primary/30 transition-calm"
-                          onClick={() => handleSelectSuggestion(option.text)}
-                        >
-                          <CardContent className="p-3">
-                            <div className="flex items-start gap-2">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <p className="text-sm text-foreground">{option.text}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge 
-                                    variant="outline" 
-                                    className={`text-[10px] px-1.5 py-0 ${styleLabels[option.style]?.className || ""}`}
-                                  >
-                                    {styleLabels[option.style]?.label || option.style}
-                                  </Badge>
-                                  <p className="text-xs text-muted-foreground">
-                                    {option.why_it_works}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Dismiss */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCoachSuggestions(null)}
-                  className="text-xs text-muted-foreground"
-                >
-                  Dismiss suggestions
-                </Button>
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label htmlFor="visionDescription" className="text-sm font-medium text-foreground">
                 Why is this important to you? (optional)
               </label>
@@ -378,7 +225,7 @@ export function OnboardingVisionStep({
         )}
 
         {/* Continue button */}
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end pt-2">
           <Button onClick={handleNext} disabled={!selectedPillar || !title.trim()}>
             Continue
           </Button>
