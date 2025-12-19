@@ -75,7 +75,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     item.path === "/dashboard" && "mr-2"
                   )}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className={item.path === "/dashboard" ? "h-5 w-5" : "h-4 w-4"} />
                   {item.label}
                 </button>
               ))}
@@ -131,7 +131,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     : "text-muted-foreground"
                 )}
               >
-                <item.icon className="h-4 w-4" />
+                <item.icon className={item.path === "/dashboard" ? "h-5 w-5" : "h-4 w-4"} />
                 {item.label}
               </button>
             ))}
