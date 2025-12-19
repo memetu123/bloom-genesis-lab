@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.generate-vision-example]
 verify_jwt = true
+
+[functions.coach-vision-phrasing]
+verify_jwt = true
