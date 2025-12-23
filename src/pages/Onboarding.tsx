@@ -47,7 +47,7 @@ const Onboarding = () => {
     setSaving(true);
 
     try {
-      // 1. Create all pillars
+      // 1. Create or update pillars (upsert to handle Planning Guide re-runs)
       const pillarInserts = data.selectedPillars.map((p, index) => ({
         user_id: user.id,
         name: p.name,
@@ -55,15 +55,18 @@ const Onboarding = () => {
         sort_order: index
       }));
 
-      const { data: insertedPillars, error: pillarError } = await supabase
+      const { data: upsertedPillars, error: pillarError } = await supabase
         .from("pillars")
-        .insert(pillarInserts)
+        .upsert(pillarInserts, { 
+          onConflict: 'user_id,name',
+          ignoreDuplicates: false 
+        })
         .select();
 
       if (pillarError) throw pillarError;
 
-      // Find the pillar we created vision for
-      const focusPillar = insertedPillars?.find(p => p.name === data.selectedPillarForVision);
+      // Find the pillar for the vision (from upserted results)
+      const focusPillar = upsertedPillars?.find(p => p.name === data.selectedPillarForVision);
       if (!focusPillar || !data.vision) throw new Error("Missing pillar or vision data");
 
       // 2. Create vision
