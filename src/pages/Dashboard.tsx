@@ -63,16 +63,6 @@ const Dashboard = () => {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [mobileSheetVision, setMobileSheetVision] = useState<VisionWithHierarchy | null>(null);
   
-  // Mobile FAB action sheet state - now vision-scoped
-  const [fabSheetOpen, setFabSheetOpen] = useState(false);
-  const [fabScopedVision, setFabScopedVision] = useState<VisionWithHierarchy | null>(null);
-  
-  // Open vision-scoped add sheet
-  const openVisionScopedAddSheet = (vision: VisionWithHierarchy, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setFabScopedVision(vision);
-    setFabSheetOpen(true);
-  };
 
   // Build focused visions with full hierarchy (no caps)
   const focusedVisions = useMemo((): VisionWithHierarchy[] => {
@@ -256,29 +246,7 @@ const Dashboard = () => {
                   {vision.pillar_name}
                 </span>
               )}
-              {/* Per-vision add dropdown (desktop) */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-1 text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer"
-                    aria-label={`Add to ${vision.title}`}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-popover border border-border shadow-md">
-                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=three_year&vision=${vision.id}`)}>
-                    Add 3-Year Goal
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=one_year&vision=${vision.id}`)}>
-                    Add 1-Year Goal
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=ninety_day&vision=${vision.id}`)}>
-                    Add 90-Day Plan
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Focus toggle (star icon) - standalone */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -290,31 +258,51 @@ const Dashboard = () => {
                     : "text-muted-foreground/50 hover:text-primary"
                 }`}
                 title={vision.is_focus ? "Remove from focus" : "Add to focus"}
+                aria-label={vision.is_focus ? "Remove from focus" : "Add to focus"}
               >
                 <Star className={`h-4 w-4 ${vision.is_focus ? "fill-current" : ""}`} />
               </button>
+              {/* Overflow menu (•••) - single entry point for all actions */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    aria-label={`Actions for ${vision.title}`}
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-popover border border-border shadow-md">
+                <DropdownMenuContent align="end" className="bg-popover border border-border shadow-md w-48">
+                  {/* Section 1: Add */}
+                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=three_year&vision=${vision.id}`)}>
+                    Add 3-Year Goal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=one_year&vision=${vision.id}`)}>
+                    Add 1-Year Goal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(`/goal/new?type=ninety_day&vision=${vision.id}`)}>
+                    Add 90-Day Plan
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {/* Section 2: Edit */}
                   <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
                     Edit vision
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {/* Section 3: Destructive */}
                   <DropdownMenuItem 
                     onClick={() => handleArchiveVision(vision.id)}
                     className="text-muted-foreground"
                   >
-                    Archive
+                    Archive vision
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem 
-                    onClick={() => handleDeleteVision(vision.id)}
+                    onClick={() => {
+                      if (confirm("Are you sure you want to delete this vision? This action cannot be undone.")) {
+                        handleDeleteVision(vision.id);
+                      }
+                    }}
                     className="text-destructive focus:text-destructive"
                   >
                     Delete vision
@@ -464,25 +452,28 @@ const Dashboard = () => {
               )}
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
-              <button
-                onClick={(e) => openVisionScopedAddSheet(vision, e)}
-                className="p-1.5 text-muted-foreground/60 hover:text-primary transition-colors"
-                aria-label={`Add to ${vision.title}`}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+              {/* Focus toggle (star icon) - standalone */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   handleToggleFocus(vision.id, vision.is_focus);
                 }}
-                className={`p-1 transition-colors cursor-pointer ${
+                className={`p-1.5 transition-colors cursor-pointer ${
                   vision.is_focus 
                     ? "text-primary" 
                     : "text-muted-foreground/40"
                 }`}
+                aria-label={vision.is_focus ? "Remove from focus" : "Add to focus"}
               >
                 <Star className={`h-4 w-4 ${vision.is_focus ? "fill-current" : ""}`} />
+              </button>
+              {/* Overflow menu (•••) - single entry point for all actions */}
+              <button
+                onClick={(e) => openMobileVisionActions(vision, e)}
+                className="p-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                aria-label={`Actions for ${vision.title}`}
+              >
+                <MoreHorizontal className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -508,7 +499,7 @@ const Dashboard = () => {
           {/* Mobile: Empty state - directional copy */}
           {!isExpanded && !hasAnyGoals && (
             <button
-              onClick={(e) => openVisionScopedAddSheet(vision, e)}
+              onClick={(e) => openMobileVisionActions(vision, e)}
               className="mt-2.5 text-sm text-muted-foreground/70 hover:text-primary inline-flex items-center gap-1 transition-colors"
             >
               Add your first goal
@@ -717,19 +708,20 @@ const Dashboard = () => {
         </button>
       )}
 
-      {/* ========== MOBILE VISION-SCOPED ADD SHEET ========== */}
-      <Sheet open={fabSheetOpen} onOpenChange={setFabSheetOpen}>
+
+
+      {/* ========== MOBILE VISION ACTION SHEET ========== */}
+      <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
         <SheetContent side="bottom" className="rounded-t-xl">
           <SheetHeader>
-            <SheetTitle className="truncate text-left">
-              Add to "{fabScopedVision?.title}"
-            </SheetTitle>
+            <SheetTitle className="truncate text-left">{mobileSheetVision?.title}</SheetTitle>
           </SheetHeader>
           <div className="py-3 space-y-0.5">
+            {/* Section 1: Add */}
             <button
               onClick={() => {
-                setFabSheetOpen(false);
-                navigate(`/goal/new?type=three_year&vision=${fabScopedVision?.id}`);
+                setMobileSheetOpen(false);
+                navigate(`/goal/new?type=three_year&vision=${mobileSheetVision?.id}`);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
@@ -737,8 +729,8 @@ const Dashboard = () => {
             </button>
             <button
               onClick={() => {
-                setFabSheetOpen(false);
-                navigate(`/goal/new?type=one_year&vision=${fabScopedVision?.id}`);
+                setMobileSheetOpen(false);
+                navigate(`/goal/new?type=one_year&vision=${mobileSheetVision?.id}`);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
@@ -746,24 +738,15 @@ const Dashboard = () => {
             </button>
             <button
               onClick={() => {
-                setFabSheetOpen(false);
-                navigate(`/goal/new?type=ninety_day&vision=${fabScopedVision?.id}`);
+                setMobileSheetOpen(false);
+                navigate(`/goal/new?type=ninety_day&vision=${mobileSheetVision?.id}`);
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
               Add 90-Day Plan
             </button>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* ========== MOBILE VISION ACTION SHEET ========== */}
-      <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-xl">
-          <SheetHeader>
-            <SheetTitle className="truncate">{mobileSheetVision?.title}</SheetTitle>
-          </SheetHeader>
-          <div className="py-4 space-y-1">
+            <div className="border-t border-border my-2" />
+            {/* Section 2: Edit */}
             <button
               onClick={() => {
                 setMobileSheetOpen(false);
@@ -773,34 +756,8 @@ const Dashboard = () => {
             >
               Edit vision
             </button>
-            <button
-              onClick={() => {
-                setMobileSheetOpen(false);
-                navigate(`/goal/new?type=three_year&vision=${mobileSheetVision?.id}`);
-              }}
-              className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
-            >
-              Add 3-Year goal
-            </button>
-            <button
-              onClick={() => {
-                setMobileSheetOpen(false);
-                navigate(`/goal/new?type=one_year&vision=${mobileSheetVision?.id}`);
-              }}
-              className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
-            >
-              Add 1-Year goal
-            </button>
-            <button
-              onClick={() => {
-                setMobileSheetOpen(false);
-                navigate(`/goal/new?type=ninety_day&vision=${mobileSheetVision?.id}`);
-              }}
-              className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
-            >
-              Add 90-Day plan
-            </button>
             <div className="border-t border-border my-2" />
+            {/* Section 3: Destructive */}
             <button
               onClick={() => {
                 setMobileSheetOpen(false);
@@ -812,8 +769,10 @@ const Dashboard = () => {
             </button>
             <button
               onClick={() => {
-                setMobileSheetOpen(false);
-                if (mobileSheetVision) handleDeleteVision(mobileSheetVision.id);
+                if (confirm("Are you sure you want to delete this vision? This action cannot be undone.")) {
+                  setMobileSheetOpen(false);
+                  if (mobileSheetVision) handleDeleteVision(mobileSheetVision.id);
+                }
               }}
               className="w-full text-left px-4 py-3 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
             >
