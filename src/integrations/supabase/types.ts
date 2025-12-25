@@ -25,6 +25,7 @@ export type Database = {
           is_deleted: boolean | null
           is_detached: boolean | null
           is_flexible_time: boolean | null
+          notes: string | null
           task_type: string | null
           time_end: string | null
           time_start: string | null
@@ -41,6 +42,7 @@ export type Database = {
           is_deleted?: boolean | null
           is_detached?: boolean | null
           is_flexible_time?: boolean | null
+          notes?: string | null
           task_type?: string | null
           time_end?: string | null
           time_start?: string | null
@@ -57,6 +59,7 @@ export type Database = {
           is_deleted?: boolean | null
           is_detached?: boolean | null
           is_flexible_time?: boolean | null
+          notes?: string | null
           task_type?: string | null
           time_end?: string | null
           time_start?: string | null

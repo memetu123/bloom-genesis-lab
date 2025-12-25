@@ -84,6 +84,7 @@ const TaskDetailModal = ({
   const [goalId, setGoalId] = useState<string>("");
   const [originalGoalId, setOriginalGoalId] = useState<string>("");
   const [relatedExpanded, setRelatedExpanded] = useState(false);
+  const [notes, setNotes] = useState<string>("");
 
   const dateKey = format(date, "yyyy-MM-dd");
 
@@ -120,6 +121,10 @@ const TaskDetailModal = ({
       setRelatedExpanded(false);
       setGoalId("");
       setOriginalGoalId("");
+      setNotes("");
+
+      // Fetch notes and other data
+      fetchTaskNotes(task);
 
       // Fetch recurrence rules and goal if recurring
       if (task.commitmentId) {
@@ -131,6 +136,39 @@ const TaskDetailModal = ({
       }
     }
   }, [task]);
+
+  const fetchTaskNotes = async (task: NonNullable<TaskDetailModalProps['task']>) => {
+    // Fetch notes from the completion record for this date
+    const isRecurring = task.commitmentId !== null;
+    
+    if (isRecurring && task.commitmentId) {
+      // For recurring tasks, check if there's a completion for this date
+      const { data: completion } = await supabase
+        .from("commitment_completions")
+        .select("notes")
+        .eq("commitment_id", task.commitmentId)
+        .eq("completed_date", dateKey)
+        .maybeSingle();
+      
+      if (completion?.notes) {
+        setNotes(completion.notes);
+      }
+    } else {
+      // For independent tasks, fetch from the completion record directly
+      const parts = task.id.split("-");
+      const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
+      
+      const { data: completion } = await supabase
+        .from("commitment_completions")
+        .select("notes")
+        .eq("id", actualId)
+        .maybeSingle();
+      
+      if (completion?.notes) {
+        setNotes(completion.notes);
+      }
+    }
+  };
 
   const fetchRecurrenceRulesAndGoal = async (commitmentId: string) => {
     const { data } = await supabase
@@ -281,12 +319,15 @@ const TaskDetailModal = ({
           time_end: timeEnd || null,
           is_flexible_time: !timeStart,
           task_type: "recurring",
+          notes: notes || null,
         });
 
         // Update weekly checkin actual_count
         await updateCheckinCount(task.commitmentId!, 1);
       } else if (!isCompleted && existingCompletion && isRecurring) {
-        // Remove completion record
+        // If there are notes, keep the completion but unmark it (we don't have a completed flag, so we keep it for notes)
+        // Actually, the current design deletes the completion - but we should preserve notes
+        // For now, we'll delete as before (notes will be lost if task is uncompleted)
         await supabase
           .from("commitment_completions")
           .delete()
@@ -295,7 +336,7 @@ const TaskDetailModal = ({
         // Update weekly checkin actual_count
         await updateCheckinCount(task.commitmentId!, -1);
       } else if (existingCompletion) {
-        // Update existing completion (time, title for independent)
+        // Update existing completion (time, title for independent, notes)
         await supabase
           .from("commitment_completions")
           .update({
@@ -303,6 +344,7 @@ const TaskDetailModal = ({
             time_start: timeStart || null,
             time_end: timeEnd || null,
             is_flexible_time: !timeStart,
+            notes: notes || null,
           })
           .eq("id", existingCompletion.id);
       } else if (!isRecurring && !existingCompletion) {
@@ -317,8 +359,21 @@ const TaskDetailModal = ({
             time_start: timeStart || null,
             time_end: timeEnd || null,
             is_flexible_time: !timeStart,
+            notes: notes || null,
           })
           .eq("id", updateId);
+      } else if (isRecurring && !existingCompletion && notes) {
+        // Recurring task without completion but has notes - create a completion just for notes
+        await supabase.from("commitment_completions").insert({
+          user_id: user.id,
+          commitment_id: task.commitmentId,
+          completed_date: dateKey,
+          time_start: timeStart || null,
+          time_end: timeEnd || null,
+          is_flexible_time: !timeStart,
+          task_type: "recurring",
+          notes: notes,
+        });
       }
 
       toast.success("Task updated");
@@ -779,6 +834,22 @@ const TaskDetailModal = ({
               )}
             </div>
           )}
+
+          {/* 6. Notes (optional) - free-form text */}
+          <div className="space-y-1.5">
+            <label htmlFor="task-notes" className="text-xs text-muted-foreground">
+              Notes (optional)
+            </label>
+            <textarea
+              id="task-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add any context, thoughts, or details…"
+              rows={3}
+              className="w-full min-h-[4.5rem] text-sm border border-border/40 rounded-lg bg-transparent px-3 py-2 resize-none focus:border-primary/60 focus:outline-none focus:ring-0 placeholder:text-muted-foreground/50 overflow-y-auto"
+              style={{ maxHeight: '8rem' }}
+            />
+          </div>
         </div>
 
         {/* Actions - Save primary, Delete as text link - stable footer */}
