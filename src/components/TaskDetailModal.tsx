@@ -493,22 +493,24 @@ const TaskDetailModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden rounded-xl border-border/50">
-        {/* Header - date only, close button handled by DialogContent */}
-        <div className="px-5 pt-5 pb-3">
+      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden rounded-xl border-border/50 max-h-[85vh] flex flex-col">
+        {/* Header - date only, stable position */}
+        <div className="px-5 pt-5 pb-3 shrink-0">
           <p className="text-xs text-muted-foreground">
             {formatDateWithDay(date, preferences.dateFormat)}
           </p>
         </div>
 
-        <div className="px-5 pb-5 space-y-5 max-h-[65vh] overflow-y-auto">
-          {/* 1. Task Title - single input, thin border, no wrapper */}
-          <Input
+        <div className="px-5 pb-5 space-y-5 overflow-y-auto overflow-x-hidden flex-1 min-h-0">
+          {/* 1. Task Title - textarea for wrapping, max 2 lines visible */}
+          <textarea
             id="task-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Task title"
-            className="h-10 text-sm border border-border/50 rounded-lg bg-transparent focus:border-primary focus:outline-none focus:ring-0 focus:ring-offset-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            rows={2}
+            className="w-full min-h-[2.5rem] max-h-[4rem] text-sm border border-border/50 rounded-lg bg-transparent px-3 py-2 resize-none focus:border-primary focus:outline-none focus:ring-0 focus:ring-offset-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-hidden"
+            style={{ lineHeight: '1.4' }}
           />
 
           {/* 2. Mark as Complete - flat inline row */}
@@ -589,7 +591,7 @@ const TaskDetailModal = ({
 
             {/* Info for detached tasks */}
             {isDetached && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[10px] text-muted-foreground/70 leading-tight">
                 Changes only affect this day.
               </p>
             )}
@@ -719,35 +721,37 @@ const TaskDetailModal = ({
 
           {/* 5. Related to (optional) - Collapsible */}
           {relatedGoals.length > 0 && (
-            <div>
+            <div className="min-w-0">
               <button
                 type="button"
                 onClick={() => setRelatedExpanded(!relatedExpanded)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full min-w-0"
               >
-                {relatedExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                )}
-                <span>Related to (optional)</span>
+                <span className="shrink-0">
+                  {relatedExpanded ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                </span>
+                <span className="shrink-0">Related to (optional)</span>
                 {goalId && !relatedExpanded && (
-                  <span className="ml-1 text-foreground text-xs">
+                  <span className="ml-1 text-foreground text-xs truncate min-w-0 flex-1">
                     — {relatedGoals.find(g => g.id === goalId)?.title || "..."}
                   </span>
                 )}
               </button>
 
               {relatedExpanded && (
-                <div className="mt-2 space-y-2">
+                <div className="mt-2 space-y-1.5">
                   <Select
                     value={goalId || "none"}
                     onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
                   >
-                    <SelectTrigger className="w-full h-9 text-sm">
+                    <SelectTrigger className="w-full h-9 text-sm [&>span]:truncate [&>span]:min-w-0 [&>span]:flex-1 [&>span]:text-left">
                       <SelectValue placeholder="Select a plan or goal" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[calc(100vw-3rem)]">
                       <SelectItem value="none">
                         <span className="text-muted-foreground">None</span>
                       </SelectItem>
@@ -756,9 +760,9 @@ const TaskDetailModal = ({
                         const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
                         return (
                           <SelectItem key={goal.id} value={goal.id}>
-                            <div className="flex flex-col">
-                              <span>{goal.title}</span>
-                              <span className="text-xs text-muted-foreground">
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate">{goal.title}</span>
+                              <span className="text-xs text-muted-foreground truncate">
                                 {typeLabel}
                                 {visionName && ` · ${visionName}`}
                               </span>
@@ -768,7 +772,7 @@ const TaskDetailModal = ({
                       })}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground/70 leading-tight">
                     Used to organize your weekly plan.
                   </p>
                 </div>
@@ -777,8 +781,8 @@ const TaskDetailModal = ({
           )}
         </div>
 
-        {/* Actions - Save primary, Delete as text link */}
-        <div className="px-5 pb-5 pt-3 space-y-3">
+        {/* Actions - Save primary, Delete as text link - stable footer */}
+        <div className="px-5 pb-5 pt-3 space-y-3 shrink-0 border-t border-border/30">
           <Button onClick={handleSave} disabled={saving} className="w-full h-10 rounded-lg font-medium">
             {saving ? "Saving..." : "Save changes"}
           </Button>
