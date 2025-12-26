@@ -210,21 +210,14 @@ const Dashboard = () => {
     setMobileSheetOpen(true);
   };
 
-  // Filter helpers for desktop view
+  // Filter helper for mobile collapsed view
   const getActiveGoals = (goals: GlobalGoal[]) => 
     goals.filter(g => g.status === "active" || g.status === "in_progress");
-  
-  const getLimited3Year = (goals: GlobalGoal[]) => {
-    const limited = goals.slice(0, 2);
-    return { items: limited, hasMore: goals.length > 2, moreCount: goals.length - 2 };
-  };
 
   // Desktop Vision Card
   const renderDesktopVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
     const activePlan = getActive90DayPlan(vision.ninetyDay);
-    const active1Year = getActiveGoals(vision.oneYear);
-    const active90Day = getActiveGoals(vision.ninetyDay);
-    const { items: limited3Year, hasMore: hasMore3Year, moreCount: more3YearCount } = getLimited3Year(vision.threeYear);
+    const hasAnyGoals = vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 0;
 
     return (
       <Card 
@@ -313,13 +306,13 @@ const Dashboard = () => {
           </div>
 
           {/* 3-Year Direction - NO tint, neutral context */}
-          {limited3Year.length > 0 && (
+          {vision.threeYear.length > 0 && (
             <div className="mb-3">
               <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
                 3-Year Direction
               </span>
               <div className="space-y-1">
-                {limited3Year.map(goal => (
+                {vision.threeYear.map(goal => (
                   <p 
                     key={goal.id} 
                     className={`text-sm ${isMuted ? "text-muted-foreground/70" : "text-muted-foreground"}`}
@@ -332,32 +325,30 @@ const Dashboard = () => {
                     </span>
                   </p>
                 ))}
-                {hasMore3Year && (
-                  <p className="text-xs text-muted-foreground/60">
-                    +{more3YearCount} more
-                  </p>
-                )}
               </div>
             </div>
           )}
 
           {/* 1-Year Goals - Light tint */}
-          {active1Year.length > 0 && (
+          {vision.oneYear.length > 0 && (
             <div className="mb-3 bg-muted/40 rounded-lg p-3">
               <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
                 1-Year Goals
               </span>
               <ul className="space-y-1">
-                {active1Year.map(goal => (
+                {vision.oneYear.map(goal => (
                   <li 
                     key={goal.id} 
-                    className={`text-sm ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
+                    className={`text-sm flex items-center justify-between ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
                   >
                     <span 
                       className="hover:text-primary cursor-pointer transition-colors"
                       onClick={() => navigate(`/goal/${goal.id}`)}
                     >
                       {goal.title}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {getGoalStatusLabel(goal.status)}
                     </span>
                   </li>
                 ))}
@@ -366,13 +357,13 @@ const Dashboard = () => {
           )}
 
           {/* 90-Day Commitments - Stronger tint */}
-          {active90Day.length > 0 && (
+          {vision.ninetyDay.length > 0 && (
             <div className="mb-2 bg-muted/60 rounded-lg p-3">
               <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-1.5">
                 90-Day Commitments
               </span>
               <ul className="space-y-1">
-                {active90Day.map(goal => (
+                {vision.ninetyDay.map(goal => (
                   <li 
                     key={goal.id} 
                     className="flex items-center justify-between cursor-pointer hover:bg-background/50 rounded p-1 -m-1 transition-colors"
@@ -391,9 +382,7 @@ const Dashboard = () => {
           )}
 
           {/* Empty state */}
-          {vision.threeYear.length === 0 && 
-           vision.oneYear.length === 0 && 
-           vision.ninetyDay.length === 0 && (
+          {!hasAnyGoals && (
             <p className="text-sm text-muted-foreground mb-4">
               Add a goal when it feels right
             </p>
