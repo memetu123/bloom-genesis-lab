@@ -299,7 +299,7 @@ const TaskDetailModal = ({
         }
       }
 
-      // Handle completion status
+      // Handle completion status and notes
       const idParts = task.id.split("-");
       const completionId = idParts.length === 5 ? task.id : idParts.slice(0, 5).join("-");
       const { data: existingCompletion } = await supabase
@@ -309,45 +309,60 @@ const TaskDetailModal = ({
         .eq("completed_date", dateKey)
         .maybeSingle();
 
-      if (isCompleted && !existingCompletion && isRecurring) {
-        // Create completion record for recurring task
-        await supabase.from("commitment_completions").insert({
-          user_id: user.id,
-          commitment_id: task.commitmentId,
-          completed_date: dateKey,
-          time_start: timeStart || null,
-          time_end: timeEnd || null,
-          is_flexible_time: !timeStart,
-          task_type: "recurring",
-          notes: notes || null,
-        });
+      if (isRecurring && task.commitmentId) {
+        if (existingCompletion) {
+          if (!isCompleted && !notes) {
+            // No completion, no notes - delete the record
+            await supabase
+              .from("commitment_completions")
+              .delete()
+              .eq("id", existingCompletion.id);
 
-        // Update weekly checkin actual_count
-        await updateCheckinCount(task.commitmentId!, 1);
-      } else if (!isCompleted && existingCompletion && isRecurring) {
-        // If there are notes, keep the completion but unmark it (we don't have a completed flag, so we keep it for notes)
-        // Actually, the current design deletes the completion - but we should preserve notes
-        // For now, we'll delete as before (notes will be lost if task is uncompleted)
-        await supabase
-          .from("commitment_completions")
-          .delete()
-          .eq("id", existingCompletion.id);
+            // Update weekly checkin if it was previously completed (task.isCompleted was true)
+            if (task.isCompleted) {
+              await updateCheckinCount(task.commitmentId, -1);
+            }
+          } else {
+            // Update existing completion - keep the record for notes or completion status
+            const wasCompleted = task.isCompleted;
+            const nowCompleted = isCompleted;
+            
+            await supabase
+              .from("commitment_completions")
+              .update({
+                time_start: timeStart || null,
+                time_end: timeEnd || null,
+                is_flexible_time: !timeStart,
+                notes: notes || null,
+              })
+              .eq("id", existingCompletion.id);
 
-        // Update weekly checkin actual_count
-        await updateCheckinCount(task.commitmentId!, -1);
-      } else if (existingCompletion) {
-        // Update existing completion (time, title for independent, notes)
-        await supabase
-          .from("commitment_completions")
-          .update({
-            title: !isRecurring ? title : undefined,
+            // Update checkin count only if completion status changed
+            if (!wasCompleted && nowCompleted) {
+              await updateCheckinCount(task.commitmentId, 1);
+            } else if (wasCompleted && !nowCompleted) {
+              await updateCheckinCount(task.commitmentId, -1);
+            }
+          }
+        } else if (isCompleted || notes) {
+          // Create completion record for recurring task (either completed or has notes)
+          await supabase.from("commitment_completions").insert({
+            user_id: user.id,
+            commitment_id: task.commitmentId,
+            completed_date: dateKey,
             time_start: timeStart || null,
             time_end: timeEnd || null,
             is_flexible_time: !timeStart,
+            task_type: "recurring",
             notes: notes || null,
-          })
-          .eq("id", existingCompletion.id);
-      } else if (!isRecurring && !existingCompletion) {
+          });
+
+          // Update weekly checkin actual_count only if completing
+          if (isCompleted) {
+            await updateCheckinCount(task.commitmentId, 1);
+          }
+        }
+      } else if (!isRecurring) {
         // Independent task - just update it
         const updateParts = task.id.split("-");
         const updateId = updateParts.length === 5 ? task.id : updateParts.slice(0, 5).join("-");
@@ -362,18 +377,6 @@ const TaskDetailModal = ({
             notes: notes || null,
           })
           .eq("id", updateId);
-      } else if (isRecurring && !existingCompletion && notes) {
-        // Recurring task without completion but has notes - create a completion just for notes
-        await supabase.from("commitment_completions").insert({
-          user_id: user.id,
-          commitment_id: task.commitmentId,
-          completed_date: dateKey,
-          time_start: timeStart || null,
-          time_end: timeEnd || null,
-          is_flexible_time: !timeStart,
-          task_type: "recurring",
-          notes: notes,
-        });
       }
 
       toast.success("Task updated");
