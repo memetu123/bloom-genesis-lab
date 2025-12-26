@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus, Target, ChevronRight, Star } from "lucide-react";
 import EditableTitle from "@/components/EditableTitle";
 import ItemActions from "@/components/ItemActions";
@@ -63,6 +63,7 @@ const CHILD_TYPE_LABELS: Record<GoalType, { childType: GoalType | "commitment"; 
 
 const GoalDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [goal, setGoal] = useState<Goal | null>(null);
@@ -88,8 +89,98 @@ const GoalDetail = () => {
   const [editDescription, setEditDescription] = useState("");
   const [editStatus, setEditStatus] = useState<GoalStatus>("active");
 
+  // Check if this is a "new goal" creation flow
+  const isNewGoal = id === "new";
+  const newGoalType = searchParams.get("type") as GoalType | null;
+  const newGoalVisionId = searchParams.get("vision");
+  const newGoalParentId = searchParams.get("parent");
+
+  // State for creating a new goal
+  const [createTitle, setCreateTitle] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [creatingGoal, setCreatingGoal] = useState(false);
+  const [visionData, setVisionData] = useState<{ id: string; title: string; pillar_id: string } | null>(null);
+
+  // Fetch vision data for new goal creation
   useEffect(() => {
-    if (!user || !id) return;
+    if (!isNewGoal || !newGoalVisionId || !user) {
+      if (isNewGoal && !newGoalVisionId) {
+        toast.error("Vision ID is required to create a goal");
+        navigate("/dashboard");
+      }
+      return;
+    }
+
+    const fetchVisionData = async () => {
+      try {
+        const { data: vision, error } = await supabase
+          .from("life_visions")
+          .select("id, title, pillar_id")
+          .eq("id", newGoalVisionId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!vision) {
+          toast.error("Vision not found");
+          navigate("/dashboard");
+          return;
+        }
+
+        setVisionData(vision);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching vision:", error);
+        toast.error("Failed to load vision data");
+        navigate("/dashboard");
+      }
+    };
+
+    fetchVisionData();
+  }, [isNewGoal, newGoalVisionId, user, navigate]);
+
+  // Handle creating a new goal
+  const handleCreateGoal = async () => {
+    if (!user || !createTitle.trim() || !visionData || !newGoalType) return;
+    setCreatingGoal(true);
+
+    try {
+      const { data: newGoal, error } = await supabase
+        .from("goals")
+        .insert({
+          user_id: user.id,
+          pillar_id: visionData.pillar_id,
+          life_vision_id: visionData.id,
+          parent_goal_id: newGoalParentId || null,
+          goal_type: newGoalType,
+          title: createTitle.trim(),
+          description: createDescription.trim() || null,
+          status: "not_started",
+          is_focus: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success(`${GOAL_TYPE_LABELS[newGoalType]} created`);
+      
+      // Navigate to the new goal or back to dashboard
+      if (newGoalType === "ninety_day") {
+        navigate(`/weekly?plan=${newGoal.id}`, { replace: true });
+      } else {
+        navigate(`/goal/${newGoal.id}`, { replace: true });
+      }
+    } catch (error: any) {
+      console.error("Error creating goal:", error);
+      toast.error("Failed to create goal");
+    } finally {
+      setCreatingGoal(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || !id || isNewGoal) return;
 
     const fetchData = async () => {
       try {
@@ -172,7 +263,7 @@ const GoalDetail = () => {
     };
 
     fetchData();
-  }, [user, id, navigate]);
+  }, [user, id, navigate, isNewGoal]);
 
   const toggleGoalFocus = async () => {
     if (!goal || updatingFocus) return;
@@ -411,6 +502,83 @@ const GoalDetail = () => {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <p className="text-muted-foreground text-center">Loading...</p>
+      </div>
+    );
+  }
+
+  // New goal creation UI
+  if (isNewGoal && visionData && newGoalType) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        {/* Breadcrumb for new goal */}
+        <div className="text-sm text-muted-foreground mb-4 flex items-center flex-wrap gap-1">
+          <span 
+            className="hover:text-foreground cursor-pointer transition-colors"
+            onClick={() => navigate("/dashboard")}
+          >
+            Dashboard
+          </span>
+          <ChevronRight className="h-3 w-3" />
+          <span 
+            className="hover:text-foreground cursor-pointer transition-colors"
+            onClick={() => navigate(`/vision/${visionData.id}`)}
+          >
+            {visionData.title}
+          </span>
+          <ChevronRight className="h-3 w-3" />
+          <span>New {GOAL_TYPE_LABELS[newGoalType]}</span>
+        </div>
+
+        {/* Create goal form */}
+        <Card>
+          <CardContent className="p-6">
+            <h1 className="text-xl font-semibold mb-6">
+              Create {GOAL_TYPE_LABELS[newGoalType]}
+            </h1>
+
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="create-title">Title</Label>
+                <Input
+                  id="create-title"
+                  value={createTitle}
+                  onChange={(e) => setCreateTitle(e.target.value)}
+                  placeholder={`Enter ${GOAL_TYPE_LABELS[newGoalType].toLowerCase()} title...`}
+                  className="mt-1"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="create-description">Description (optional)</Label>
+                <Textarea
+                  id="create-description"
+                  value={createDescription}
+                  onChange={(e) => setCreateDescription(e.target.value)}
+                  placeholder="Add more details about this goal..."
+                  className="mt-1 min-h-[100px]"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateGoal}
+                  disabled={!createTitle.trim() || creatingGoal}
+                  className="flex-1"
+                >
+                  {creatingGoal ? "Creating..." : `Create ${GOAL_TYPE_LABELS[newGoalType]}`}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
