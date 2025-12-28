@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, ChevronRight } from "lucide-react";
+import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus } from "lucide-react";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -34,14 +34,17 @@ import { toast } from "sonner";
  * Direction. Clarity. Intent.
  */
 
+// Goal with children for hierarchical display
+interface GoalWithChildren extends GlobalGoal {
+  children: GoalWithChildren[];
+}
+
 interface VisionWithHierarchy {
   id: string;
   title: string;
   pillar_name: string;
   is_focus: boolean;
-  threeYear: GlobalGoal[];
-  oneYear: GlobalGoal[];
-  ninetyDay: GlobalGoal[];
+  threeYearWithChildren: GoalWithChildren[];
 }
 
 const Dashboard = () => {
@@ -64,7 +67,38 @@ const Dashboard = () => {
   const [mobileSheetVision, setMobileSheetVision] = useState<VisionWithHierarchy | null>(null);
   
 
-  // Build focused visions with full hierarchy (no caps)
+  // Build hierarchical goal tree: 3yr → 1yr → 90d
+  const buildGoalTree = (visionGoals: GlobalGoal[]): GoalWithChildren[] => {
+    const threeYear = visionGoals.filter(g => g.goal_type === "three_year");
+    const oneYear = visionGoals.filter(g => g.goal_type === "one_year");
+    const ninetyDay = visionGoals.filter(g => g.goal_type === "ninety_day");
+
+    // Build 1yr goals with their 90d children
+    const oneYearWithChildren: GoalWithChildren[] = oneYear.map(goal => ({
+      ...goal,
+      children: ninetyDay
+        .filter(nd => nd.parent_goal_id === goal.id)
+        .map(nd => ({ ...nd, children: [] })),
+    }));
+
+    // Build 3yr goals with their 1yr children (which have 90d children)
+    const threeYearWithChildren: GoalWithChildren[] = threeYear.map(goal => ({
+      ...goal,
+      children: oneYearWithChildren.filter(oy => oy.parent_goal_id === goal.id),
+    }));
+
+    // Find orphan 1yr goals (no parent 3yr) and add them as top-level
+    const orphanOneYear = oneYearWithChildren.filter(oy => !oy.parent_goal_id);
+    
+    // Find orphan 90d goals (no parent 1yr) and add them as top-level
+    const orphanNinetyDay = ninetyDay
+      .filter(nd => !nd.parent_goal_id)
+      .map(nd => ({ ...nd, children: [] }));
+
+    return [...threeYearWithChildren, ...orphanOneYear, ...orphanNinetyDay];
+  };
+
+  // Build focused visions with hierarchical goals
   const focusedVisions = useMemo((): VisionWithHierarchy[] => {
     const focused = visions.filter(v => v.is_focus && v.status === "active");
 
@@ -76,9 +110,7 @@ const Dashboard = () => {
         title: vision.title,
         pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
         is_focus: true,
-        threeYear: visionGoals.filter(g => g.goal_type === "three_year"),
-        oneYear: visionGoals.filter(g => g.goal_type === "one_year"),
-        ninetyDay: visionGoals.filter(g => g.goal_type === "ninety_day"),
+        threeYearWithChildren: buildGoalTree(visionGoals),
       };
     });
   }, [visions, goals, pillarsMap]);
@@ -94,9 +126,7 @@ const Dashboard = () => {
           title: vision.title,
           pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
           is_focus: false,
-          threeYear: visionGoals.filter(g => g.goal_type === "three_year"),
-          oneYear: visionGoals.filter(g => g.goal_type === "one_year"),
-          ninetyDay: visionGoals.filter(g => g.goal_type === "ninety_day"),
+          threeYearWithChildren: buildGoalTree(visionGoals),
         };
       });
   }, [visions, goals, pillarsMap]);
@@ -177,20 +207,47 @@ const Dashboard = () => {
     }
   };
 
-  // Get status label for 90-day goals
-  const getGoalStatusLabel = (status: string | null) => {
-    if (status === "in_progress" || status === "active") return "Active";
-    if (status === "not_started") return "Planned";
-    return "Inactive";
+  // Helper to get label chip styling based on goal type
+  const getLabelChip = (goalType: string) => {
+    const labels: Record<string, string> = {
+      three_year: "3yr",
+      one_year: "1yr",
+      ninety_day: "90d",
+    };
+    return labels[goalType] || "";
+  };
+
+  // Collect all 90-day goals from the tree for navigation
+  const getAllNinetyDayGoals = (goals: GoalWithChildren[]): GoalWithChildren[] => {
+    const result: GoalWithChildren[] = [];
+    const traverse = (items: GoalWithChildren[]) => {
+      for (const item of items) {
+        if (item.goal_type === "ninety_day") {
+          result.push(item);
+        }
+        traverse(item.children);
+      }
+    };
+    traverse(goals);
+    return result;
   };
 
   // Get first active 90-day plan for navigation
-  const getActive90DayPlan = (ninetyDayGoals: GlobalGoal[]) => {
+  const getActive90DayPlan = (goals: GoalWithChildren[]) => {
+    const ninetyDayGoals = getAllNinetyDayGoals(goals);
     const active = ninetyDayGoals.find(g => g.status === "active" || g.status === "in_progress");
     return active || ninetyDayGoals[0];
   };
 
-  // Toggle expanded state for mobile vision cards
+  // Check if there are any child goals to show when expanded
+  const hasExpandableContent = (goals: GoalWithChildren[]): boolean => {
+    for (const goal of goals) {
+      if (goal.children.length > 0) return true;
+    }
+    return false;
+  };
+
+  // Toggle expanded state for vision cards
   const toggleVisionExpanded = (visionId: string) => {
     setExpandedVisionIds(prev => {
       const next = new Set(prev);
@@ -210,14 +267,92 @@ const Dashboard = () => {
     setMobileSheetOpen(true);
   };
 
-  // Filter helper for mobile collapsed view
-  const getActiveGoals = (goals: GlobalGoal[]) => 
-    goals.filter(g => g.status === "active" || g.status === "in_progress");
+  // Render a single goal item with label chip
+  const renderGoalItem = (
+    goal: GoalWithChildren, 
+    indentLevel: number, 
+    showConnector: boolean,
+    isMuted: boolean,
+    isMobile: boolean
+  ) => {
+    const labelChip = getLabelChip(goal.goal_type);
+    const isNinetyDay = goal.goal_type === "ninety_day";
+    
+    return (
+      <div
+        key={goal.id}
+        className={`flex items-start gap-2 ${isMobile ? "py-1" : "py-1.5"}`}
+        style={{ paddingLeft: indentLevel * (isMobile ? 16 : 20) }}
+      >
+        {/* Connector marker */}
+        {showConnector && (
+          <span className="text-muted-foreground/40 font-mono text-xs shrink-0 mt-0.5">└─</span>
+        )}
+        
+        {/* Label chip */}
+        <span className={`
+          shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded 
+          bg-muted/60 text-muted-foreground
+        `}>
+          {labelChip}
+        </span>
+        
+        {/* Goal title */}
+        <span
+          className={`
+            text-sm cursor-pointer transition-colors break-words flex-1
+            ${isMuted ? "text-muted-foreground/70" : "text-foreground/90"}
+            hover:text-primary
+          `}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isNinetyDay) {
+              navigate(`/weekly?plan=${goal.id}`);
+            } else {
+              navigate(`/goal/${goal.id}`);
+            }
+          }}
+        >
+          {goal.title}
+        </span>
+      </div>
+    );
+  };
+
+  // Recursively render goal tree
+  const renderGoalTree = (
+    goals: GoalWithChildren[],
+    indentLevel: number,
+    isExpanded: boolean,
+    isMuted: boolean,
+    isMobile: boolean
+  ): React.ReactNode => {
+    return goals.map((goal) => {
+      const isThreeYear = goal.goal_type === "three_year";
+      const showConnector = indentLevel > 0;
+      
+      return (
+        <div key={goal.id}>
+          {/* Render the goal item */}
+          {renderGoalItem(goal, indentLevel, showConnector, isMuted, isMobile)}
+          
+          {/* Render children only when expanded */}
+          {isExpanded && goal.children.length > 0 && (
+            <div>
+              {renderGoalTree(goal.children, indentLevel + 1, isExpanded, isMuted, isMobile)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
 
   // Desktop Vision Card
   const renderDesktopVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
-    const activePlan = getActive90DayPlan(vision.ninetyDay);
-    const hasAnyGoals = vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 0;
+    const activePlan = getActive90DayPlan(vision.threeYearWithChildren);
+    const hasAnyGoals = vision.threeYearWithChildren.length > 0;
+    const isExpanded = expandedVisionIds.has(vision.id);
+    const canExpand = hasExpandableContent(vision.threeYearWithChildren);
 
     return (
       <Card 
@@ -305,91 +440,30 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* 3-Year Direction - NO tint, neutral context */}
-          {vision.threeYear.length > 0 && (
+          {/* Hierarchical Goal Tree */}
+          {hasAnyGoals ? (
             <div className="mb-3">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
-                3-Year Direction
-              </span>
-              <div className="space-y-1">
-                {vision.threeYear.map(goal => (
-                  <p 
-                    key={goal.id} 
-                    className={`text-sm ${isMuted ? "text-muted-foreground/70" : "text-muted-foreground"}`}
-                  >
-                    <span 
-                      className="hover:text-foreground cursor-pointer transition-colors"
-                      onClick={() => navigate(`/goal/${goal.id}`)}
-                    >
-                      {goal.title}
-                    </span>
-                  </p>
-                ))}
-              </div>
+              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, isMuted, false)}
             </div>
-          )}
-
-          {/* 1-Year Goals - Light tint */}
-          {vision.oneYear.length > 0 && (
-            <div className="mb-3 bg-muted/40 rounded-lg p-3">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
-                1-Year Goals
-              </span>
-              <ul className="space-y-1">
-                {vision.oneYear.map(goal => (
-                  <li 
-                    key={goal.id} 
-                    className={`text-sm flex items-center justify-between ${isMuted ? "text-muted-foreground" : "text-foreground"}`}
-                  >
-                    <span 
-                      className="hover:text-primary cursor-pointer transition-colors"
-                      onClick={() => navigate(`/goal/${goal.id}`)}
-                    >
-                      {goal.title}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {getGoalStatusLabel(goal.status)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* 90-Day Commitments - Stronger tint */}
-          {vision.ninetyDay.length > 0 && (
-            <div className="mb-2 bg-muted/60 rounded-lg p-3">
-              <span className="text-xs text-foreground font-medium uppercase tracking-wide block mb-1.5">
-                90-Day Commitments
-              </span>
-              <ul className="space-y-1">
-                {vision.ninetyDay.map(goal => (
-                  <li 
-                    key={goal.id} 
-                    className="flex items-center justify-between cursor-pointer hover:bg-background/50 rounded p-1 -m-1 transition-colors"
-                    onClick={() => navigate(`/weekly?plan=${goal.id}`)}
-                  >
-                    <span className={`text-sm font-medium ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
-                      {goal.title}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {getGoalStatusLabel(goal.status)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Empty state */}
-          {!hasAnyGoals && (
+          ) : (
             <p className="text-sm text-muted-foreground mb-4">
               Add a goal when it feels right
             </p>
           )}
 
           {/* Vision Footer */}
-          <div className="pt-3 border-t border-muted">
+          <div className="pt-3 border-t border-muted flex items-center justify-between">
+            {/* Show more/less toggle */}
+            {canExpand && (
+              <button
+                onClick={() => toggleVisionExpanded(vision.id)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {isExpanded ? "Show less" : "Show more"}
+              </button>
+            )}
+            {!canExpand && <span />}
+            
             <button
               onClick={() => {
                 if (activePlan) {
@@ -411,11 +485,10 @@ const Dashboard = () => {
 
   // Mobile Vision Card - compact, focused, scannable
   const renderMobileVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
-    const activePlan = getActive90DayPlan(vision.ninetyDay);
+    const activePlan = getActive90DayPlan(vision.threeYearWithChildren);
     const isExpanded = expandedVisionIds.has(vision.id);
-    const active90Day = getActiveGoals(vision.ninetyDay);
-    const hasStrategy = vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 1;
-    const hasAnyGoals = vision.threeYear.length > 0 || vision.oneYear.length > 0 || vision.ninetyDay.length > 0;
+    const hasAnyGoals = vision.threeYearWithChildren.length > 0;
+    const canExpand = hasExpandableContent(vision.threeYearWithChildren);
 
     return (
       <Card 
@@ -467,26 +540,12 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Mobile: Active 90-day plan (default collapsed view) */}
-          {!isExpanded && active90Day.length > 0 && (
-            <div 
-              className="mt-2.5 border-l-2 border-primary/40 pl-2.5 py-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/weekly?plan=${active90Day[0].id}`);
-              }}
-            >
-              <span className={`text-sm font-medium block ${isMuted ? "text-muted-foreground" : "text-foreground"}`}>
-                {active90Day[0].title}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                {getGoalStatusLabel(active90Day[0].status)} · 90-day plan
-              </span>
+          {/* Hierarchical Goal Tree */}
+          {hasAnyGoals ? (
+            <div className="mt-2.5">
+              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, isMuted, true)}
             </div>
-          )}
-
-          {/* Mobile: Empty state - directional copy */}
-          {!isExpanded && !hasAnyGoals && (
+          ) : (
             <button
               onClick={(e) => openMobileVisionActions(vision, e)}
               className="mt-2.5 text-sm text-muted-foreground/70 hover:text-primary inline-flex items-center gap-1 transition-colors"
@@ -496,99 +555,21 @@ const Dashboard = () => {
             </button>
           )}
 
-          {/* Mobile: Expanded hierarchy - selective tints */}
-          {isExpanded && (
-            <div className="mt-2 space-y-2">
-              {/* 3-Year Direction - NO tint */}
-              {vision.threeYear.length > 0 && (
-                <div>
-                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
-                    3-Year Direction
-                  </span>
-                  <div className="space-y-0.5">
-                    {vision.threeYear.map(goal => (
-                      <p 
-                        key={goal.id} 
-                        className="text-sm text-muted-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/goal/${goal.id}`);
-                        }}
-                      >
-                        {goal.title}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 1-Year Goals - Light tint */}
-              {vision.oneYear.length > 0 && (
-                <div className="bg-muted/40 rounded-lg p-2.5">
-                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
-                    1-Year Goals
-                  </span>
-                  <div className="space-y-0.5">
-                    {vision.oneYear.map(goal => (
-                      <p 
-                        key={goal.id} 
-                        className="text-sm text-foreground/80"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/goal/${goal.id}`);
-                        }}
-                      >
-                        {goal.title}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 90-Day Commitments - Stronger tint */}
-              {vision.ninetyDay.length > 0 && (
-                <div className="bg-muted/60 rounded-lg p-2.5">
-                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide block mb-1">
-                    90-Day Plans
-                  </span>
-                  <div className="space-y-0.5">
-                    {vision.ninetyDay.map(goal => (
-                      <div 
-                        key={goal.id} 
-                        className="flex items-center justify-between text-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/weekly?plan=${goal.id}`);
-                        }}
-                      >
-                        <span className="text-foreground/90">{goal.title}</span>
-                        <span className="text-[10px] text-muted-foreground/60">
-                          {getGoalStatusLabel(goal.status)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Mobile: Actions row - tighter spacing */}
           <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-muted/50">
-            {/* Secondary: View full strategy */}
-            {hasStrategy && (
+            {/* Show more/less toggle */}
+            {canExpand && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleVisionExpanded(vision.id);
                 }}
-                className="text-xs text-muted-foreground/60 hover:text-muted-foreground inline-flex items-center gap-0.5 transition-colors"
+                className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
               >
-                {isExpanded ? "Hide strategy" : "View full strategy"}
-                <ChevronRight className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                {isExpanded ? "Show less" : "Show more"}
               </button>
             )}
-            {!hasStrategy && <span />}
+            {!canExpand && <span />}
 
             {/* Primary: Plan this week */}
             <button
