@@ -334,6 +334,7 @@ const TaskDetailModal = ({
                 time_end: timeEnd || null,
                 is_flexible_time: !timeStart,
                 notes: notes || null,
+                is_completed: isCompleted,
               })
               .eq("id", existingCompletion.id);
 
@@ -355,6 +356,7 @@ const TaskDetailModal = ({
             is_flexible_time: !timeStart,
             task_type: "recurring",
             notes: notes || null,
+            is_completed: isCompleted,
           });
 
           // Update weekly checkin actual_count only if completing

@@ -22,6 +22,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           instance_number: number | null
+          is_completed: boolean | null
           is_deleted: boolean | null
           is_detached: boolean | null
           is_flexible_time: boolean | null
@@ -39,6 +40,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           instance_number?: number | null
+          is_completed?: boolean | null
           is_deleted?: boolean | null
           is_detached?: boolean | null
           is_flexible_time?: boolean | null
@@ -56,6 +58,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           instance_number?: number | null
+          is_completed?: boolean | null
           is_deleted?: boolean | null
           is_detached?: boolean | null
           is_flexible_time?: boolean | null
