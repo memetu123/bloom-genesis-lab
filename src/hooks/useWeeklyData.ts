@@ -285,7 +285,7 @@ export function useWeeklyData(
               id: `${commitment.id}-${dateKey}-${inst}`,
               commitmentId: commitment.id,
               title: commitment.title,
-              isCompleted: !!completion && (completion.instance_number === inst || instanceCount === 1),
+              isCompleted: (completion?.is_completed ?? false) && (completion.instance_number === inst || instanceCount === 1),
               timeStart: completion?.time_start || details.start,
               timeEnd: completion?.time_end || details.end,
               taskType: "recurring",

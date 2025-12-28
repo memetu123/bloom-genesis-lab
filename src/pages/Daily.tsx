@@ -184,13 +184,22 @@ const Daily = () => {
             });
         }
       } else {
-        if (task.isCompleted) {
+        // Check if completion record exists
+        const { data: existingCompletion } = await supabase
+          .from("commitment_completions")
+          .select("id")
+          .eq("commitment_id", task.commitmentId)
+          .eq("completed_date", dateKey)
+          .maybeSingle();
+
+        if (existingCompletion) {
+          // Update the is_completed flag
           await supabase
             .from("commitment_completions")
-            .delete()
-            .eq("commitment_id", task.commitmentId)
-            .eq("completed_date", dateKey);
+            .update({ is_completed: !task.isCompleted })
+            .eq("id", existingCompletion.id);
         } else {
+          // Create new completion record
           await supabase
             .from("commitment_completions")
             .insert({
@@ -198,6 +207,7 @@ const Daily = () => {
               commitment_id: task.commitmentId,
               completed_date: dateKey,
               instance_number: task.instanceNumber || 1,
+              is_completed: true,
             });
         }
       }

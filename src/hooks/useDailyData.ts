@@ -169,7 +169,7 @@ export function useDailyData(
           title: commitment.title,
           timeStart,
           timeEnd,
-          isCompleted: !!completion,
+          isCompleted: completion?.is_completed ?? false,
           taskType: "recurring",
           instanceNumber: completion?.instance_number || 1,
           totalInstances: timesPerDay,
