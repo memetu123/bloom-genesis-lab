@@ -387,6 +387,7 @@ export type Database = {
           default_time_end: string | null
           default_time_start: string | null
           deleted_at: string | null
+          end_date: string | null
           flexible_time: boolean | null
           frequency_json: Json | null
           goal_id: string | null
@@ -397,6 +398,7 @@ export type Database = {
           repeat_days_of_week: string[] | null
           repeat_frequency: string | null
           repeat_times_per_period: number | null
+          start_date: string | null
           task_type: string | null
           times_per_day: number | null
           title: string
@@ -409,6 +411,7 @@ export type Database = {
           default_time_end?: string | null
           default_time_start?: string | null
           deleted_at?: string | null
+          end_date?: string | null
           flexible_time?: boolean | null
           frequency_json?: Json | null
           goal_id?: string | null
@@ -419,6 +422,7 @@ export type Database = {
           repeat_days_of_week?: string[] | null
           repeat_frequency?: string | null
           repeat_times_per_period?: number | null
+          start_date?: string | null
           task_type?: string | null
           times_per_day?: number | null
           title: string
@@ -431,6 +435,7 @@ export type Database = {
           default_time_end?: string | null
           default_time_start?: string | null
           deleted_at?: string | null
+          end_date?: string | null
           flexible_time?: boolean | null
           frequency_json?: Json | null
           goal_id?: string | null
@@ -441,6 +446,7 @@ export type Database = {
           repeat_days_of_week?: string[] | null
           repeat_frequency?: string | null
           repeat_times_per_period?: number | null
+          start_date?: string | null
           task_type?: string | null
           times_per_day?: number | null
           title?: string

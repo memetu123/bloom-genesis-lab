@@ -79,6 +79,8 @@ const TaskCreateModal = ({
   const [scheduledDate, setScheduledDate] = useState(
     format(defaultDate, "yyyy-MM-dd")
   );
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [relatedExpanded, setRelatedExpanded] = useState(false);
 
@@ -126,6 +128,8 @@ const TaskCreateModal = ({
       setGoalId(defaultGoalId || "");
       setTimeStart("");
       setTimeEnd("");
+      setStartDate("");
+      setEndDate("");
       // Auto-expand related section if goal is pre-selected
       setRelatedExpanded(!!defaultGoalId);
       
@@ -150,6 +154,8 @@ const TaskCreateModal = ({
     setGoalId("");
     setTimeStart("");
     setTimeEnd("");
+    setStartDate("");
+    setEndDate("");
     setScheduledDate(format(defaultDate, "yyyy-MM-dd"));
     setRelatedExpanded(false);
   };
@@ -193,6 +199,8 @@ const TaskCreateModal = ({
           timeStart: timeStart || undefined,
           timeEnd: timeEnd || undefined,
           weekStart,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
         });
         toast.success("Recurring task created");
       }
@@ -333,6 +341,42 @@ const TaskCreateModal = ({
                 onChange={(e) => setScheduledDate(e.target.value)}
                 className="mt-1"
               />
+            </div>
+          )}
+
+          {/* Start/End dates for recurring tasks */}
+          {recurrenceType !== "none" && (
+            <div className="space-y-3">
+              <Label className="text-sm text-muted-foreground">Duration (optional)</Label>
+              <div className="flex gap-2 items-center">
+                <div className="flex-1">
+                  <Label htmlFor="start-date" className="text-xs text-muted-foreground">
+                    Start date
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="end-date" className="text-xs text-muted-foreground">
+                    End date
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to repeat indefinitely
+              </p>
             </div>
           )}
 

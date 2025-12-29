@@ -47,10 +47,12 @@ export const useTaskScheduling = () => {
       timeStart?: string;
       timeEnd?: string;
       weekStart?: Date;
+      startDate?: string;
+      endDate?: string;
     }) => {
       if (!user) throw new Error("User not authenticated");
 
-      const { title, goalId, recurrence, timeStart, timeEnd, weekStart } = params;
+      const { title, goalId, recurrence, timeStart, timeEnd, weekStart, startDate, endDate } = params;
 
       // Create the weekly commitment with new fields
       const { data: commitment, error } = await supabase
@@ -68,6 +70,8 @@ export const useTaskScheduling = () => {
           flexible_time: !timeStart,
           commitment_type: "habit",
           is_active: true,
+          start_date: startDate || null,
+          end_date: endDate || null,
           // Legacy fields for backward compatibility
           repeat_frequency: recurrence.recurrenceType === 'daily' ? 'daily' : 'weekly',
           repeat_times_per_period: recurrence.recurrenceType === 'daily' 

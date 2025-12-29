@@ -137,6 +137,13 @@ export function useDailyData(
         const recurrenceType = commitment.recurrence_type || 'weekly';
         const daysOfWeek = commitment.repeat_days_of_week || [];
         
+        // Check date bounds (start_date and end_date)
+        const startDate = commitment.start_date;
+        const endDate = commitment.end_date;
+        
+        if (startDate && dateKey < startDate) continue; // Before start date
+        if (endDate && dateKey > endDate) continue; // After end date
+        
         // Check if should appear on this day
         let shouldShow = false;
         if (recurrenceType === 'daily') {
