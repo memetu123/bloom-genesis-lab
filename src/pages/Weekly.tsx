@@ -518,15 +518,15 @@ const Weekly = () => {
       {isMobile && goalOptions.length > 0 && (
         <button
           onClick={() => setMobilePlanSheetOpen(true)}
-          className="w-full mb-4 flex items-center justify-between py-3 px-4 bg-muted/30 border border-border rounded-lg min-h-[48px]"
+          className="w-full mb-4 flex items-center justify-between py-3 px-4 bg-muted/30 border border-border rounded-lg min-h-[48px] overflow-hidden"
         >
-          <div className="flex flex-col items-start min-w-0">
+          <div className="flex flex-col items-start min-w-0 flex-1 overflow-hidden">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide">90-Day Plan</span>
-            <span className="text-sm font-medium text-foreground truncate">
+            <span className="text-sm font-medium text-foreground truncate w-full text-left">
               {activePlan?.title || "All tasks"}
             </span>
           </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
         </button>
       )}
 
