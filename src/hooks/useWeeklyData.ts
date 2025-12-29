@@ -230,7 +230,7 @@ export function useWeeklyData(
 
       setCommitments(enrichedCommitments);
 
-      // Build commitment details lookup
+      // Build commitment details lookup (including date bounds)
       const commitmentDetailsMap = new Map(
         rawCommitments.map(c => [c.id, {
           start: c.default_time_start,
@@ -238,6 +238,8 @@ export function useWeeklyData(
           recurrenceType: c.recurrence_type || 'weekly',
           timesPerDay: c.times_per_day || 1,
           daysOfWeek: c.repeat_days_of_week || [],
+          startDate: c.start_date,
+          endDate: c.end_date,
         }])
       );
 
@@ -255,6 +257,10 @@ export function useWeeklyData(
         for (const commitment of enrichedCommitments) {
           const details = commitmentDetailsMap.get(commitment.id);
           if (!details) continue;
+
+          // Check date bounds (start_date and end_date)
+          if (details.startDate && dateKey < details.startDate) continue; // Before start date
+          if (details.endDate && dateKey > details.endDate) continue; // After end date
 
           // Check if should appear on this day
           let shouldShow = false;
