@@ -85,6 +85,8 @@ const TaskDetailModal = ({
   const [originalGoalId, setOriginalGoalId] = useState<string>("");
   const [relatedExpanded, setRelatedExpanded] = useState(false);
   const [notes, setNotes] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const dateKey = format(date, "yyyy-MM-dd");
 
@@ -122,6 +124,8 @@ const TaskDetailModal = ({
       setGoalId("");
       setOriginalGoalId("");
       setNotes("");
+      setStartDate("");
+      setEndDate("");
 
       // Fetch notes and other data
       fetchTaskNotes(task);
@@ -173,7 +177,7 @@ const TaskDetailModal = ({
   const fetchRecurrenceRulesAndGoal = async (commitmentId: string) => {
     const { data } = await supabase
       .from("weekly_commitments")
-      .select("recurrence_type, times_per_day, repeat_days_of_week, goal_id")
+      .select("recurrence_type, times_per_day, repeat_days_of_week, goal_id, start_date, end_date")
       .eq("id", commitmentId)
       .maybeSingle();
 
@@ -183,6 +187,8 @@ const TaskDetailModal = ({
       setSelectedDays((data.repeat_days_of_week as DayOfWeek[]) || []);
       setGoalId(data.goal_id || "");
       setOriginalGoalId(data.goal_id || "");
+      setStartDate(data.start_date || "");
+      setEndDate(data.end_date || "");
     }
   };
 
@@ -227,7 +233,7 @@ const TaskDetailModal = ({
       const goalChanged = goalId !== originalGoalId;
 
       if (isRecurring && task.commitmentId) {
-        // Update weekly commitment (including goal_id if changed)
+        // Update weekly commitment (including goal_id and dates if changed)
         await supabase
           .from("weekly_commitments")
           .update({
@@ -235,6 +241,8 @@ const TaskDetailModal = ({
             default_time_start: timeStart || null,
             default_time_end: timeEnd || null,
             flexible_time: !timeStart,
+            start_date: startDate || null,
+            end_date: endDate || null,
             ...(goalChanged ? { goal_id: goalId || null } : {}),
           })
           .eq("id", task.commitmentId);
@@ -778,6 +786,46 @@ const TaskDetailModal = ({
               </div>
             </div>
           </div>
+
+          {/* Duration (Start/End dates) - Only for recurring tasks */}
+          {isRecurring && (
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
+                <Calendar className="h-3 w-3 opacity-30" />
+                Duration (optional)
+              </span>
+
+              <div className="flex gap-3 items-end">
+                <div className="flex-1">
+                  <Label htmlFor="start-date" className="text-xs font-medium text-foreground/70 mb-1 block">
+                    Start date
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="end-date" className="text-xs font-medium text-foreground/70 mb-1 block">
+                    End date
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground/60">
+                Leave empty to repeat indefinitely
+              </p>
+            </div>
+          )}
 
           {/* 5. Related to (optional) - Collapsible */}
           {relatedGoals.length > 0 && (
