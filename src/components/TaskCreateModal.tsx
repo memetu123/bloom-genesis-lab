@@ -224,9 +224,9 @@ const TaskCreateModal = ({
         <VisuallyHidden.Root>
           <DialogTitle>Add Task</DialogTitle>
         </VisuallyHidden.Root>
-        <div className="space-y-5">
+        <div className="space-y-5 pt-2">
           {/* Title - Entry point, no header above */}
-          <div>
+          <div className="pr-8">
             <Label htmlFor="task-title" className="sr-only">Task Title</Label>
             <Input
               ref={titleInputRef}
