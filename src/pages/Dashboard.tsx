@@ -37,6 +37,7 @@ import { toast } from "sonner";
 // Goal with children for hierarchical display
 interface GoalWithChildren extends GlobalGoal {
   children: GoalWithChildren[];
+  isActive: boolean; // Derived: has active tasks or active descendants
 }
 
 interface VisionWithHierarchy {
@@ -51,7 +52,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const { visions, goals, pillars, pillarsMap, loading, refetchVisions, refetchGoals } = useAppData();
+  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
   const [expandedVisionIds, setExpandedVisionIds] = useState<Set<string>>(new Set());
   
@@ -67,35 +68,58 @@ const Dashboard = () => {
   const [mobileSheetVision, setMobileSheetVision] = useState<VisionWithHierarchy | null>(null);
   
 
-  // Build hierarchical goal tree: 3yr → 1yr → 90d
+  // Build hierarchical goal tree: 3yr → 1yr → 90d with activity derivation
   const buildGoalTree = (visionGoals: GlobalGoal[]): GoalWithChildren[] => {
     const threeYear = visionGoals.filter(g => g.goal_type === "three_year");
     const oneYear = visionGoals.filter(g => g.goal_type === "one_year");
     const ninetyDay = visionGoals.filter(g => g.goal_type === "ninety_day");
 
-    // Build 1yr goals with their 90d children
-    const oneYearWithChildren: GoalWithChildren[] = oneYear.map(goal => ({
-      ...goal,
-      children: ninetyDay
-        .filter(nd => nd.parent_goal_id === goal.id)
-        .map(nd => ({ ...nd, children: [] })),
+    // Build 90d goals with activity status (has active tasks)
+    const ninetyDayWithActivity: GoalWithChildren[] = ninetyDay.map(nd => ({
+      ...nd,
+      children: [],
+      isActive: goalsWithActiveTasks.has(nd.id),
     }));
 
-    // Build 3yr goals with their 1yr children (which have 90d children)
-    const threeYearWithChildren: GoalWithChildren[] = threeYear.map(goal => ({
-      ...goal,
-      children: oneYearWithChildren.filter(oy => oy.parent_goal_id === goal.id),
-    }));
+    // Build 1yr goals with their 90d children - active if any child is active
+    const oneYearWithChildren: GoalWithChildren[] = oneYear.map(goal => {
+      const children = ninetyDayWithActivity.filter(nd => nd.parent_goal_id === goal.id);
+      const isActive = children.some(c => c.isActive);
+      return { ...goal, children, isActive };
+    });
+
+    // Build 3yr goals with their 1yr children - active if any child is active
+    const threeYearWithChildren: GoalWithChildren[] = threeYear.map(goal => {
+      const children = oneYearWithChildren.filter(oy => oy.parent_goal_id === goal.id);
+      const isActive = children.some(c => c.isActive);
+      return { ...goal, children, isActive };
+    });
 
     // Find orphan 1yr goals (no parent 3yr) and add them as top-level
     const orphanOneYear = oneYearWithChildren.filter(oy => !oy.parent_goal_id);
     
     // Find orphan 90d goals (no parent 1yr) and add them as top-level
-    const orphanNinetyDay = ninetyDay
-      .filter(nd => !nd.parent_goal_id)
-      .map(nd => ({ ...nd, children: [] }));
+    const orphanNinetyDay = ninetyDayWithActivity.filter(nd => !nd.parent_goal_id);
 
-    return [...threeYearWithChildren, ...orphanOneYear, ...orphanNinetyDay];
+    // Combine all top-level goals and sort: active first, preserve relative order within groups
+    const allTopLevel = [...threeYearWithChildren, ...orphanOneYear, ...orphanNinetyDay];
+    return sortByActivity(allTopLevel);
+  };
+
+  // Sort goals by activity: active first, then inactive, preserving relative order within each group
+  const sortByActivity = (items: GoalWithChildren[]): GoalWithChildren[] => {
+    const active = items.filter(g => g.isActive);
+    const inactive = items.filter(g => !g.isActive);
+    
+    // Also sort children recursively
+    const sortChildren = (goals: GoalWithChildren[]): GoalWithChildren[] => {
+      return goals.map(g => ({
+        ...g,
+        children: sortByActivity(g.children),
+      }));
+    };
+
+    return [...sortChildren(active), ...sortChildren(inactive)];
   };
 
   // Build focused visions with hierarchical goals
@@ -113,7 +137,7 @@ const Dashboard = () => {
         threeYearWithChildren: buildGoalTree(visionGoals),
       };
     });
-  }, [visions, goals, pillarsMap]);
+  }, [visions, goals, pillarsMap, goalsWithActiveTasks]);
 
   // Non-focused active visions with hierarchy
   const nonFocusedVisions = useMemo((): VisionWithHierarchy[] => {
@@ -129,7 +153,7 @@ const Dashboard = () => {
           threeYearWithChildren: buildGoalTree(visionGoals),
         };
       });
-  }, [visions, goals, pillarsMap]);
+  }, [visions, goals, pillarsMap, goalsWithActiveTasks]);
 
   const handleToggleFocus = async (visionId: string, currentFocus: boolean) => {
     try {
@@ -267,16 +291,16 @@ const Dashboard = () => {
     setMobileSheetOpen(true);
   };
 
-  // Render a single goal item with label chip
+  // Render a single goal item with label chip - uses goal's isActive for muting
   const renderGoalItem = (
     goal: GoalWithChildren, 
     indentLevel: number, 
     showConnector: boolean,
-    isMuted: boolean,
     isMobile: boolean
   ) => {
     const labelChip = getLabelChip(goal.goal_type);
     const isNinetyDay = goal.goal_type === "ninety_day";
+    const isMuted = !goal.isActive;
     
     return (
       <div
@@ -292,7 +316,7 @@ const Dashboard = () => {
         {/* Label chip */}
         <span className={`
           shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded 
-          bg-muted/60 text-muted-foreground
+          ${isMuted ? "bg-muted/40 text-muted-foreground/60" : "bg-muted/60 text-muted-foreground"}
         `}>
           {labelChip}
         </span>
@@ -301,7 +325,7 @@ const Dashboard = () => {
         <span
           className={`
             text-sm cursor-pointer transition-colors break-words flex-1
-            ${isMuted ? "text-muted-foreground/70" : "text-foreground/90"}
+            ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
             hover:text-primary
           `}
           onClick={(e) => {
@@ -324,22 +348,20 @@ const Dashboard = () => {
     goals: GoalWithChildren[],
     indentLevel: number,
     isExpanded: boolean,
-    isMuted: boolean,
     isMobile: boolean
   ): React.ReactNode => {
     return goals.map((goal) => {
-      const isThreeYear = goal.goal_type === "three_year";
       const showConnector = indentLevel > 0;
       
       return (
         <div key={goal.id}>
           {/* Render the goal item */}
-          {renderGoalItem(goal, indentLevel, showConnector, isMuted, isMobile)}
+          {renderGoalItem(goal, indentLevel, showConnector, isMobile)}
           
           {/* Render children only when expanded */}
           {isExpanded && goal.children.length > 0 && (
             <div>
-              {renderGoalTree(goal.children, indentLevel + 1, isExpanded, isMuted, isMobile)}
+              {renderGoalTree(goal.children, indentLevel + 1, isExpanded, isMobile)}
             </div>
           )}
         </div>
@@ -443,7 +465,7 @@ const Dashboard = () => {
           {/* Hierarchical Goal Tree */}
           {hasAnyGoals ? (
             <div className="mb-3">
-              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, isMuted, false)}
+              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, false)}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground mb-4">
@@ -543,7 +565,7 @@ const Dashboard = () => {
           {/* Hierarchical Goal Tree */}
           {hasAnyGoals ? (
             <div className="mt-2.5">
-              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, isMuted, true)}
+              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, true)}
             </div>
           ) : (
             <button

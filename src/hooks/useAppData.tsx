@@ -51,6 +51,12 @@ export interface Goal {
   is_deleted: boolean;
 }
 
+export interface WeeklyCommitment {
+  id: string;
+  goal_id: string | null;
+  is_active: boolean;
+}
+
 // ============ DEFAULTS ============
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -67,11 +73,15 @@ interface AppDataContextType {
   pillars: Pillar[];
   visions: Vision[];
   goals: Goal[];
+  commitments: WeeklyCommitment[];
   
   // Lookup maps for O(1) access
   pillarsMap: Map<string, Pillar>;
   visionsMap: Map<string, Vision>;
   goalsMap: Map<string, Goal>;
+  
+  // Set of goal IDs that have active tasks (for activity derivation)
+  goalsWithActiveTasks: Set<string>;
   
   // Loading states
   loading: boolean;
@@ -82,6 +92,7 @@ interface AppDataContextType {
   refetchPillars: () => Promise<void>;
   refetchVisions: () => Promise<void>;
   refetchGoals: () => Promise<void>;
+  refetchCommitments: () => Promise<void>;
   refetchAll: () => Promise<void>;
 }
 
@@ -97,6 +108,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [visions, setVisions] = useState<Vision[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [commitments, setCommitments] = useState<WeeklyCommitment[]>([]);
   
   // Loading states
   const [preferencesLoading, setPreferencesLoading] = useState(true);
@@ -115,6 +127,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setPillars([]);
       setVisions([]);
       setGoals([]);
+      setCommitments([]);
       setPreferencesLoading(false);
       setCoreDataLoading(false);
       didFetchRef.current = false;
@@ -138,7 +151,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     try {
       // Fetch everything in parallel - SINGLE batch request
-      const [prefsResult, pillarsResult, visionsResult, goalsResult] = await Promise.all([
+      const [prefsResult, pillarsResult, visionsResult, goalsResult, commitmentsResult] = await Promise.all([
         supabase
           .from("user_preferences")
           .select("start_of_week, time_format, date_format")
@@ -158,6 +171,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .from("goals")
           .select("*")
           .eq("user_id", user.id)
+          .or("is_deleted.is.null,is_deleted.eq.false"),
+        supabase
+          .from("weekly_commitments")
+          .select("id, goal_id, is_active")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
           .or("is_deleted.is.null,is_deleted.eq.false"),
       ]);
 
@@ -191,6 +210,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setGoals((goalsResult.data || []).map(g => ({
           ...g,
           is_deleted: g.is_deleted || false,
+        })));
+      }
+
+      // Process commitments
+      if (!commitmentsResult.error) {
+        setCommitments((commitmentsResult.data || []).map(c => ({
+          id: c.id,
+          goal_id: c.goal_id,
+          is_active: c.is_active ?? true,
         })));
       }
 
@@ -253,6 +281,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [goals]
   );
 
+  // Set of goal IDs that have at least one active task (weekly commitment)
+  const goalsWithActiveTasks = useMemo(() => {
+    const set = new Set<string>();
+    for (const commitment of commitments) {
+      if (commitment.goal_id && commitment.is_active) {
+        set.add(commitment.goal_id);
+      }
+    }
+    return set;
+  }, [commitments]);
+
   // ============ REFETCH METHODS ============
 
   const refetchPreferences = useCallback(async () => {
@@ -313,6 +352,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     })));
   }, [user]);
 
+  const refetchCommitments = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("weekly_commitments")
+      .select("id, goal_id, is_active")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .or("is_deleted.is.null,is_deleted.eq.false");
+    setCommitments((data || []).map(c => ({
+      id: c.id,
+      goal_id: c.goal_id,
+      is_active: c.is_active ?? true,
+    })));
+  }, [user]);
+
   const refetchAll = useCallback(async () => {
     didFetchRef.current = false;
     isFetchingRef.current = false;
@@ -328,30 +382,36 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     pillars,
     visions,
     goals,
+    commitments,
     pillarsMap,
     visionsMap,
     goalsMap,
+    goalsWithActiveTasks,
     loading,
     preferencesLoading,
     refetchPreferences,
     refetchPillars,
     refetchVisions,
     refetchGoals,
+    refetchCommitments,
     refetchAll,
   }), [
     preferences,
     pillars,
     visions,
     goals,
+    commitments,
     pillarsMap,
     visionsMap,
     goalsMap,
+    goalsWithActiveTasks,
     loading,
     preferencesLoading,
     refetchPreferences,
     refetchPillars,
     refetchVisions,
     refetchGoals,
+    refetchCommitments,
     refetchAll,
   ]);
 
