@@ -48,6 +48,8 @@ interface VisionWithHierarchy {
   threeYearWithChildren: GoalWithChildren[];
 }
 
+type HierarchyFilter = "all" | "3yr" | "1yr" | "90d";
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -55,6 +57,7 @@ const Dashboard = () => {
   const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
   const [expandedVisionIds, setExpandedVisionIds] = useState<Set<string>>(new Set());
+  const [hierarchyFilter, setHierarchyFilter] = useState<HierarchyFilter>("all");
   
   // Add vision dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -284,6 +287,21 @@ const Dashboard = () => {
     });
   };
 
+  // Collect all goals of a specific type from the hierarchy
+  const collectGoalsByType = (goals: GoalWithChildren[], goalType: string): GoalWithChildren[] => {
+    const result: GoalWithChildren[] = [];
+    const traverse = (items: GoalWithChildren[]) => {
+      for (const item of items) {
+        if (item.goal_type === goalType) {
+          result.push(item);
+        }
+        traverse(item.children);
+      }
+    };
+    traverse(goals);
+    return result;
+  };
+
   // Open mobile action sheet for a vision
   const openMobileVisionActions = (vision: VisionWithHierarchy, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -343,7 +361,7 @@ const Dashboard = () => {
     );
   };
 
-  // Recursively render goal tree
+  // Recursively render goal tree (for "all" filter)
   const renderGoalTree = (
     goals: GoalWithChildren[],
     indentLevel: number,
@@ -369,12 +387,44 @@ const Dashboard = () => {
     });
   };
 
+  // Render flat list of goals (for filtered views - no hierarchy connectors)
+  const renderFlatGoalList = (
+    goals: GoalWithChildren[],
+    isMobile: boolean
+  ): React.ReactNode => {
+    return goals.map((goal) => (
+      <div key={goal.id}>
+        {renderGoalItem(goal, 0, false, isMobile)}
+      </div>
+    ));
+  };
+
+  // Get goals to display based on filter
+  const getFilteredGoals = (
+    threeYearWithChildren: GoalWithChildren[]
+  ): { goals: GoalWithChildren[]; isFlat: boolean } => {
+    switch (hierarchyFilter) {
+      case "3yr":
+        // Only top-level 3yr goals (which are in threeYearWithChildren)
+        const threeYrOnly = threeYearWithChildren.filter(g => g.goal_type === "three_year");
+        return { goals: threeYrOnly, isFlat: true };
+      case "1yr":
+        return { goals: collectGoalsByType(threeYearWithChildren, "one_year"), isFlat: true };
+      case "90d":
+        return { goals: collectGoalsByType(threeYearWithChildren, "ninety_day"), isFlat: true };
+      default:
+        return { goals: threeYearWithChildren, isFlat: false };
+    }
+  };
+
   // Desktop Vision Card
   const renderDesktopVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
     const activePlan = getActive90DayPlan(vision.threeYearWithChildren);
-    const hasAnyGoals = vision.threeYearWithChildren.length > 0;
     const isExpanded = expandedVisionIds.has(vision.id);
     const canExpand = hasExpandableContent(vision.threeYearWithChildren);
+    const { goals: filteredGoals, isFlat } = getFilteredGoals(vision.threeYearWithChildren);
+    const hasAnyGoals = filteredGoals.length > 0;
+    const showExpandToggle = hierarchyFilter === "all" && canExpand;
 
     return (
       <Card 
@@ -462,29 +512,36 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Hierarchical Goal Tree */}
+          {/* Goal Content */}
           {hasAnyGoals ? (
             <div className="mb-3">
-              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, false)}
+              {isFlat 
+                ? renderFlatGoalList(filteredGoals, false)
+                : renderGoalTree(filteredGoals, 0, isExpanded, false)
+              }
             </div>
           ) : (
             <p className="text-sm text-muted-foreground mb-4">
-              Add a goal when it feels right
+              {hierarchyFilter === "all" 
+                ? "Add a goal when it feels right"
+                : `No ${hierarchyFilter === "3yr" ? "3-year goals" : hierarchyFilter === "1yr" ? "1-year goals" : "90-day plans"}`
+              }
             </p>
           )}
 
           {/* Vision Footer */}
           <div className="pt-3 border-t border-muted flex items-center justify-between">
-            {/* Show more/less toggle */}
-            {canExpand && (
+            {/* Show more/less toggle - only for "all" filter */}
+            {showExpandToggle ? (
               <button
                 onClick={() => toggleVisionExpanded(vision.id)}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 {isExpanded ? "Show less" : "Show more"}
               </button>
+            ) : (
+              <span />
             )}
-            {!canExpand && <span />}
             
             <button
               onClick={() => {
@@ -509,8 +566,10 @@ const Dashboard = () => {
   const renderMobileVisionCard = (vision: VisionWithHierarchy, isMuted: boolean = false) => {
     const activePlan = getActive90DayPlan(vision.threeYearWithChildren);
     const isExpanded = expandedVisionIds.has(vision.id);
-    const hasAnyGoals = vision.threeYearWithChildren.length > 0;
     const canExpand = hasExpandableContent(vision.threeYearWithChildren);
+    const { goals: filteredGoals, isFlat } = getFilteredGoals(vision.threeYearWithChildren);
+    const hasAnyGoals = filteredGoals.length > 0;
+    const showExpandToggle = hierarchyFilter === "all" && canExpand;
 
     return (
       <Card 
@@ -562,25 +621,31 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Hierarchical Goal Tree */}
+          {/* Goal Content */}
           {hasAnyGoals ? (
             <div className="mt-2.5">
-              {renderGoalTree(vision.threeYearWithChildren, 0, isExpanded, true)}
+              {isFlat 
+                ? renderFlatGoalList(filteredGoals, true)
+                : renderGoalTree(filteredGoals, 0, isExpanded, true)
+              }
             </div>
           ) : (
             <button
               onClick={(e) => openMobileVisionActions(vision, e)}
               className="mt-2.5 text-sm text-muted-foreground/70 hover:text-primary inline-flex items-center gap-1 transition-colors"
             >
-              Add your first goal
-              <ArrowRight className="h-3 w-3" />
+              {hierarchyFilter === "all" 
+                ? "Add your first goal"
+                : `No ${hierarchyFilter === "3yr" ? "3-year goals" : hierarchyFilter === "1yr" ? "1-year goals" : "90-day plans"}`
+              }
+              {hierarchyFilter === "all" && <ArrowRight className="h-3 w-3" />}
             </button>
           )}
 
           {/* Mobile: Actions row - tighter spacing */}
           <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-muted/50">
-            {/* Show more/less toggle */}
-            {canExpand && (
+            {/* Show more/less toggle - only for "all" filter */}
+            {showExpandToggle ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -590,8 +655,9 @@ const Dashboard = () => {
               >
                 {isExpanded ? "Show less" : "Show more"}
               </button>
+            ) : (
+              <span />
             )}
-            {!canExpand && <span />}
 
             {/* Primary: Plan this week */}
             <button
@@ -629,10 +695,18 @@ const Dashboard = () => {
     );
   }
 
+  // Filter options for segmented control
+  const filterOptions: { value: HierarchyFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "3yr", label: "3yr" },
+    { value: "1yr", label: "1yr" },
+    { value: "90d", label: "90d" },
+  ];
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in pb-24 md:pb-8">
       {/* ========== HEADER ========== */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold text-foreground">
           My North Star
         </h1>
@@ -643,6 +717,28 @@ const Dashboard = () => {
             tooltip="Add vision"
           />
         )}
+      </div>
+
+      {/* ========== HIERARCHY FILTER ========== */}
+      <div className="mb-6">
+        <div className={`inline-flex rounded-md border border-border bg-muted/30 p-0.5 ${isMobile ? "w-full" : ""}`}>
+          {filterOptions.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setHierarchyFilter(option.value)}
+              className={`
+                px-3 py-1.5 text-xs font-medium rounded transition-colors
+                ${isMobile ? "flex-1" : ""}
+                ${hierarchyFilter === option.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                }
+              `}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ========== FOCUSED VISIONS ========== */}
