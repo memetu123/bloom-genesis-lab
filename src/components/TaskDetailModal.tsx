@@ -92,13 +92,19 @@ const TaskDetailModal = ({
 
   // Get filtered and sorted goals for "Related to" section
   const relatedGoals = (() => {
-    let filtered = allGoals.filter(
-      (g) =>
-        !g.is_deleted &&
-        g.status !== "archived" &&
-        g.status !== "completed" &&
-        (g.goal_type === "ninety_day" || g.goal_type === "one_year")
-    );
+    // Filter to active 90-day and 1-year goals only, excluding goals from deleted visions
+    let filtered = allGoals.filter((g) => {
+      // Skip deleted, archived, or completed goals
+      if (g.is_deleted || g.status === "archived" || g.status === "completed") return false;
+      // Only include 90-day and 1-year goals
+      if (g.goal_type !== "ninety_day" && g.goal_type !== "one_year") return false;
+      // Skip goals belonging to deleted visions
+      if (g.life_vision_id) {
+        const vision = visionsMap.get(g.life_vision_id);
+        if (vision?.is_deleted) return false;
+      }
+      return true;
+    });
     return filtered.sort((a, b) => {
       if (a.goal_type === "ninety_day" && b.goal_type !== "ninety_day") return -1;
       if (a.goal_type !== "ninety_day" && b.goal_type === "ninety_day") return 1;
