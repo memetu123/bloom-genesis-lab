@@ -90,26 +90,20 @@ const TaskDetailModal = ({
 
   const dateKey = format(date, "yyyy-MM-dd");
 
-  // Get filtered and sorted goals for "Related to" section
+  // Get filtered and sorted 90-day plans for "Related to" section
   const relatedGoals = (() => {
-    // Filter to active 90-day and 1-year goals only, excluding goals from deleted visions
+    // Filter to active 90-day plans only, excluding plans from deleted visions
     let filtered = allGoals.filter((g) => {
-      // Skip deleted, archived, or completed goals
+      // Skip deleted, archived, or completed plans
       if (g.is_deleted || g.status === "archived" || g.status === "completed") return false;
-      // Only include 90-day and 1-year goals
-      if (g.goal_type !== "ninety_day" && g.goal_type !== "one_year") return false;
-      // Skip goals belonging to deleted visions
-      if (g.life_vision_id) {
-        const vision = visionsMap.get(g.life_vision_id);
-        if (vision?.is_deleted) return false;
-      }
+      // Only include 90-day plans
+      if (g.goal_type !== "ninety_day") return false;
+      // Skip plans belonging to deleted visions (vision not in map means it was deleted)
+      if (g.life_vision_id && !visionsMap.has(g.life_vision_id)) return false;
       return true;
     });
-    return filtered.sort((a, b) => {
-      if (a.goal_type === "ninety_day" && b.goal_type !== "ninety_day") return -1;
-      if (a.goal_type !== "ninety_day" && b.goal_type === "ninety_day") return 1;
-      return a.title.localeCompare(b.title);
-    });
+    // Sort alphabetically
+    return filtered.sort((a, b) => a.title.localeCompare(b.title));
   })();
 
   const getVisionContext = (goal: Goal): string | null => {
@@ -863,7 +857,7 @@ const TaskDetailModal = ({
                     onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
                   >
                     <SelectTrigger className="w-full h-9 text-sm [&>span]:truncate [&>span]:min-w-0 [&>span]:flex-1 [&>span]:text-left">
-                      <SelectValue placeholder="Select a plan or goal" />
+                      <SelectValue placeholder="Select a 90-day plan" />
                     </SelectTrigger>
                     <SelectContent className="max-w-[calc(100vw-3rem)]">
                       <SelectItem value="none">
@@ -871,15 +865,15 @@ const TaskDetailModal = ({
                       </SelectItem>
                       {relatedGoals.map((goal) => {
                         const visionName = getVisionContext(goal);
-                        const typeLabel = goal.goal_type === "ninety_day" ? "90-day" : "1-year";
                         return (
                           <SelectItem key={goal.id} value={goal.id}>
                             <div className="flex flex-col min-w-0">
                               <span className="truncate">{goal.title}</span>
-                              <span className="text-xs text-muted-foreground truncate">
-                                {typeLabel}
-                                {visionName && ` · ${visionName}`}
-                              </span>
+                              {visionName && (
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {visionName}
+                                </span>
+                              )}
                             </div>
                           </SelectItem>
                         );
