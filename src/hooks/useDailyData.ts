@@ -25,6 +25,12 @@ export interface DailyTask {
   isDetached?: boolean;
   /** Goal ID linked to this task (via weekly_commitment) */
   goalId: string | null;
+  /** Goal title for hierarchy display */
+  goalTitle: string | null;
+  /** Vision title for hierarchy display */
+  visionTitle: string | null;
+  /** Vision is_focus for star display */
+  visionIsFocus: boolean | null;
   // For TaskDetailModal - avoid extra fetch
   recurrenceType?: string;
   timesPerDay?: number;
@@ -48,7 +54,7 @@ export function useDailyData(
   weekStartsOn: 0 | 1 = 1
 ): UseDailyDataResult {
   const { user } = useAuth();
-  const { goalsMap } = useAppData();
+  const { goalsMap, visionsMap } = useAppData();
   
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,9 +169,13 @@ export function useDailyData(
         // Skip if detached
         if (completion?.is_detached) continue;
 
-        const goalIsFocus = commitment.goal_id 
-          ? goalsMap.get(commitment.goal_id)?.is_focus ?? null 
-          : null;
+        const goal = commitment.goal_id ? goalsMap.get(commitment.goal_id) : null;
+        const goalIsFocus = goal?.is_focus ?? null;
+        const goalTitle = goal?.title ?? null;
+        const vision = goal?.life_vision_id ? visionsMap.get(goal.life_vision_id) : null;
+        const visionTitle = vision?.title ?? null;
+        const visionIsFocus = vision?.is_focus ?? null;
+        
         const timeStart = completion?.time_start || commitment.default_time_start;
         const timeEnd = completion?.time_end || commitment.default_time_end;
         const timesPerDay = commitment.times_per_day || 1;
@@ -182,6 +192,9 @@ export function useDailyData(
           totalInstances: timesPerDay,
           goalIsFocus,
           goalId: commitment.goal_id,
+          goalTitle,
+          visionTitle,
+          visionIsFocus,
           // Include for TaskDetailModal
           recurrenceType,
           timesPerDay,
@@ -200,6 +213,10 @@ export function useDailyData(
         const originalCommitment = task.is_detached && task.commitment_id
           ? rawCommitments.find(c => c.id === task.commitment_id)
           : null;
+        const detachedGoalId = originalCommitment?.goal_id || null;
+        const detachedGoal = detachedGoalId ? goalsMap.get(detachedGoalId) : null;
+        const detachedVision = detachedGoal?.life_vision_id ? visionsMap.get(detachedGoal.life_vision_id) : null;
+        
         dailyTasks.push({
           id: task.id,
           commitmentId: task.is_detached ? task.commitment_id : null,
@@ -209,7 +226,10 @@ export function useDailyData(
           isCompleted: taskInstance?.is_completed ?? false,
           taskType: "independent",
           goalIsFocus: null,
-          goalId: originalCommitment?.goal_id || null,
+          goalId: detachedGoalId,
+          goalTitle: detachedGoal?.title ?? null,
+          visionTitle: detachedVision?.title ?? null,
+          visionIsFocus: detachedVision?.is_focus ?? null,
           isDetached: task.is_detached ?? false,
         });
       }
@@ -224,7 +244,7 @@ export function useDailyData(
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [user, selectedDate, dateKey, currentCacheKey, weekStartsOn, goalsMap]);
+  }, [user, selectedDate, dateKey, currentCacheKey, weekStartsOn, goalsMap, visionsMap]);
 
   // Fetch when cache key changes
   useEffect(() => {
