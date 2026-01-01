@@ -48,7 +48,7 @@ interface VisionWithHierarchy {
   threeYearWithChildren: GoalWithChildren[];
 }
 
-type HierarchyFilter = "all" | "3yr" | "1yr" | "90d";
+type HierarchyFilter = "all" | "1yr" | "90d";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -361,11 +361,10 @@ const Dashboard = () => {
     );
   };
 
-  // Recursively render goal tree (for "all" filter)
+  // Recursively render goal tree with full hierarchy (for expanded "all" filter)
   const renderGoalTree = (
     goals: GoalWithChildren[],
     indentLevel: number,
-    isExpanded: boolean,
     isMobile: boolean
   ): React.ReactNode => {
     return goals.map((goal) => {
@@ -376,10 +375,10 @@ const Dashboard = () => {
           {/* Render the goal item */}
           {renderGoalItem(goal, indentLevel, showConnector, isMobile)}
           
-          {/* Render children only when expanded */}
-          {isExpanded && goal.children.length > 0 && (
+          {/* Render children recursively */}
+          {goal.children.length > 0 && (
             <div>
-              {renderGoalTree(goal.children, indentLevel + 1, isExpanded, isMobile)}
+              {renderGoalTree(goal.children, indentLevel + 1, isMobile)}
             </div>
           )}
         </div>
@@ -390,31 +389,42 @@ const Dashboard = () => {
   // Render flat list of goals (for filtered views - no hierarchy connectors)
   const renderFlatGoalList = (
     goals: GoalWithChildren[],
-    isMobile: boolean
+    isMobile: boolean,
+    maxItems?: number
   ): React.ReactNode => {
-    return goals.map((goal) => (
+    const displayGoals = maxItems !== undefined ? goals.slice(0, maxItems) : goals;
+    return displayGoals.map((goal) => (
       <div key={goal.id}>
         {renderGoalItem(goal, 0, false, isMobile)}
       </div>
     ));
   };
 
-  // Get goals to display based on filter
+  // Render collapsed view for "all" filter - only 3yr goals, no children
+  const renderCollapsedView = (
+    threeYearWithChildren: GoalWithChildren[],
+    isMobile: boolean
+  ): React.ReactNode => {
+    // Only show 3yr goals at top level (no children visible)
+    const threeYrGoals = threeYearWithChildren.filter(g => g.goal_type === "three_year");
+    return threeYrGoals.map((goal) => (
+      <div key={goal.id}>
+        {renderGoalItem(goal, 0, false, isMobile)}
+      </div>
+    ));
+  };
+
+  // Get goals to display based on filter and expansion state
   const getFilteredGoals = (
-    threeYearWithChildren: GoalWithChildren[]
-  ): { goals: GoalWithChildren[]; isFlat: boolean } => {
-    switch (hierarchyFilter) {
-      case "3yr":
-        // Only top-level 3yr goals (which are in threeYearWithChildren)
-        const threeYrOnly = threeYearWithChildren.filter(g => g.goal_type === "three_year");
-        return { goals: threeYrOnly, isFlat: true };
-      case "1yr":
-        return { goals: collectGoalsByType(threeYearWithChildren, "one_year"), isFlat: true };
-      case "90d":
-        return { goals: collectGoalsByType(threeYearWithChildren, "ninety_day"), isFlat: true };
-      default:
-        return { goals: threeYearWithChildren, isFlat: false };
-    }
+    threeYearWithChildren: GoalWithChildren[],
+    goalType: "one_year" | "ninety_day"
+  ): GoalWithChildren[] => {
+    return collectGoalsByType(threeYearWithChildren, goalType);
+  };
+
+  // Check if there are 3yr goals to show in collapsed "all" mode
+  const hasThreeYearGoals = (threeYearWithChildren: GoalWithChildren[]): boolean => {
+    return threeYearWithChildren.some(g => g.goal_type === "three_year");
   };
 
   // Desktop Vision Card
@@ -422,9 +432,30 @@ const Dashboard = () => {
     const activePlan = getActive90DayPlan(vision.threeYearWithChildren);
     const isExpanded = expandedVisionIds.has(vision.id);
     const canExpand = hasExpandableContent(vision.threeYearWithChildren);
-    const { goals: filteredGoals, isFlat } = getFilteredGoals(vision.threeYearWithChildren);
-    const hasAnyGoals = filteredGoals.length > 0;
-    const showExpandToggle = hierarchyFilter === "all" && canExpand;
+    
+    // Determine what to show based on filter
+    let goalsToShow: GoalWithChildren[] = [];
+    let hasContent = false;
+    let showExpandToggle = false;
+    let emptyMessage = "Add a goal when it feels right";
+
+    if (hierarchyFilter === "all") {
+      // "All" mode: collapsed shows 3yr only, expanded shows full hierarchy
+      const has3yr = hasThreeYearGoals(vision.threeYearWithChildren);
+      hasContent = vision.threeYearWithChildren.length > 0;
+      showExpandToggle = canExpand; // Can expand if there are children to show
+      emptyMessage = "Add a goal when it feels right";
+    } else if (hierarchyFilter === "1yr") {
+      goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "one_year");
+      hasContent = goalsToShow.length > 0;
+      showExpandToggle = false; // No expand in filtered mode
+      emptyMessage = "No 1-year goals";
+    } else if (hierarchyFilter === "90d") {
+      goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "ninety_day");
+      hasContent = goalsToShow.length > 0;
+      showExpandToggle = false; // No expand in filtered mode
+      emptyMessage = "No 90-day plans";
+    }
 
     return (
       <Card 
@@ -513,25 +544,32 @@ const Dashboard = () => {
           </div>
 
           {/* Goal Content */}
-          {hasAnyGoals ? (
-            <div className="mb-3">
-              {isFlat 
-                ? renderFlatGoalList(filteredGoals, false)
-                : renderGoalTree(filteredGoals, 0, isExpanded, false)
-              }
-            </div>
+          {hierarchyFilter === "all" ? (
+            // "All" mode: collapsed shows 3yr only, expanded shows full hierarchy
+            hasThreeYearGoals(vision.threeYearWithChildren) || vision.threeYearWithChildren.length > 0 ? (
+              <div className="mb-3">
+                {isExpanded 
+                  ? renderGoalTree(vision.threeYearWithChildren, 0, false)
+                  : renderCollapsedView(vision.threeYearWithChildren, false)
+                }
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-4">{emptyMessage}</p>
+            )
           ) : (
-            <p className="text-sm text-muted-foreground mb-4">
-              {hierarchyFilter === "all" 
-                ? "Add a goal when it feels right"
-                : `No ${hierarchyFilter === "3yr" ? "3-year goals" : hierarchyFilter === "1yr" ? "1-year goals" : "90-day plans"}`
-              }
-            </p>
+            // Filtered mode: flat list
+            hasContent ? (
+              <div className="mb-3">
+                {renderFlatGoalList(goalsToShow, false)}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-4">{emptyMessage}</p>
+            )
           )}
 
           {/* Vision Footer */}
           <div className="pt-3 border-t border-muted flex items-center justify-between">
-            {/* Show more/less toggle - only for "all" filter */}
+            {/* Show more/less toggle - only for "all" filter with expandable content */}
             {showExpandToggle ? (
               <button
                 onClick={() => toggleVisionExpanded(vision.id)}
@@ -567,9 +605,28 @@ const Dashboard = () => {
     const activePlan = getActive90DayPlan(vision.threeYearWithChildren);
     const isExpanded = expandedVisionIds.has(vision.id);
     const canExpand = hasExpandableContent(vision.threeYearWithChildren);
-    const { goals: filteredGoals, isFlat } = getFilteredGoals(vision.threeYearWithChildren);
-    const hasAnyGoals = filteredGoals.length > 0;
-    const showExpandToggle = hierarchyFilter === "all" && canExpand;
+    
+    // Determine what to show based on filter
+    let goalsToShow: GoalWithChildren[] = [];
+    let hasContent = false;
+    let showExpandToggle = false;
+    let emptyMessage = "Add your first goal";
+
+    if (hierarchyFilter === "all") {
+      hasContent = vision.threeYearWithChildren.length > 0;
+      showExpandToggle = canExpand;
+      emptyMessage = "Add your first goal";
+    } else if (hierarchyFilter === "1yr") {
+      goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "one_year");
+      hasContent = goalsToShow.length > 0;
+      showExpandToggle = false;
+      emptyMessage = "No 1-year goals";
+    } else if (hierarchyFilter === "90d") {
+      goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "ninety_day");
+      hasContent = goalsToShow.length > 0;
+      showExpandToggle = false;
+      emptyMessage = "No 90-day plans";
+    }
 
     return (
       <Card 
@@ -622,24 +679,33 @@ const Dashboard = () => {
           </div>
 
           {/* Goal Content */}
-          {hasAnyGoals ? (
-            <div className="mt-2.5">
-              {isFlat 
-                ? renderFlatGoalList(filteredGoals, true)
-                : renderGoalTree(filteredGoals, 0, isExpanded, true)
-              }
-            </div>
+          {hierarchyFilter === "all" ? (
+            // "All" mode
+            hasContent ? (
+              <div className="mt-2.5">
+                {isExpanded 
+                  ? renderGoalTree(vision.threeYearWithChildren, 0, true)
+                  : renderCollapsedView(vision.threeYearWithChildren, true)
+                }
+              </div>
+            ) : (
+              <button
+                onClick={(e) => openMobileVisionActions(vision, e)}
+                className="mt-2.5 text-sm text-muted-foreground/70 hover:text-primary inline-flex items-center gap-1 transition-colors"
+              >
+                {emptyMessage}
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            )
           ) : (
-            <button
-              onClick={(e) => openMobileVisionActions(vision, e)}
-              className="mt-2.5 text-sm text-muted-foreground/70 hover:text-primary inline-flex items-center gap-1 transition-colors"
-            >
-              {hierarchyFilter === "all" 
-                ? "Add your first goal"
-                : `No ${hierarchyFilter === "3yr" ? "3-year goals" : hierarchyFilter === "1yr" ? "1-year goals" : "90-day plans"}`
-              }
-              {hierarchyFilter === "all" && <ArrowRight className="h-3 w-3" />}
-            </button>
+            // Filtered mode
+            hasContent ? (
+              <div className="mt-2.5">
+                {renderFlatGoalList(goalsToShow, true)}
+              </div>
+            ) : (
+              <p className="mt-2.5 text-sm text-muted-foreground/70">{emptyMessage}</p>
+            )
           )}
 
           {/* Mobile: Actions row - tighter spacing */}
@@ -695,10 +761,9 @@ const Dashboard = () => {
     );
   }
 
-  // Filter options for segmented control
+  // Filter options for segmented control (removed 3yr - "All" shows 3yr by default)
   const filterOptions: { value: HierarchyFilter; label: string }[] = [
     { value: "all", label: "All" },
-    { value: "3yr", label: "3yr" },
     { value: "1yr", label: "1yr" },
     { value: "90d", label: "90d" },
   ];
