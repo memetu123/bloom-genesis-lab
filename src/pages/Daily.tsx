@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Unlink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Unlink, Star } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useDailyData, DailyTask } from "@/hooks/useDailyData";
@@ -20,17 +21,21 @@ import TaskCreateModal from "@/components/TaskCreateModal";
  * OPTIMIZED: Uses useDailyData hook for single-batch fetching
  */
 
-// Memoized task item component with plan border indicator
+// Memoized task item component with plan border indicator and hierarchy context
 const TaskItem = memo(({ 
   task, 
   timeFormat, 
   onToggle, 
-  onClick 
+  onClick,
+  onHierarchyClick,
+  isMobile
 }: { 
   task: DailyTask; 
   timeFormat: "12h" | "24h";
   onToggle: () => void;
   onClick: () => void;
+  onHierarchyClick: () => void;
+  isMobile: boolean;
 }) => {
   const timeDisplay = task.timeStart 
     ? formatTimeRange(task.timeStart, task.timeEnd || null, timeFormat)
@@ -46,6 +51,90 @@ const TaskItem = memo(({
   // Tasks without a plan: no border
   const showPlanBorder = !!task.goalId;
 
+  // Hierarchy context display
+  const hasHierarchy = !!task.goalTitle;
+
+  // Hierarchy context component
+  const HierarchyContext = hasHierarchy ? (
+    <button
+      onClick={(e) => { e.stopPropagation(); onHierarchyClick(); }}
+      className="text-left hover:opacity-80 transition-opacity"
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[hsl(75,25%,88%)] dark:bg-[hsl(75,20%,25%)] text-[hsl(75,40%,35%)] dark:text-[hsl(75,35%,65%)]">
+          90d
+        </span>
+        <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+          {task.goalTitle}
+        </span>
+      </div>
+      {task.visionTitle && (
+        <div className="flex items-center gap-1 mt-0.5">
+          <Star className={`h-3 w-3 shrink-0 ${task.visionIsFocus ? "text-primary fill-current" : "text-muted-foreground/50"}`} />
+          <span className="text-[11px] text-muted-foreground/70 truncate max-w-[140px]">
+            {task.visionTitle}
+          </span>
+        </div>
+      )}
+    </button>
+  ) : null;
+
+  // Mobile: stacked layout with hierarchy below time
+  if (isMobile) {
+    return (
+      <div className={`
+        py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
+        ${showPlanBorder ? "border-l border-l-muted-foreground/30 ml-0 pl-3" : ""}
+      `}>
+        <div className="flex items-start gap-3">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
+          >
+            {task.isCompleted ? "●" : "○"}
+          </button>
+          <button
+            onClick={onClick}
+            className="flex-1 text-left"
+          >
+            <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
+              {task.title}{instanceLabel}
+            </span>
+            {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
+              <div className="flex items-center gap-2 mt-0.5">
+                {timeDisplay && (
+                  <span className="text-xs text-muted-foreground">{timeDisplay}</span>
+                )}
+                {task.taskType === "independent" && !task.isDetached && (
+                  <span className="text-[9px] bg-muted px-1 rounded">1x</span>
+                )}
+                {task.isDetached && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <Unlink className="h-3 w-3 text-muted-foreground/60" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      Detached from recurring task
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+          </button>
+        </div>
+        {/* Hierarchy context - stacked below on mobile */}
+        {hasHierarchy && (
+          <div className="mt-1.5 ml-8">
+            {HierarchyContext}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop: side-by-side layout with hierarchy in right column
   return (
     <div className={`
       flex items-start gap-3 py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
@@ -59,7 +148,7 @@ const TaskItem = memo(({
       </button>
       <button
         onClick={onClick}
-        className="flex-1 text-left"
+        className="flex-1 text-left min-w-0"
       >
         <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
           {task.title}{instanceLabel}
@@ -87,6 +176,12 @@ const TaskItem = memo(({
           </div>
         )}
       </button>
+      {/* Hierarchy context - right column on desktop */}
+      {hasHierarchy && (
+        <div className="shrink-0 max-w-[180px]">
+          {HierarchyContext}
+        </div>
+      )}
     </div>
   );
 });
@@ -98,6 +193,7 @@ const Daily = () => {
   const { user } = useAuth();
   const { preferences, goals } = useAppData();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
+  const isMobile = useIsMobile();
   
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
@@ -150,6 +246,12 @@ const Daily = () => {
 
   // Stable handlers
   const handleTaskClick = useCallback((task: DailyTask) => {
+    setSelectedTask(task);
+    setModalOpen(true);
+  }, []);
+
+  // Handler for clicking hierarchy context - opens task detail modal
+  const handleHierarchyClick = useCallback((task: DailyTask) => {
     setSelectedTask(task);
     setModalOpen(true);
   }, []);
@@ -381,6 +483,8 @@ const Daily = () => {
                             timeFormat={preferences.timeFormat}
                             onToggle={() => handleToggleComplete(task)}
                             onClick={() => handleTaskClick(task)}
+                            onHierarchyClick={() => handleHierarchyClick(task)}
+                            isMobile={isMobile}
                           />
                         ))}
                       </div>
@@ -405,6 +509,8 @@ const Daily = () => {
                     timeFormat={preferences.timeFormat}
                     onToggle={() => handleToggleComplete(task)}
                     onClick={() => handleTaskClick(task)}
+                    onHierarchyClick={() => handleHierarchyClick(task)}
+                    isMobile={isMobile}
                   />
                 ))}
               </div>
