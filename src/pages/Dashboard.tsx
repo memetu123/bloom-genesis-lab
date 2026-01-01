@@ -786,17 +786,17 @@ const Dashboard = () => {
 
       {/* ========== HIERARCHY FILTER ========== */}
       <div className="mb-6">
-        <div className={`inline-flex rounded-md border border-border bg-muted/30 p-0.5 ${isMobile ? "w-full" : ""}`}>
+        <p className="text-xs text-muted-foreground/70 mb-2">View by timeframe</p>
+        <div className="flex flex-wrap gap-2">
           {filterOptions.map((option) => (
             <button
               key={option.value}
               onClick={() => setHierarchyFilter(option.value)}
               className={`
-                px-3 py-1.5 text-xs font-medium rounded transition-colors
-                ${isMobile ? "flex-1" : ""}
+                px-4 py-1.5 text-sm rounded-full transition-all
                 ${hierarchyFilter === option.value
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-[hsl(75,25%,88%)] dark:bg-[hsl(75,20%,25%)] text-[hsl(75,40%,35%)] dark:text-[hsl(75,35%,65%)] font-medium shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]"
+                  : "text-muted-foreground hover:bg-muted/60"
                 }
               `}
             >
