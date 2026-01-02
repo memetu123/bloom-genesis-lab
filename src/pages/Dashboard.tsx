@@ -805,14 +805,6 @@ const Dashboard = () => {
       : renderDesktopVisionCard(vision, isMuted);
   };
 
-  if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <p className="text-muted-foreground text-center">Loading...</p>
-      </div>
-    );
-  }
-
   // Filter options for segmented control (removed 3yr - "All" shows 3yr by default)
   const filterOptions: { value: HierarchyFilter; label: string }[] = [
     { value: "all", label: "All" },
@@ -964,6 +956,14 @@ const Dashboard = () => {
       </div>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <p className="text-muted-foreground text-center">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in pb-24 md:pb-8">
