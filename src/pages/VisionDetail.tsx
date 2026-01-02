@@ -145,30 +145,6 @@ const VisionDetail = () => {
     }
   };
 
-  const toggleGoalFocus = async (goalId: string, currentFocus: boolean) => {
-    if (updatingFocus) return;
-    setUpdatingFocus(goalId);
-
-    try {
-      const { error } = await supabase
-        .from("goals")
-        .update({ is_focus: !currentFocus })
-        .eq("id", goalId);
-
-      if (error) throw error;
-
-      setThreeYearGoals(prev =>
-        prev.map(g => g.id === goalId ? { ...g, is_focus: !currentFocus } : g)
-      );
-      toast.success(currentFocus ? "Removed from focus" : "Added to focus");
-    } catch (error: any) {
-      console.error("Error toggling focus:", error);
-      toast.error("Failed to update focus");
-    } finally {
-      setUpdatingFocus(null);
-    }
-  };
-
   const handleAddGoal = async () => {
     if (!user || !vision || !newGoalTitle.trim()) return;
     setSaving(true);
@@ -507,25 +483,6 @@ const VisionDetail = () => {
               <Card key={goal.id} className="transition-calm">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    {/* Focus toggle */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleGoalFocus(goal.id, goal.is_focus);
-                      }}
-                      disabled={updatingFocus === goal.id}
-                      className="flex-shrink-0 p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
-                      title={goal.is_focus ? "Remove from focus" : "Add to focus"}
-                    >
-                      <Star
-                        className={`h-5 w-5 transition-calm ${
-                          goal.is_focus 
-                            ? "fill-primary text-primary" 
-                            : "text-muted-foreground"
-                        }`}
-                      />
-                    </button>
-                    
                     {/* Goal content - clickable */}
                     <div 
                       className="flex-1 cursor-pointer"
