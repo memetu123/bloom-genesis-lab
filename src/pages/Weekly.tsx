@@ -208,9 +208,9 @@ const Weekly = () => {
       filtered = filtered.filter(c => c.goal_id === activePlanId);
     }
     
-    // Then filter by focus if enabled
+    // Then filter by focus if enabled (based on vision's is_focus, not goal)
     if (showFocusedOnly) {
-      filtered = filtered.filter(c => c.goal_is_focus === true);
+      filtered = filtered.filter(c => c.vision_is_focus === true);
     }
     
     return filtered;

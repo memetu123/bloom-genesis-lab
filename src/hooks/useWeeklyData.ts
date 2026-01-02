@@ -36,7 +36,7 @@ export interface CommitmentData {
     planned_count: number;
     actual_count: number;
   } | null;
-  goal_is_focus: boolean | null;
+  vision_is_focus: boolean | null;
   // For TaskDetailModal - avoid extra fetch
   recurrence_type: string;
   times_per_day: number;
@@ -62,7 +62,7 @@ export function useWeeklyData(
   weekEnd: Date
 ): UseWeeklyDataResult {
   const { user } = useAuth();
-  const { goalsMap } = useAppData();
+  const { goalsMap, visionsMap } = useAppData();
   
   const [commitments, setCommitments] = useState<CommitmentData[]>([]);
   const [tasksByDate, setTasksByDate] = useState<Record<string, DayTask[]>>({});
@@ -206,7 +206,9 @@ export function useWeeklyData(
       const enrichedCommitments: CommitmentData[] = rawCommitments.map(commitment => {
         const frequency = commitment.frequency_json as { times_per_week: number };
         const checkin = checkinByCommitmentId.get(commitment.id);
-        const goalIsFocus = commitment.goal_id ? goalsMap.get(commitment.goal_id)?.is_focus ?? null : null;
+        const goal = commitment.goal_id ? goalsMap.get(commitment.goal_id) : null;
+        const vision = goal?.life_vision_id ? visionsMap.get(goal.life_vision_id) : null;
+        const visionIsFocus = vision?.is_focus ?? null;
 
         return {
           id: commitment.id,
@@ -218,7 +220,7 @@ export function useWeeklyData(
             planned_count: checkin.planned_count,
             actual_count: checkin.actual_count
           } : null,
-          goal_is_focus: goalIsFocus,
+          vision_is_focus: visionIsFocus,
           // Include recurrence details for TaskDetailModal
           recurrence_type: commitment.recurrence_type || 'weekly',
           times_per_day: commitment.times_per_day || 1,
