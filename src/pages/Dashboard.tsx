@@ -4,6 +4,7 @@ import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus } from "lucide-reac
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useExecutionStatus, ExecutionState } from "@/hooks/useExecutionStatus";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -169,6 +170,45 @@ const Dashboard = () => {
         };
       });
   }, [visions, goals, pillarsMap, goalsWithActiveTasks]);
+
+  // Build ID collections for execution status hook
+  const { ninetyDayPlanIds, oneYearGoalIds, goalToChildPlansMap } = useMemo(() => {
+    const allVisions = [...focusedVisions, ...nonFocusedVisions];
+    const ninetyDayIds: string[] = [];
+    const oneYearIds: string[] = [];
+    const childMap = new Map<string, string[]>();
+
+    const traverse = (items: GoalWithChildren[], parentOneYearId?: string) => {
+      for (const item of items) {
+        if (item.goal_type === "ninety_day") {
+          ninetyDayIds.push(item.id);
+          if (parentOneYearId) {
+            const existing = childMap.get(parentOneYearId) || [];
+            existing.push(item.id);
+            childMap.set(parentOneYearId, existing);
+          }
+        } else if (item.goal_type === "one_year") {
+          oneYearIds.push(item.id);
+          traverse(item.children, item.id);
+        } else {
+          traverse(item.children, parentOneYearId);
+        }
+      }
+    };
+
+    for (const vision of allVisions) {
+      traverse(vision.threeYearWithChildren);
+    }
+
+    return { ninetyDayPlanIds: ninetyDayIds, oneYearGoalIds: oneYearIds, goalToChildPlansMap: childMap };
+  }, [focusedVisions, nonFocusedVisions]);
+
+  // Get execution status for goals/plans
+  const { planExecutionMap, goalExecutionMap } = useExecutionStatus(
+    ninetyDayPlanIds,
+    oneYearGoalIds,
+    goalToChildPlansMap
+  );
 
   const handleToggleFocus = async (visionId: string, currentFocus: boolean) => {
     try {
@@ -803,14 +843,50 @@ const Dashboard = () => {
     return goalsWithVision;
   }, [focusedVisions, nonFocusedVisions, hierarchyFilter]);
 
+  // Helper to get execution state label styling
+  const getExecutionStateStyle = (state: ExecutionState) => {
+    switch (state) {
+      case "active":
+        return "text-primary";
+      case "dormant":
+        return "text-amber-600 dark:text-amber-400";
+      case "planned":
+        return "text-muted-foreground";
+      default:
+        return "text-muted-foreground/50";
+    }
+  };
+
+  const getExecutionStateLabel = (state: ExecutionState) => {
+    switch (state) {
+      case "active": return "Active";
+      case "dormant": return "Dormant";
+      case "planned": return "Planned";
+      default: return "";
+    }
+  };
+
+  // Get consistency message for 90d plans
+  const getConsistencyMessage = (consistentWeeks: number): string | null => {
+    if (consistentWeeks === 0) return null;
+    if (consistentWeeks === 1) return "Building momentum";
+    return `Consistent for ${consistentWeeks} weeks`;
+  };
+
   // Render a single flat execution row (for 1yr/90d views)
   const renderExecutionRow = (
     goal: GoalWithChildren, 
     visionTitle: string, 
     label: string
   ) => {
-    const isMuted = !goal.isActive;
     const isNinetyDay = goal.goal_type === "ninety_day";
+    
+    // Get execution data
+    const planData = isNinetyDay ? planExecutionMap.get(goal.id) : null;
+    const goalData = !isNinetyDay ? goalExecutionMap.get(goal.id) : null;
+    
+    const executionState = planData?.state || goalData?.state || "none";
+    const isMuted = executionState === "dormant" || executionState === "none";
     
     return (
       <div
@@ -835,17 +911,55 @@ const Dashboard = () => {
           {label}
         </span>
         
-        {/* Goal title + Vision name stacked */}
+        {/* Goal title + execution info stacked */}
         <div className="flex flex-col flex-1 min-w-0">
-          <span className={`
-            text-sm
-            ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
-          `}>
-            {goal.title}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`
+              text-sm
+              ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
+            `}>
+              {goal.title}
+            </span>
+            {/* Execution state pill */}
+            {executionState !== "none" && (
+              <span className={`text-[10px] font-medium ${getExecutionStateStyle(executionState)}`}>
+                {getExecutionStateLabel(executionState)}
+              </span>
+            )}
+          </div>
+          
+          {/* Vision name */}
           <span className="text-xs text-muted-foreground/50">
             {visionTitle}
           </span>
+          
+          {/* 90d specific: Consistency signal + last week stats */}
+          {isNinetyDay && planData && planData.hasTasks && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+              {/* Consistency signal (only for active plans) */}
+              {planData.state === "active" && getConsistencyMessage(planData.consistentWeeks) && (
+                <span className="text-[11px] text-primary/80">
+                  {getConsistencyMessage(planData.consistentWeeks)}
+                </span>
+              )}
+              {/* Last week result */}
+              {planData.lastWeekExpected > 0 && (
+                <span className="text-[11px] text-muted-foreground/60">
+                  Last week: {planData.lastWeekCompleted} of {planData.lastWeekExpected} sessions
+                </span>
+              )}
+            </div>
+          )}
+          
+          {/* 1yr specific: Aggregated signal */}
+          {!isNinetyDay && goalData && goalData.totalPlansCount > 0 && (
+            <span className="text-[11px] text-muted-foreground/60 mt-1">
+              {goalData.activePlansCount > 0 
+                ? `${goalData.activePlansCount} active plan${goalData.activePlansCount !== 1 ? 's' : ''}`
+                : "No active plans"
+              }
+            </span>
+          )}
         </div>
       </div>
     );
