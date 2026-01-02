@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Unlink, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Unlink, Eye, EyeOff } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +21,55 @@ import TaskCreateModal from "@/components/TaskCreateModal";
  * OPTIMIZED: Uses useDailyData hook for single-batch fetching
  */
 
+// Meta column component for hierarchy display
+const HierarchyMeta = memo(({ 
+  task, 
+  showVisions,
+  onHierarchyClick 
+}: { 
+  task: DailyTask;
+  showVisions: boolean;
+  onHierarchyClick: () => void;
+}) => {
+  const hasGoal = !!task.goalTitle;
+  
+  // Unlinked state
+  if (!hasGoal) {
+    return (
+      <div className="text-xs text-muted-foreground/50 italic">
+        Unlinked
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onHierarchyClick(); }}
+      className="text-left hover:opacity-80 transition-opacity w-full"
+    >
+      {/* Plan line */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[hsl(75,20%,90%)] dark:bg-[hsl(75,15%,22%)] text-[hsl(75,30%,40%)] dark:text-[hsl(75,25%,60%)] shrink-0">
+          90d
+        </span>
+        <span className="text-[11px] text-muted-foreground truncate">
+          {task.goalTitle}
+        </span>
+      </div>
+      {/* Vision line - only if enabled and has vision */}
+      {showVisions && task.visionTitle && (
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] text-muted-foreground/40 shrink-0 w-[26px] text-center">⭐</span>
+          <span className="text-[11px] text-muted-foreground/60 truncate">
+            {task.visionTitle}
+          </span>
+        </div>
+      )}
+    </button>
+  );
+});
+HierarchyMeta.displayName = 'HierarchyMeta';
+
 // Memoized task item component with plan border indicator and hierarchy context
 const TaskItem = memo(({ 
   task, 
@@ -28,7 +77,8 @@ const TaskItem = memo(({
   onToggle, 
   onClick,
   onHierarchyClick,
-  isMobile
+  isMobile,
+  showVisions
 }: { 
   task: DailyTask; 
   timeFormat: "12h" | "24h";
@@ -36,6 +86,7 @@ const TaskItem = memo(({
   onClick: () => void;
   onHierarchyClick: () => void;
   isMobile: boolean;
+  showVisions: boolean;
 }) => {
   const timeDisplay = task.timeStart 
     ? formatTimeRange(task.timeStart, task.timeEnd || null, timeFormat)
@@ -51,40 +102,12 @@ const TaskItem = memo(({
   // Tasks without a plan: no border
   const showPlanBorder = !!task.goalId;
 
-  // Hierarchy context display
-  const hasHierarchy = !!task.goalTitle;
-
-  // Hierarchy context component
-  const HierarchyContext = hasHierarchy ? (
-    <button
-      onClick={(e) => { e.stopPropagation(); onHierarchyClick(); }}
-      className="text-left hover:opacity-80 transition-opacity"
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[hsl(75,25%,88%)] dark:bg-[hsl(75,20%,25%)] text-[hsl(75,40%,35%)] dark:text-[hsl(75,35%,65%)]">
-          90d
-        </span>
-        <span className="text-xs text-muted-foreground truncate max-w-[140px]">
-          {task.goalTitle}
-        </span>
-      </div>
-      {task.visionTitle && (
-        <div className="flex items-center gap-1 mt-0.5">
-          <Star className={`h-3 w-3 shrink-0 ${task.visionIsFocus ? "text-primary fill-current" : "text-muted-foreground/50"}`} />
-          <span className="text-[11px] text-muted-foreground/70 truncate max-w-[140px]">
-            {task.visionTitle}
-          </span>
-        </div>
-      )}
-    </button>
-  ) : null;
-
   // Mobile: stacked layout with hierarchy below time
   if (isMobile) {
     return (
       <div className={`
         py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
-        ${showPlanBorder ? "border-l border-l-muted-foreground/30 ml-0 pl-3" : ""}
+        ${showPlanBorder ? "border-l-2 border-l-muted-foreground/20 ml-0 pl-3" : ""}
       `}>
         <div className="flex items-start gap-3">
           <button
@@ -125,63 +148,71 @@ const TaskItem = memo(({
           </button>
         </div>
         {/* Hierarchy context - stacked below on mobile */}
-        {hasHierarchy && (
-          <div className="mt-1.5 ml-8">
-            {HierarchyContext}
-          </div>
-        )}
+        <div className="mt-1.5 ml-8">
+          <HierarchyMeta 
+            task={task} 
+            showVisions={showVisions} 
+            onHierarchyClick={onHierarchyClick} 
+          />
+        </div>
       </div>
     );
   }
 
-  // Desktop: side-by-side layout with hierarchy in right column
+  // Desktop: 3-column grid layout
   return (
     <div className={`
-      flex items-start gap-3 py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
-      ${showPlanBorder ? "border-l border-l-muted-foreground/30 ml-0 pl-3" : ""}
+      grid grid-cols-[1fr_auto] gap-4 items-start py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
+      ${showPlanBorder ? "border-l-2 border-l-muted-foreground/20 ml-0 pl-3" : ""}
     `}>
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
-      >
-        {task.isCompleted ? "●" : "○"}
-      </button>
-      <button
-        onClick={onClick}
-        className="flex-1 text-left min-w-0"
-      >
-        <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
-          {task.title}{instanceLabel}
-        </span>
-        {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
-          <div className="flex items-center gap-2 mt-0.5">
-            {timeDisplay && (
-              <span className="text-xs text-muted-foreground">{timeDisplay}</span>
-            )}
-            {task.taskType === "independent" && !task.isDetached && (
-              <span className="text-[9px] bg-muted px-1 rounded">1x</span>
-            )}
-            {task.isDetached && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <Unlink className="h-3 w-3 text-muted-foreground/60" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Detached from recurring task
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        )}
-      </button>
-      {/* Hierarchy context - right column on desktop */}
-      {hasHierarchy && (
-        <div className="shrink-0 max-w-[180px]">
-          {HierarchyContext}
-        </div>
-      )}
+      {/* Column 2: Main task content */}
+      <div className="flex items-start gap-3 min-w-0">
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
+        >
+          {task.isCompleted ? "●" : "○"}
+        </button>
+        <button
+          onClick={onClick}
+          className="flex-1 text-left min-w-0"
+        >
+          <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
+            {task.title}{instanceLabel}
+          </span>
+          {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
+            <div className="flex items-center gap-2 mt-0.5">
+              {timeDisplay && (
+                <span className="text-xs text-muted-foreground">{timeDisplay}</span>
+              )}
+              {task.taskType === "independent" && !task.isDetached && (
+                <span className="text-[9px] bg-muted px-1 rounded">1x</span>
+              )}
+              {task.isDetached && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Unlink className="h-3 w-3 text-muted-foreground/60" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    Detached from recurring task
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          )}
+        </button>
+      </div>
+      
+      {/* Column 3: Hierarchy/meta column */}
+      <div className="shrink-0 w-[200px] max-w-[280px]">
+        <HierarchyMeta 
+          task={task} 
+          showVisions={showVisions} 
+          onHierarchyClick={onHierarchyClick} 
+        />
+      </div>
     </div>
   );
 });
@@ -196,6 +227,7 @@ const Daily = () => {
   const isMobile = useIsMobile();
   
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
+  const [showVisions, setShowVisions] = useState(true);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -462,9 +494,27 @@ const Daily = () => {
           {/* Scheduled tasks - Timeline view */}
           {scheduledTasks.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">
-                Scheduled
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Scheduled
+                </h3>
+                <button
+                  onClick={() => setShowVisions(!showVisions)}
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-calm"
+                >
+                  {showVisions ? (
+                    <>
+                      <EyeOff className="h-3 w-3" />
+                      <span>Hide visions</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-3 w-3" />
+                      <span>Show visions</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="border border-border">
                 {timeSlots.map((slot) => {
                   const slotTasks = getTasksForSlot(slot);
@@ -472,10 +522,10 @@ const Daily = () => {
 
                   return (
                     <div key={slot} className="flex border-b border-border last:border-b-0">
-                      <div className="w-16 py-2 px-2 text-xs text-muted-foreground border-r border-border">
+                      <div className="w-16 py-2 px-2 text-xs text-muted-foreground border-r border-border shrink-0">
                         {formatTime(slot, preferences.timeFormat)}
                       </div>
-                      <div className="flex-1 py-1 px-2">
+                      <div className="flex-1 py-1 px-2 min-w-0">
                         {slotTasks.map((task) => (
                           <TaskItem
                             key={task.id}
@@ -485,6 +535,7 @@ const Daily = () => {
                             onClick={() => handleTaskClick(task)}
                             onHierarchyClick={() => handleHierarchyClick(task)}
                             isMobile={isMobile}
+                            showVisions={showVisions}
                           />
                         ))}
                       </div>
@@ -511,6 +562,7 @@ const Daily = () => {
                     onClick={() => handleTaskClick(task)}
                     onHierarchyClick={() => handleHierarchyClick(task)}
                     isMobile={isMobile}
+                    showVisions={showVisions}
                   />
                 ))}
               </div>
