@@ -272,7 +272,7 @@ const Dashboard = () => {
 
       // Within same tier, apply tie-breakers
       if (tierA === 1) {
-        // Tier 1: Sort by active plans count (descending), then most recent completion
+        // Tier 1: Sort by active plans count (descending)
         const activePlansA = execA?.activePlansCount ?? 0;
         const activePlansB = execB?.activePlansCount ?? 0;
         if (activePlansA !== activePlansB) {
@@ -281,7 +281,13 @@ const Dashboard = () => {
         // Then by most recent completion date (descending)
         const completionA = execA?.mostRecentCompletionDate ?? "";
         const completionB = execB?.mostRecentCompletionDate ?? "";
-        return completionB.localeCompare(completionA);
+        if (completionA !== completionB) {
+          return completionB.localeCompare(completionA);
+        }
+        // Then by total plans with tasks (descending)
+        const plansWithTasksA = execA?.totalPlansWithTasks ?? 0;
+        const plansWithTasksB = execB?.totalPlansWithTasks ?? 0;
+        return plansWithTasksB - plansWithTasksA;
       } else if (tierA === 2) {
         // Tier 2: Sort by most recent completion date (descending)
         const completionA = execA?.mostRecentCompletionDate ?? "";

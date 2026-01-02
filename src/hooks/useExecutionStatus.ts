@@ -41,6 +41,7 @@ export interface VisionExecutionData {
   visionId: string;
   tier: VisionExecutionTier;
   activePlansCount: number;
+  totalPlansWithTasks: number;
   mostRecentCompletionDate: string | null;
   mostRecentEditDate: string | null;
 }
@@ -377,6 +378,7 @@ export function useExecutionStatus(
 
     for (const [visionId, planIds] of visionToPlanIdsMap) {
       let activePlansCount = 0;
+      let totalPlansWithTasks = 0;
       let hasAnyPlans = false;
       let hasAnyTasks = false;
       let mostRecentCompletionDate: string | null = null;
@@ -385,7 +387,10 @@ export function useExecutionStatus(
         hasAnyPlans = true;
         const planData = planExecutionMap.get(planId);
         if (planData) {
-          if (planData.hasTasks) hasAnyTasks = true;
+          if (planData.hasTasks) {
+            hasAnyTasks = true;
+            totalPlansWithTasks++;
+          }
           if (planData.state === "active") activePlansCount++;
           
           // Track most recent completion across all plans
@@ -414,6 +419,7 @@ export function useExecutionStatus(
         visionId,
         tier,
         activePlansCount,
+        totalPlansWithTasks,
         mostRecentCompletionDate,
         mostRecentEditDate: visionEditDates.get(visionId) || null,
       });
