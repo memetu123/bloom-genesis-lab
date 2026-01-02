@@ -274,13 +274,29 @@ const Weekly = () => {
     [filteredCommitments, goals]
   );
 
-  // Goals for dropdown - memoized with vision labels, grouped by vision
+  // Get set of plan IDs that have active commitments
+  const plansWithTasks = useMemo(() => {
+    const planIds = new Set<string>();
+    commitments.forEach(c => {
+      if (c.goal_id) planIds.add(c.goal_id);
+    });
+    return planIds;
+  }, [commitments]);
+
+  // Goals for dropdown - only active, non-deleted plans with tasks
   const goalOptions = useMemo(() => 
-    goals.filter(g => g.goal_type === "ninety_day").map(g => {
-      const vision = g.life_vision_id ? visionsMap.get(g.life_vision_id) : null;
-      return { id: g.id, title: g.title, visionId: g.life_vision_id, visionLabel: vision?.title || null };
-    }),
-    [goals, visionsMap]
+    goals
+      .filter(g => 
+        g.goal_type === "ninety_day" && 
+        !g.is_deleted && 
+        g.status !== "archived" &&
+        plansWithTasks.has(g.id)
+      )
+      .map(g => {
+        const vision = g.life_vision_id ? visionsMap.get(g.life_vision_id) : null;
+        return { id: g.id, title: g.title, visionId: g.life_vision_id, visionLabel: vision?.title || null };
+      }),
+    [goals, visionsMap, plansWithTasks]
   );
 
   // Group plans by vision for dropdown
