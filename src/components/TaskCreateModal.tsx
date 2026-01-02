@@ -255,7 +255,7 @@ const TaskCreateModal = ({
                 <RadioGroupItem value="none" id="recurrence-none" className="mt-0.5" />
                 <div>
                   <Label htmlFor="recurrence-none" className="font-normal cursor-pointer">
-                    Independent
+                    One-time
                   </Label>
                   <p className="text-xs text-muted-foreground">One-time task for this date only</p>
                 </div>

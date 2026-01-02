@@ -104,7 +104,7 @@ const WeeklyTotals = ({ commitments }: WeeklyTotalsProps) => {
             {independentTasks.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Independent tasks
+                  One-time tasks
                 </h4>
                 <div className="space-y-2 pl-2">
                   {independentTasks.map((c) => {
