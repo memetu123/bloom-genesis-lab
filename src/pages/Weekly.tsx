@@ -202,17 +202,18 @@ const Weekly = () => {
   // Filter commitments based on focus toggle AND active plan - memoized
   const filteredCommitments = useMemo(() => {
     let filtered = commitments;
-    
+
     // Filter by active plan if set
     if (activePlanId) {
       filtered = filtered.filter(c => c.goal_id === activePlanId);
     }
-    
+
     // Then filter by focus if enabled (based on vision's is_focus, not goal)
+    // IMPORTANT: treat "unknown" (null) as included; only exclude explicitly unfocused.
     if (showFocusedOnly) {
-      filtered = filtered.filter(c => c.vision_is_focus === true);
+      filtered = filtered.filter(c => c.vision_is_focus !== false);
     }
-    
+
     return filtered;
   }, [showFocusedOnly, commitments, activePlanId]);
 

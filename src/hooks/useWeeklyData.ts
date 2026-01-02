@@ -336,7 +336,7 @@ export function useWeeklyData(
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [user, weekStart, weekStartStr, weekEndStr, currentCacheKey, goalsMap]);
+  }, [user, weekStart, weekStartStr, weekEndStr, currentCacheKey, goalsMap, visionsMap, commitments.length]);
 
   // Fetch when cache key changes
   useEffect(() => {
