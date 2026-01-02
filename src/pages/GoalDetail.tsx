@@ -583,13 +583,6 @@ const GoalDetail = () => {
         <span>{GOAL_TYPE_LABELS[goal.goal_type]}</span>
       </div>
 
-      {/* Go back link */}
-      <button
-        onClick={() => navigate(-1)}
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
-      >
-        ← Go back
-      </button>
 
       {/* Goal info */}
       <div className="mb-8">
@@ -793,6 +786,14 @@ const GoalDetail = () => {
             </div>
           )
         )}
+
+        {/* Go back link */}
+        <button
+          onClick={() => navigate(-1)}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors mt-8"
+        >
+          ← Go back
+        </button>
     </div>
   );
 };
