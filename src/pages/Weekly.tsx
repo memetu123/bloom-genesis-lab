@@ -347,56 +347,29 @@ const Weekly = () => {
     );
   }
 
-  // Shared dropdown content for plan selection - grouped by vision
-  const PlanDropdownContent = () => (
-    <DropdownMenuContent align="end" className="w-72 bg-popover border border-border shadow-md max-h-80 overflow-y-auto">
+  // Shared dropdown content for plan selection - flat list (no grouping)
+  const PlanDropdownContent = ({ align = "start" }: { align?: "start" | "end" }) => (
+    <DropdownMenuContent align={align} className="w-64 bg-popover border border-border/60 shadow-sm max-h-80 overflow-y-auto">
       <DropdownMenuItem 
         onClick={clearPlanContext}
         className="cursor-pointer flex items-center gap-2"
       >
         <Check className={`h-3 w-3 ${!activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-        <span>No plan (All tasks)</span>
+        <span>All Plans</span>
       </DropdownMenuItem>
-      <DropdownMenuSeparator />
+      <DropdownMenuSeparator className="bg-border/50" />
       
-      {/* Plans grouped by vision */}
-      {Object.entries(groupedPlanOptions.groups).map(([visionId, group]) => (
-        <div key={visionId}>
-          <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            {group.visionLabel}
-          </div>
-          {group.plans.map((plan) => (
-            <DropdownMenuItem 
-              key={plan.id}
-              onClick={() => setSearchParams({ plan: plan.id })}
-              className="cursor-pointer flex items-center gap-2 pl-4"
-            >
-              <Check className={`h-3 w-3 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-              <span className="truncate">{plan.title}</span>
-            </DropdownMenuItem>
-          ))}
-        </div>
+      {/* Flat list of all plans */}
+      {goalOptions.map((plan) => (
+        <DropdownMenuItem 
+          key={plan.id}
+          onClick={() => setSearchParams({ plan: plan.id })}
+          className="cursor-pointer flex items-center gap-2"
+        >
+          <Check className={`h-3 w-3 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
+          <span className="truncate">{plan.title}</span>
+        </DropdownMenuItem>
       ))}
-      
-      {/* Plans without a vision */}
-      {groupedPlanOptions.noVisionPlans.length > 0 && (
-        <>
-          {Object.keys(groupedPlanOptions.groups).length > 0 && <DropdownMenuSeparator />}
-          <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            Other Plans
-          </div>
-          {groupedPlanOptions.noVisionPlans.map((plan) => (
-            <DropdownMenuItem 
-              key={plan.id}
-              onClick={() => setSearchParams({ plan: plan.id })}
-              className="cursor-pointer flex items-center gap-2 pl-4"
-            >
-              <Check className={`h-3 w-3 shrink-0 ${plan.id === activePlanId ? 'opacity-100' : 'opacity-0'}`} />
-              <span className="truncate">{plan.title}</span>
-            </DropdownMenuItem>
-          ))}
-        </>
-      )}
     </DropdownMenuContent>
   );
 
@@ -415,101 +388,40 @@ const Weekly = () => {
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${!activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
             >
               <Check className={`h-4 w-4 ${!activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
-              <span className="text-sm font-medium">No plan (All tasks)</span>
+              <span className="text-sm font-medium">All Plans</span>
             </button>
             
-            {Object.entries(groupedPlanOptions.groups).map(([visionId, group]) => (
-              <div key={visionId} className="pt-2">
-                <div className="px-4 py-2 text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                  {group.visionLabel}
-                </div>
-                {group.plans.map((plan) => (
-                  <button
-                    key={plan.id}
-                    onClick={() => selectPlan(plan.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${plan.id === activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
-                  >
-                    <Check className={`h-4 w-4 ${plan.id === activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
-                    <span className="text-sm">{plan.title}</span>
-                  </button>
-                ))}
-              </div>
+            {/* Flat list of all plans */}
+            {goalOptions.map((plan) => (
+              <button
+                key={plan.id}
+                onClick={() => selectPlan(plan.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${plan.id === activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
+              >
+                <Check className={`h-4 w-4 ${plan.id === activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
+                <span className="text-sm truncate">{plan.title}</span>
+              </button>
             ))}
-            
-            {groupedPlanOptions.noVisionPlans.length > 0 && (
-              <div className="pt-2">
-                <div className="px-4 py-2 text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                  Other Plans
-                </div>
-                {groupedPlanOptions.noVisionPlans.map((plan) => (
-                  <button
-                    key={plan.id}
-                    onClick={() => selectPlan(plan.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${plan.id === activePlanId ? 'bg-primary/10' : 'hover:bg-muted'}`}
-                  >
-                    <Check className={`h-4 w-4 ${plan.id === activePlanId ? 'opacity-100 text-primary' : 'opacity-0'}`} />
-                    <span className="text-sm">{plan.title}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* 90-Day Plan Context Header - Desktop */}
-      {!isMobile && activePlan && (
-        <div className="mb-4 flex items-center justify-between py-2 px-3 bg-muted/30 border border-border rounded-lg">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">90-Day Plan</span>
-            <span className="text-sm font-medium text-foreground truncate">{activePlan.title}</span>
-            {activePlanVision && (
-              <span className="text-xs text-muted-foreground/70 bg-muted/50 px-1.5 py-0.5 rounded shrink-0">
-                {activePlanVision.title}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button 
-                  className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                  title="Change plan"
-                >
-                  Change plan
-                  <ChevronDown className="h-3 w-3" />
-                </button>
-              </DropdownMenuTrigger>
-              <PlanDropdownContent />
-            </DropdownMenu>
-            <button
-              onClick={clearPlanContext}
-              className="px-2 py-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-              title="Show all tasks"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 90-Day Plan Context Header - Desktop No Plan */}
-      {!isMobile && !activePlan && goalOptions.length > 0 && (
-        <div className="mb-4 flex items-center justify-between py-2 px-3 border border-border/50 rounded-lg">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs text-muted-foreground/70 uppercase tracking-wide shrink-0">90-Day Plan</span>
-            <span className="text-sm text-muted-foreground">All tasks</span>
-          </div>
+      {/* Viewing dropdown - Desktop (left-aligned, lightweight) */}
+      {!isMobile && goalOptions.length > 0 && (
+        <div className="mb-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button 
-                className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border/40 rounded-md hover:border-border/60 transition-calm"
               >
-                Choose a plan
-                <ChevronDown className="h-3 w-3" />
+                <span className="text-xs text-muted-foreground/70">Viewing:</span>
+                <span className="font-medium text-foreground truncate max-w-[180px]">
+                  {activePlan?.title || "All Plans"}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
               </button>
             </DropdownMenuTrigger>
-            <PlanDropdownContent />
+            <PlanDropdownContent align="start" />
           </DropdownMenu>
         </div>
       )}
@@ -518,15 +430,13 @@ const Weekly = () => {
       {isMobile && goalOptions.length > 0 && (
         <button
           onClick={() => setMobilePlanSheetOpen(true)}
-          className="w-full mb-4 flex items-center justify-between py-3 px-4 bg-muted/30 border border-border rounded-lg min-h-[48px] overflow-hidden"
+          className="mb-4 flex items-center gap-1.5 px-3 py-2 text-sm border border-border/40 rounded-md min-h-[44px]"
         >
-          <div className="flex flex-col items-start min-w-0 flex-1 overflow-hidden">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">90-Day Plan</span>
-            <span className="text-sm font-medium text-foreground truncate w-full text-left">
-              {activePlan?.title || "All tasks"}
-            </span>
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+          <span className="text-xs text-muted-foreground/70">Viewing:</span>
+          <span className="font-medium text-foreground truncate max-w-[200px]">
+            {activePlan?.title || "All Plans"}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
         </button>
       )}
 
