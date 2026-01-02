@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus } from "lucide-react";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,12 +52,24 @@ type HierarchyFilter = "all" | "1yr" | "90d";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
   const [expandedVisionIds, setExpandedVisionIds] = useState<Set<string>>(new Set());
-  const [hierarchyFilter, setHierarchyFilter] = useState<HierarchyFilter>("all");
+  
+  // Read filter from URL params (defaults to "all")
+  const hierarchyFilter = (searchParams.get("filter") as HierarchyFilter) || "all";
+  
+  const setHierarchyFilter = (filter: HierarchyFilter) => {
+    if (filter === "all") {
+      searchParams.delete("filter");
+    } else {
+      searchParams.set("filter", filter);
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
   
   // Add vision dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
