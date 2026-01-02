@@ -52,6 +52,9 @@ interface CommitmentWithGoal {
   frequency_json: unknown;
   times_per_day: number | null;
   repeat_days_of_week: string[] | null;
+  recurrence_type: string | null;
+  task_type: string | null;
+  created_at: string | null;
 }
 
 interface CompletionRecord {
@@ -70,6 +73,10 @@ interface UseExecutionStatusResult {
 const EXECUTION_WINDOW_DAYS = 14;
 // Consistency threshold - percentage of expected tasks that must be completed
 const CONSISTENCY_THRESHOLD = 0.6;
+// Grace period for newly created tasks before they can become "dormant"
+const DAILY_GRACE_PERIOD_DAYS = 3;
+const WEEKLY_GRACE_PERIOD_DAYS = 7;
+const ONE_TIME_GRACE_PERIOD_DAYS = 1;
 
 export function useExecutionStatus(
   ninetyDayPlanIds: string[],
@@ -112,7 +119,7 @@ export function useExecutionStatus(
         // Fetch commitments for these goals
         const { data: commitmentsData } = await supabase
           .from("weekly_commitments")
-          .select("id, goal_id, frequency_json, times_per_day, repeat_days_of_week")
+          .select("id, goal_id, frequency_json, times_per_day, repeat_days_of_week, recurrence_type, task_type, created_at")
           .eq("user_id", user.id)
           .eq("is_active", true)
           .or("is_deleted.is.null,is_deleted.eq.false")
@@ -182,6 +189,36 @@ export function useExecutionStatus(
       frequencyJson?.times_per_week || 3;
     return timesPerDay * daysPerWeek;
   }, []);
+
+  // Calculate grace period for a commitment based on recurrence type
+  const getGracePeriodDays = useCallback((commitment: CommitmentWithGoal): number => {
+    const recurrenceType = commitment.recurrence_type;
+    const taskType = commitment.task_type;
+    
+    // One-time tasks (independent)
+    if (taskType === 'independent' || recurrenceType === 'none') {
+      return ONE_TIME_GRACE_PERIOD_DAYS;
+    }
+    
+    // Daily recurrence
+    if (recurrenceType === 'daily') {
+      return DAILY_GRACE_PERIOD_DAYS;
+    }
+    
+    // Weekly recurrence (default)
+    return WEEKLY_GRACE_PERIOD_DAYS;
+  }, []);
+
+  // Check if a commitment is still within its grace period
+  const isWithinGracePeriod = useCallback((commitment: CommitmentWithGoal, referenceDate: Date): boolean => {
+    if (!commitment.created_at) return false;
+    
+    const createdAt = new Date(commitment.created_at);
+    const gracePeriodDays = getGracePeriodDays(commitment);
+    const daysSinceCreation = differenceInDays(referenceDate, createdAt);
+    
+    return daysSinceCreation < gracePeriodDays;
+  }, [getGracePeriodDays]);
 
   // Calculate 90d plan execution data
   const planExecutionMap = useMemo(() => {
@@ -255,11 +292,20 @@ export function useExecutionStatus(
         }
       }
 
+      // Check if ALL commitments for this plan are still within their grace period
+      const allWithinGracePeriod = planCommitments.every(c => isWithinGracePeriod(c, today));
+      const anyCompletionsEver = planCompletions.length > 0;
+      
       // Determine state
       let state: ExecutionState;
       if (recentCompletions.length > 0) {
+        // Has recent activity - Active
         state = "active";
+      } else if (!anyCompletionsEver && allWithinGracePeriod) {
+        // No completions yet, but still within grace period - Planned
+        state = "planned";
       } else {
+        // Grace period passed OR had completions before but stopped - Dormant
         state = "dormant";
       }
 
@@ -292,6 +338,8 @@ export function useExecutionStatus(
     lastWeekEnd,
     currentWeekStart,
     getExpectedPerWeek,
+    isWithinGracePeriod,
+    today,
   ]);
 
   // Calculate 1yr goal execution data (aggregated from child 90d plans)
@@ -321,10 +369,26 @@ export function useExecutionStatus(
             commitmentIds.has(c.commitment_id) &&
             c.completed_date >= executionWindowStartStr
           );
+          
+          // Check grace period for direct commitments
+          const allDirectCompletions = completions.filter(c =>
+            c.commitment_id && commitmentIds.has(c.commitment_id)
+          );
+          const allWithinGracePeriod = directCommitments.every(c => isWithinGracePeriod(c, today));
+          const anyCompletionsEver = allDirectCompletions.length > 0;
+          
+          let directState: ExecutionState;
+          if (recentCompletions.length > 0) {
+            directState = "active";
+          } else if (!anyCompletionsEver && allWithinGracePeriod) {
+            directState = "planned";
+          } else {
+            directState = "dormant";
+          }
 
           map.set(goalId, {
             goalId,
-            state: recentCompletions.length > 0 ? "active" : "dormant",
+            state: directState,
             activePlansCount: 0,
             totalPlansCount: 0,
           });
@@ -332,8 +396,9 @@ export function useExecutionStatus(
         continue;
       }
 
-      // Count active plans
+      // Count active and planned plans
       let activePlansCount = 0;
+      let plannedPlansCount = 0;
       let hasAnyTasks = false;
 
       for (const planId of childPlanIds) {
@@ -341,6 +406,7 @@ export function useExecutionStatus(
         if (planData) {
           if (planData.hasTasks) hasAnyTasks = true;
           if (planData.state === "active") activePlansCount++;
+          if (planData.state === "planned") plannedPlansCount++;
         }
       }
 
@@ -350,6 +416,9 @@ export function useExecutionStatus(
         state = "planned";
       } else if (activePlansCount > 0) {
         state = "active";
+      } else if (plannedPlansCount > 0) {
+        // If all plans with tasks are still within grace period, goal is "planned"
+        state = "planned";
       } else {
         state = "dormant";
       }
@@ -370,6 +439,8 @@ export function useExecutionStatus(
     planExecutionMap,
     completions,
     executionWindowStart,
+    isWithinGracePeriod,
+    today,
   ]);
 
   // Calculate vision execution data for ordering
