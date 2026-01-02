@@ -905,27 +905,48 @@ const Dashboard = () => {
   ];
 
   // Collect all goals of a specific type across all visions for flat execution views
+  // Ordered by: vision tier (using sortedFocusedVisions), then execution state within each vision
   const allGoalsOfType = useMemo(() => {
-    const allVisions = [...focusedVisions, ...nonFocusedVisions];
-    const goalsWithVision: { goal: GoalWithChildren; visionTitle: string }[] = [];
+    // Use sortedFocusedVisions first, then non-focused visions
+    const orderedVisions = [...sortedFocusedVisions, ...nonFocusedVisions];
+    const goalsWithVision: { goal: GoalWithChildren; visionTitle: string; visionIndex: number }[] = [];
     
-    for (const vision of allVisions) {
+    for (let visionIndex = 0; visionIndex < orderedVisions.length; visionIndex++) {
+      const vision = orderedVisions[visionIndex];
       const targetType = hierarchyFilter === "1yr" ? "one_year" : "ninety_day";
       const collected = collectGoalsByType(vision.threeYearWithChildren, targetType);
       for (const goal of collected) {
-        goalsWithVision.push({ goal, visionTitle: vision.title });
+        goalsWithVision.push({ goal, visionTitle: vision.title, visionIndex });
       }
     }
     
-    // Sort: active first
+    // Helper to get execution state priority (lower = higher priority)
+    const getStatePriority = (goal: GoalWithChildren): number => {
+      const isNinetyDay = goal.goal_type === "ninety_day";
+      const planData = isNinetyDay ? planExecutionMap.get(goal.id) : null;
+      const goalData = !isNinetyDay ? goalExecutionMap.get(goal.id) : null;
+      const state = planData?.state || goalData?.state || "none";
+      
+      switch (state) {
+        case "active": return 0;
+        case "planned": return 1;
+        case "dormant": return 2;
+        default: return 3;
+      }
+    };
+    
+    // Sort: by vision order first, then by execution state within each vision
     goalsWithVision.sort((a, b) => {
-      if (a.goal.isActive && !b.goal.isActive) return -1;
-      if (!a.goal.isActive && b.goal.isActive) return 1;
-      return 0;
+      // First, sort by vision order (tier-based)
+      if (a.visionIndex !== b.visionIndex) {
+        return a.visionIndex - b.visionIndex;
+      }
+      // Within same vision, sort by execution state priority
+      return getStatePriority(a.goal) - getStatePriority(b.goal);
     });
     
     return goalsWithVision;
-  }, [focusedVisions, nonFocusedVisions, hierarchyFilter]);
+  }, [sortedFocusedVisions, nonFocusedVisions, hierarchyFilter, planExecutionMap, goalExecutionMap]);
 
   // Helper to get execution state label styling
   const getExecutionStateStyle = (state: ExecutionState) => {
