@@ -175,7 +175,7 @@ const NotionWeekCalendar = ({
               </div>
 
               {/* Tasks - show max 6, no inner scroll */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {visibleTasks.map((task) => {
                   const timeDisplay = task.timeStart ? formatTime(task.timeStart, timeFormat) : null;
                   const instanceLabel = task.totalInstances && task.totalInstances > 1
@@ -186,28 +186,22 @@ const NotionWeekCalendar = ({
                   const taskPlanId = getTaskPlanId(task);
                   const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
                   
-                  // Border logic (Calendar view - Interaction-based reveal):
-                  // - "All tasks" mode (no plan selected): tasks with ANY plan get subtle neutral border
-                  // - Tasks without a plan: no border
-                  // - Specific plan selected: NO borders (uniform appearance)
-                  const showPlanBorder = !activePlanId && taskPlanId;
-                  
                   // Show tooltip with plan name on hover (only in "All tasks" mode when task has a plan)
                   const showPlanTooltip = !activePlanId && taskPlanId && planTitle;
                     
                   const taskElement = (
                     <div
                       className={`
-                        w-full text-left text-xs py-0.5 px-1 rounded-sm
-                        hover:bg-muted/50 transition-calm
+                        w-full text-left text-xs py-1.5 px-2 rounded-md
+                        bg-card border border-border/60
+                        hover:border-border hover:shadow-sm transition-calm
                         ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                        ${showPlanBorder ? "border-l border-l-muted-foreground/30 pl-2" : ""}
                       `}
                     >
-                      <div className="flex items-start gap-1">
+                      <div className="flex items-start gap-1.5">
                         <button
                           onClick={(e) => handleToggleComplete(e, task, date)}
-                          className={`flex-shrink-0 hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
+                          className={`flex-shrink-0 mt-0.5 hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
                           aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
                         >
                           {task.isCompleted ? "●" : "○"}
@@ -249,7 +243,7 @@ const NotionWeekCalendar = ({
                     </div>
                   );
 
-                  // Wrap in tooltip if showing plan tint
+                  // Wrap in tooltip if showing plan info
                   if (showPlanTooltip) {
                     return (
                       <Tooltip key={task.id}>
