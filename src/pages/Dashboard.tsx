@@ -768,6 +768,77 @@ const Dashboard = () => {
     { value: "90d", label: "90d" },
   ];
 
+  // Collect all goals of a specific type across all visions for flat execution views
+  const allGoalsOfType = useMemo(() => {
+    const allVisions = [...focusedVisions, ...nonFocusedVisions];
+    const goalsWithVision: { goal: GoalWithChildren; visionTitle: string }[] = [];
+    
+    for (const vision of allVisions) {
+      const targetType = hierarchyFilter === "1yr" ? "one_year" : "ninety_day";
+      const collected = collectGoalsByType(vision.threeYearWithChildren, targetType);
+      for (const goal of collected) {
+        goalsWithVision.push({ goal, visionTitle: vision.title });
+      }
+    }
+    
+    // Sort: active first
+    goalsWithVision.sort((a, b) => {
+      if (a.goal.isActive && !b.goal.isActive) return -1;
+      if (!a.goal.isActive && b.goal.isActive) return 1;
+      return 0;
+    });
+    
+    return goalsWithVision;
+  }, [focusedVisions, nonFocusedVisions, hierarchyFilter]);
+
+  // Render a single flat execution row (for 1yr/90d views)
+  const renderExecutionRow = (
+    goal: GoalWithChildren, 
+    visionTitle: string, 
+    label: string
+  ) => {
+    const isMuted = !goal.isActive;
+    const isNinetyDay = goal.goal_type === "ninety_day";
+    
+    return (
+      <div
+        key={goal.id}
+        className={`
+          flex items-center gap-3 py-3 px-3 rounded-lg cursor-pointer transition-colors
+          ${isMuted ? "hover:bg-muted/30" : "hover:bg-muted/50"}
+        `}
+        onClick={() => {
+          if (isNinetyDay) {
+            navigate(`/weekly?plan=${goal.id}`);
+          } else {
+            navigate(`/goal/${goal.id}`);
+          }
+        }}
+      >
+        {/* Label chip */}
+        <span className={`
+          shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded
+          ${isMuted ? "bg-muted/40 text-muted-foreground/60" : "bg-muted/60 text-muted-foreground"}
+        `}>
+          {label}
+        </span>
+        
+        {/* Goal title */}
+        <span className={`
+          flex-1 text-sm
+          ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
+        `}>
+          {goal.title}
+        </span>
+        
+        {/* Vision name (subtle) */}
+        <span className="shrink-0 text-xs text-muted-foreground/50 max-w-[120px] truncate">
+          {visionTitle}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in pb-24 md:pb-8">
       {/* ========== HEADER ========== */}
@@ -806,28 +877,49 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ========== FOCUSED VISIONS ========== */}
-      {focusedVisions.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-12 text-center">
-            <Star className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground mb-4">No focused visions yet</p>
-            <Button 
-              variant="outline" 
-              onClick={() => setAddDialogOpen(true)}
-            >
-              Add your first vision
-            </Button>
-          </CardContent>
-        </Card>
+      {/* ========== FLAT EXECUTION VIEW (1yr or 90d) ========== */}
+      {hierarchyFilter !== "all" ? (
+        allGoalsOfType.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-12 text-center">
+              <p className="text-muted-foreground">
+                No {hierarchyFilter === "1yr" ? "1-year goals" : "90-day plans"} yet
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="divide-y divide-muted/30">
+            {allGoalsOfType.map(({ goal, visionTitle }) => 
+              renderExecutionRow(goal, visionTitle, hierarchyFilter === "1yr" ? "1yr" : "90d")
+            )}
+          </div>
+        )
       ) : (
-        <div className="space-y-4 md:space-y-6">
-          {focusedVisions.map((vision) => renderVisionCard(vision, false))}
-        </div>
+        /* ========== HIERARCHICAL VIEW (All) ========== */
+        <>
+          {focusedVisions.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center">
+                <Star className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground mb-4">No focused visions yet</p>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setAddDialogOpen(true)}
+                >
+                  Add your first vision
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4 md:space-y-6">
+              {focusedVisions.map((vision) => renderVisionCard(vision, false))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* ========== NON-FOCUSED VISIONS (Collapsible) ========== */}
-      {nonFocusedVisions.length > 0 && (
+      {/* ========== NON-FOCUSED VISIONS (Collapsible) - Only in "All" view ========== */}
+      {hierarchyFilter === "all" && nonFocusedVisions.length > 0 && (
         <div className="mt-8">
           <button
             onClick={() => setOtherVisionsExpanded(!otherVisionsExpanded)}
