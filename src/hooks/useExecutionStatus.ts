@@ -55,6 +55,7 @@ interface CommitmentWithGoal {
   recurrence_type: string | null;
   task_type: string | null;
   created_at: string | null;
+  start_date: string | null;
 }
 
 interface CompletionRecord {
@@ -119,7 +120,7 @@ export function useExecutionStatus(
         // Fetch commitments for these goals
         const { data: commitmentsData } = await supabase
           .from("weekly_commitments")
-          .select("id, goal_id, frequency_json, times_per_day, repeat_days_of_week, recurrence_type, task_type, created_at")
+          .select("id, goal_id, frequency_json, times_per_day, repeat_days_of_week, recurrence_type, task_type, created_at, start_date")
           .eq("user_id", user.id)
           .eq("is_active", true)
           .or("is_deleted.is.null,is_deleted.eq.false")
@@ -211,13 +212,18 @@ export function useExecutionStatus(
 
   // Check if a commitment is still within its grace period
   const isWithinGracePeriod = useCallback((commitment: CommitmentWithGoal, referenceDate: Date): boolean => {
-    if (!commitment.created_at) return false;
+    // Use start_date if available, otherwise fall back to created_at
+    const effectiveStartDate = commitment.start_date || commitment.created_at;
+    if (!effectiveStartDate) return false;
     
-    const createdAt = new Date(commitment.created_at);
+    const startDate = new Date(effectiveStartDate);
     const gracePeriodDays = getGracePeriodDays(commitment);
-    const daysSinceCreation = differenceInDays(referenceDate, createdAt);
+    const daysSinceStart = differenceInDays(referenceDate, startDate);
     
-    return daysSinceCreation < gracePeriodDays;
+    // If the task hasn't started yet (daysSinceStart is negative), it's within grace period
+    if (daysSinceStart < 0) return true;
+    
+    return daysSinceStart < gracePeriodDays;
   }, [getGracePeriodDays]);
 
   // Calculate 90d plan execution data
