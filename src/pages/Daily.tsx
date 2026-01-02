@@ -374,9 +374,11 @@ const Daily = () => {
   const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
   // Filter tasks based on focus toggle - memoized
-  const filteredTasks = useMemo(() => 
+  // Focus is derived ONLY from the parent Vision.
+  // IMPORTANT: treat "unknown" (null) as included; only exclude explicitly unfocused.
+  const filteredTasks = useMemo(() =>
     showFocusedOnly
-      ? tasks.filter(t => t.taskType === "independent" || t.goalIsFocus === true)
+      ? tasks.filter(t => t.visionIsFocus !== false)
       : tasks,
     [showFocusedOnly, tasks]
   );
