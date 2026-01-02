@@ -778,19 +778,6 @@ const GoalDetail = () => {
                         className="h-5 w-5 text-muted-foreground flex-shrink-0 cursor-pointer"
                         onClick={() => navigate(`/goal/${child.id}`)}
                       />
-                      <div 
-                        className="flex-1 cursor-pointer"
-                        onClick={() => navigate(`/goal/${child.id}`)}
-                      >
-                        <h3 className="font-medium text-foreground">{child.title}</h3>
-                        {child.description && (
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{child.description}</p>
-                        )}
-                      </div>
-                      <ChevronRight 
-                        className="h-5 w-5 text-muted-foreground flex-shrink-0 cursor-pointer"
-                        onClick={() => navigate(`/goal/${child.id}`)}
-                      />
                     </div>
                   </CardContent>
                 </Card>
