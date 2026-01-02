@@ -143,13 +143,16 @@ const Weekly = () => {
             });
         }
       } else {
+        // Handle recurring task completion
         if (task.isCompleted) {
+          // Uncompleting: delete the completion record
           await supabase
             .from("commitment_completions")
             .delete()
             .eq("commitment_id", task.commitmentId)
             .eq("completed_date", dateKey);
         } else {
+          // Completing: insert new completion record
           await supabase
             .from("commitment_completions")
             .insert({
@@ -159,6 +162,27 @@ const Weekly = () => {
               instance_number: task.instanceNumber || 1,
             });
         }
+
+        // Update the weekly_checkin actual_count
+        if (task.commitmentId) {
+          const { data: checkin } = await supabase
+            .from("weekly_checkins")
+            .select("id, actual_count")
+            .eq("weekly_commitment_id", task.commitmentId)
+            .eq("period_start_date", format(currentWeekStart, "yyyy-MM-dd"))
+            .maybeSingle();
+
+          if (checkin) {
+            const newActualCount = newCompleted 
+              ? checkin.actual_count + 1 
+              : Math.max(0, checkin.actual_count - 1);
+            
+            await supabase
+              .from("weekly_checkins")
+              .update({ actual_count: newActualCount })
+              .eq("id", checkin.id);
+          }
+        }
       }
       // Refetch to update state
       refetch();
@@ -166,7 +190,7 @@ const Weekly = () => {
       console.error("Error toggling completion:", error);
       toast.error("Failed to update task");
     }
-  }, [user, refetch]);
+  }, [user, refetch, currentWeekStart]);
 
   const goToPreviousWeek = useCallback(() => 
     setCurrentWeekStart(prev => subWeeks(prev, 1)), []);
