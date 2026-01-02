@@ -422,6 +422,30 @@ const Weekly = () => {
         </SheetContent>
       </Sheet>
 
+      {/* Header */}
+      <div className="mb-4 md:mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2 md:gap-4">
+          <h1 className={`font-medium text-foreground ${isMobile ? 'text-base' : 'text-lg'}`}>Weekly</h1>
+          {weeklyProgress.total > 0 && (
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+              {weeklyProgress.completed}/{weeklyProgress.total}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!activePlanId && !isMobile && (
+            <FocusFilter
+              showFocusedOnly={showFocusedOnly}
+              onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
+            />
+          )}
+          <AddIconButton
+            onClick={() => setCreateModalOpen(true)}
+            tooltip="Add task"
+          />
+        </div>
+      </div>
+
       {/* Viewing dropdown - Desktop (left-aligned, lightweight) */}
       {!isMobile && goalOptions.length > 0 && (
         <div className="mb-4">
@@ -455,30 +479,6 @@ const Weekly = () => {
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
         </button>
       )}
-
-      {/* Header */}
-      <div className="mb-4 md:mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-2 md:gap-4">
-          <h1 className={`font-medium text-foreground ${isMobile ? 'text-base' : 'text-lg'}`}>Weekly</h1>
-          {weeklyProgress.total > 0 && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              {weeklyProgress.completed}/{weeklyProgress.total}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {!activePlanId && !isMobile && (
-            <FocusFilter
-              showFocusedOnly={showFocusedOnly}
-              onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-            />
-          )}
-          <AddIconButton
-            onClick={() => setCreateModalOpen(true)}
-            tooltip="Add task"
-          />
-        </div>
-      </div>
 
       {/* Week navigation */}
       <div className="flex items-center justify-between mb-4 md:mb-6 border-b border-border pb-3 md:pb-4">
