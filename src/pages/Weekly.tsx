@@ -282,20 +282,36 @@ const Weekly = () => {
     [filteredTasksByDate]
   );
 
-  // Commitment totals for WeeklyTotals - memoized with goal info for grouping
-  const commitmentTotals = useMemo(() => 
-    filteredCommitments.map(c => {
+  // Commitment totals for WeeklyTotals - calculate planned/actual from actual tasks shown
+  const commitmentTotals = useMemo(() => {
+    // Count tasks per commitment from the actual calendar data
+    const commitmentCounts = new Map<string, { planned: number; actual: number }>();
+    
+    Object.values(filteredTasksByDate).forEach(tasks => {
+      tasks.forEach(task => {
+        if (task.commitmentId) {
+          const existing = commitmentCounts.get(task.commitmentId) || { planned: 0, actual: 0 };
+          existing.planned += 1;
+          if (task.isCompleted) existing.actual += 1;
+          commitmentCounts.set(task.commitmentId, existing);
+        }
+      });
+    });
+    
+    return filteredCommitments.map(c => {
       const goal = c.goal_id ? goals.find(g => g.id === c.goal_id) : null;
+      const counts = commitmentCounts.get(c.id) || { planned: 0, actual: 0 };
       return {
         id: c.id,
         title: c.title,
-        planned: c.checkin?.planned_count || 0,
-        actual: c.checkin?.actual_count || 0,
+        planned: counts.planned,
+        actual: counts.actual,
         goalId: c.goal_id,
         goalTitle: goal?.title || null,
       };
-    }),
-    [filteredCommitments, goals]
+    });
+  },
+    [filteredCommitments, goals, filteredTasksByDate]
   );
 
   // Get set of plan IDs that have active commitments
