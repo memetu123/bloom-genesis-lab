@@ -804,7 +804,7 @@ const Dashboard = () => {
       <div
         key={goal.id}
         className={`
-          flex items-center gap-3 py-3 px-3 rounded-lg cursor-pointer transition-colors
+          flex items-start gap-3 py-3 px-3 rounded-lg cursor-pointer transition-colors
           ${isMuted ? "hover:bg-muted/30" : "hover:bg-muted/50"}
         `}
         onClick={() => {
@@ -817,24 +817,24 @@ const Dashboard = () => {
       >
         {/* Label chip */}
         <span className={`
-          shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded
+          shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded mt-0.5
           ${isMuted ? "bg-muted/40 text-muted-foreground/60" : "bg-muted/60 text-muted-foreground"}
         `}>
           {label}
         </span>
         
-        {/* Goal title */}
-        <span className={`
-          flex-1 text-sm
-          ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
-        `}>
-          {goal.title}
-        </span>
-        
-        {/* Vision name (subtle) */}
-        <span className="shrink-0 text-xs text-muted-foreground/50 max-w-[120px] truncate">
-          {visionTitle}
-        </span>
+        {/* Goal title + Vision name stacked */}
+        <div className="flex flex-col flex-1 min-w-0">
+          <span className={`
+            text-sm
+            ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
+          `}>
+            {goal.title}
+          </span>
+          <span className="text-xs text-muted-foreground/50">
+            {visionTitle}
+          </span>
+        </div>
       </div>
     );
   };
