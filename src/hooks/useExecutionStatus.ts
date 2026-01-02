@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { startOfWeek, endOfWeek, subWeeks, format, differenceInDays } from "date-fns";
 
 export type ExecutionState = "planned" | "active" | "dormant" | "none";
+export type VisionExecutionTier = 1 | 2 | 3;
 
 export interface PlanExecutionData {
   goalId: string;
@@ -25,6 +26,8 @@ export interface PlanExecutionData {
   consistentWeeks: number;
   lastWeekCompleted: number;
   lastWeekExpected: number;
+  // For ordering tie-breakers
+  mostRecentCompletionDate: string | null;
 }
 
 export interface GoalExecutionData {
@@ -32,6 +35,14 @@ export interface GoalExecutionData {
   state: ExecutionState;
   activePlansCount: number;
   totalPlansCount: number;
+}
+
+export interface VisionExecutionData {
+  visionId: string;
+  tier: VisionExecutionTier;
+  activePlansCount: number;
+  mostRecentCompletionDate: string | null;
+  mostRecentEditDate: string | null;
 }
 
 interface CommitmentWithGoal {
@@ -50,6 +61,7 @@ interface CompletionRecord {
 interface UseExecutionStatusResult {
   planExecutionMap: Map<string, PlanExecutionData>;
   goalExecutionMap: Map<string, GoalExecutionData>;
+  visionExecutionMap: Map<string, VisionExecutionData>;
   loading: boolean;
 }
 
@@ -61,7 +73,9 @@ const CONSISTENCY_THRESHOLD = 0.6;
 export function useExecutionStatus(
   ninetyDayPlanIds: string[],
   oneYearGoalIds: string[],
-  goalToChildPlansMap: Map<string, string[]>
+  goalToChildPlansMap: Map<string, string[]>,
+  visionToPlanIdsMap: Map<string, string[]> = new Map(),
+  visionEditDates: Map<string, string> = new Map()
 ): UseExecutionStatusResult {
   const { user } = useAuth();
   const [commitments, setCommitments] = useState<CommitmentWithGoal[]>([]);
@@ -184,6 +198,7 @@ export function useExecutionStatus(
           consistentWeeks: 0,
           lastWeekCompleted: 0,
           lastWeekExpected: 0,
+          mostRecentCompletionDate: null,
         });
         continue;
       }
@@ -247,6 +262,14 @@ export function useExecutionStatus(
         state = "dormant";
       }
 
+      // Find most recent completion date for tie-breaking
+      const mostRecentCompletionDate = planCompletions.length > 0
+        ? planCompletions.reduce((latest, c) => 
+            c.completed_date > latest ? c.completed_date : latest, 
+            planCompletions[0].completed_date
+          )
+        : null;
+
       map.set(planId, {
         goalId: planId,
         state,
@@ -254,6 +277,7 @@ export function useExecutionStatus(
         consistentWeeks,
         lastWeekCompleted: lastWeekCompletions.length,
         lastWeekExpected: expectedPerWeek,
+        mostRecentCompletionDate,
       });
     }
 
@@ -347,9 +371,61 @@ export function useExecutionStatus(
     executionWindowStart,
   ]);
 
+  // Calculate vision execution data for ordering
+  const visionExecutionMap = useMemo(() => {
+    const map = new Map<string, VisionExecutionData>();
+
+    for (const [visionId, planIds] of visionToPlanIdsMap) {
+      let activePlansCount = 0;
+      let hasAnyPlans = false;
+      let hasAnyTasks = false;
+      let mostRecentCompletionDate: string | null = null;
+
+      for (const planId of planIds) {
+        hasAnyPlans = true;
+        const planData = planExecutionMap.get(planId);
+        if (planData) {
+          if (planData.hasTasks) hasAnyTasks = true;
+          if (planData.state === "active") activePlansCount++;
+          
+          // Track most recent completion across all plans
+          if (planData.mostRecentCompletionDate) {
+            if (!mostRecentCompletionDate || planData.mostRecentCompletionDate > mostRecentCompletionDate) {
+              mostRecentCompletionDate = planData.mostRecentCompletionDate;
+            }
+          }
+        }
+      }
+
+      // Determine tier
+      let tier: VisionExecutionTier;
+      if (activePlansCount > 0) {
+        // Tier 1: Actively executing
+        tier = 1;
+      } else if (hasAnyPlans && hasAnyTasks) {
+        // Tier 2: Planned but not executing (has plans with tasks, but none active)
+        tier = 2;
+      } else {
+        // Tier 3: Aspirational (no plans or no tasks scheduled)
+        tier = 3;
+      }
+
+      map.set(visionId, {
+        visionId,
+        tier,
+        activePlansCount,
+        mostRecentCompletionDate,
+        mostRecentEditDate: visionEditDates.get(visionId) || null,
+      });
+    }
+
+    return map;
+  }, [visionToPlanIdsMap, planExecutionMap, visionEditDates]);
+
   return {
     planExecutionMap,
     goalExecutionMap,
+    visionExecutionMap,
     loading,
   };
 }

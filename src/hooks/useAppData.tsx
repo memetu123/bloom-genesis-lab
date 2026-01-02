@@ -49,6 +49,7 @@ export interface Goal {
   is_focus: boolean;
   status: string | null;
   is_deleted: boolean;
+  created_at: string | null;
 }
 
 export interface WeeklyCommitment {

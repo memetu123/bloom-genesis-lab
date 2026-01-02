@@ -4,7 +4,7 @@ import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus } from "lucide-reac
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useExecutionStatus, ExecutionState } from "@/hooks/useExecutionStatus";
+import { useExecutionStatus, ExecutionState, VisionExecutionData } from "@/hooks/useExecutionStatus";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -172,11 +172,13 @@ const Dashboard = () => {
   }, [visions, goals, pillarsMap, goalsWithActiveTasks]);
 
   // Build ID collections for execution status hook
-  const { ninetyDayPlanIds, oneYearGoalIds, goalToChildPlansMap } = useMemo(() => {
+  const { ninetyDayPlanIds, oneYearGoalIds, goalToChildPlansMap, visionToPlanIdsMap, visionEditDates } = useMemo(() => {
     const allVisions = [...focusedVisions, ...nonFocusedVisions];
     const ninetyDayIds: string[] = [];
     const oneYearIds: string[] = [];
     const childMap = new Map<string, string[]>();
+    const visionPlanMap = new Map<string, string[]>();
+    const editDatesMap = new Map<string, string>();
 
     const traverse = (items: GoalWithChildren[], parentOneYearId?: string) => {
       for (const item of items) {
@@ -196,19 +198,103 @@ const Dashboard = () => {
       }
     };
 
+    // Also collect 90d plan IDs per vision for vision ordering
+    const collectPlanIds = (items: GoalWithChildren[]): string[] => {
+      const planIds: string[] = [];
+      const traverseForPlans = (goals: GoalWithChildren[]) => {
+        for (const goal of goals) {
+          if (goal.goal_type === "ninety_day") {
+            planIds.push(goal.id);
+          }
+          traverseForPlans(goal.children);
+        }
+      };
+      traverseForPlans(items);
+      return planIds;
+    };
+
     for (const vision of allVisions) {
       traverse(vision.threeYearWithChildren);
+      
+      // Build vision to plan IDs map
+      const planIds = collectPlanIds(vision.threeYearWithChildren);
+      visionPlanMap.set(vision.id, planIds);
+      
+      // Use most recent goal's created_at as proxy for vision edit date (for Tier 3 tie-breaking)
+      let mostRecentGoalDate: string | null = null;
+      const allGoals = vision.threeYearWithChildren;
+      const collectDates = (items: GoalWithChildren[]) => {
+        for (const item of items) {
+          if (item.created_at && (!mostRecentGoalDate || item.created_at > mostRecentGoalDate)) {
+            mostRecentGoalDate = item.created_at;
+          }
+          collectDates(item.children);
+        }
+      };
+      collectDates(allGoals);
+      if (mostRecentGoalDate) {
+        editDatesMap.set(vision.id, mostRecentGoalDate);
+      }
     }
 
-    return { ninetyDayPlanIds: ninetyDayIds, oneYearGoalIds: oneYearIds, goalToChildPlansMap: childMap };
-  }, [focusedVisions, nonFocusedVisions]);
+    return { 
+      ninetyDayPlanIds: ninetyDayIds, 
+      oneYearGoalIds: oneYearIds, 
+      goalToChildPlansMap: childMap,
+      visionToPlanIdsMap: visionPlanMap,
+      visionEditDates: editDatesMap,
+    };
+  }, [focusedVisions, nonFocusedVisions, visions]);
 
   // Get execution status for goals/plans
-  const { planExecutionMap, goalExecutionMap } = useExecutionStatus(
+  const { planExecutionMap, goalExecutionMap, visionExecutionMap } = useExecutionStatus(
     ninetyDayPlanIds,
     oneYearGoalIds,
-    goalToChildPlansMap
+    goalToChildPlansMap,
+    visionToPlanIdsMap,
+    visionEditDates
   );
+
+  // Sort focused visions by execution activity tiers
+  const sortedFocusedVisions = useMemo((): VisionWithHierarchy[] => {
+    return [...focusedVisions].sort((a, b) => {
+      const execA = visionExecutionMap.get(a.id);
+      const execB = visionExecutionMap.get(b.id);
+
+      // Default to tier 3 if no execution data
+      const tierA = execA?.tier ?? 3;
+      const tierB = execB?.tier ?? 3;
+
+      // Primary sort: by tier (ascending - tier 1 first)
+      if (tierA !== tierB) {
+        return tierA - tierB;
+      }
+
+      // Within same tier, apply tie-breakers
+      if (tierA === 1) {
+        // Tier 1: Sort by active plans count (descending), then most recent completion
+        const activePlansA = execA?.activePlansCount ?? 0;
+        const activePlansB = execB?.activePlansCount ?? 0;
+        if (activePlansA !== activePlansB) {
+          return activePlansB - activePlansA;
+        }
+        // Then by most recent completion date (descending)
+        const completionA = execA?.mostRecentCompletionDate ?? "";
+        const completionB = execB?.mostRecentCompletionDate ?? "";
+        return completionB.localeCompare(completionA);
+      } else if (tierA === 2) {
+        // Tier 2: Sort by most recent completion date (descending)
+        const completionA = execA?.mostRecentCompletionDate ?? "";
+        const completionB = execB?.mostRecentCompletionDate ?? "";
+        return completionB.localeCompare(completionA);
+      } else {
+        // Tier 3: Sort by most recently edited/created (descending)
+        const editA = execA?.mostRecentEditDate ?? "";
+        const editB = execB?.mostRecentEditDate ?? "";
+        return editB.localeCompare(editA);
+      }
+    });
+  }, [focusedVisions, visionExecutionMap]);
 
   const handleToggleFocus = async (visionId: string, currentFocus: boolean) => {
     try {
@@ -1023,7 +1109,7 @@ const Dashboard = () => {
       ) : (
         /* ========== HIERARCHICAL VIEW (All) ========== */
         <>
-          {focusedVisions.length === 0 ? (
+          {sortedFocusedVisions.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="py-12 text-center">
                 <Star className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
@@ -1038,7 +1124,7 @@ const Dashboard = () => {
             </Card>
           ) : (
             <div className="space-y-4 md:space-y-6">
-              {focusedVisions.map((vision) => renderVisionCard(vision, false))}
+              {sortedFocusedVisions.map((vision) => renderVisionCard(vision, false))}
             </div>
           )}
         </>
