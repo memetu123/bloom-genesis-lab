@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Star, ChevronRight, Target, Check, Archive } from "lucide-react";
+import { ChevronRight, Target, Check, Archive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, Goal as GlobalGoal, Vision as GlobalVision } from "@/hooks/useAppData";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
-import FocusFilter from "@/components/FocusFilter";
+
 import AddIconButton from "@/components/AddIconButton";
 import StatusFilter, { StatusFilterValue } from "@/components/StatusFilter";
 import ItemActions from "@/components/ItemActions";
@@ -57,8 +57,6 @@ const Goals = () => {
   // Local state for enriched goals with weekly progress
   const [localGoals, setLocalGoals] = useState<GoalWithRelations[]>([]);
   const [progressLoading, setProgressLoading] = useState(true);
-  const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
-  const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -81,7 +79,6 @@ const Goals = () => {
     if (focusId && !appDataLoading) {
       setStatusFilter("all");
       setVisionFilter("all");
-      setShowFocusedOnly(false);
       setHighlightedId(focusId);
       setTimeout(() => {
         const element = cardRefs.current[focusId];
@@ -164,35 +161,6 @@ const Goals = () => {
 
   const loading = appDataLoading || progressLoading;
 
-  const toggleFocus = async (goalId: string, currentFocus: boolean) => {
-    if (updatingFocus) return;
-    setUpdatingFocus(goalId);
-
-    // Optimistic update
-    setLocalGoals(prev =>
-      prev.map(g => g.id === goalId ? { ...g, is_focus: !currentFocus } : g)
-    );
-
-    try {
-      const { error } = await supabase
-        .from("goals")
-        .update({ is_focus: !currentFocus })
-        .eq("id", goalId);
-
-      if (error) throw error;
-      toast.success(currentFocus ? "Removed from focus" : "Added to focus");
-    } catch (error: any) {
-      console.error("Error toggling focus:", error);
-      // Rollback
-      setLocalGoals(prev =>
-        prev.map(g => g.id === goalId ? { ...g, is_focus: currentFocus } : g)
-      );
-      toast.error("Failed to update focus");
-    } finally {
-      setUpdatingFocus(null);
-    }
-  };
-
   const updateStatus = async (goalId: string, newStatus: "active" | "completed" | "archived") => {
     // Optimistic update
     setLocalGoals(prev =>
@@ -270,8 +238,6 @@ const Goals = () => {
     // Status filter - treat "not_started" as "active"
     const effectiveStatus = g.status === "not_started" ? "active" : g.status;
     if (statusFilter !== "all" && effectiveStatus !== statusFilter) return false;
-    // Focus filter
-    if (showFocusedOnly && !g.is_focus) return false;
     // Vision filter
     if (visionFilter !== "all" && g.life_vision_id !== visionFilter) return false;
     return true;
@@ -305,19 +271,13 @@ const Goals = () => {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">My Goals</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            View and focus on goals at every level.
+            View and manage goals at every level.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <FocusFilter
-            showFocusedOnly={showFocusedOnly}
-            onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-          />
-          <AddIconButton
-            onClick={() => setDialogOpen(true)}
-            tooltip="Add goal"
-          />
-        </div>
+        <AddIconButton
+          onClick={() => setDialogOpen(true)}
+          tooltip="Add goal"
+        />
       </div>
 
       {/* Filters */}
@@ -344,17 +304,16 @@ const Goals = () => {
           <CardContent className="py-12 text-center">
             <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground mb-2">
-              {statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly 
+              {statusFilter !== "active" || visionFilter !== "all"
                 ? "No goals match your filters" 
                 : "No goals yet"}
             </p>
-            {(statusFilter !== "active" || visionFilter !== "all" || showFocusedOnly) && (
+            {(statusFilter !== "active" || visionFilter !== "all") && (
               <Button 
                 variant="link"
                 onClick={() => {
                   setStatusFilter("active");
                   setVisionFilter("all");
-                  setShowFocusedOnly(false);
                 }}
               >
                 Clear filters
@@ -378,25 +337,6 @@ const Goals = () => {
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3">
-                        {/* Focus toggle */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFocus(goal.id, goal.is_focus);
-                          }}
-                          disabled={updatingFocus === goal.id}
-                          className="flex-shrink-0 p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
-                          title={goal.is_focus ? "Remove from focus" : "Add to focus"}
-                        >
-                          <Star
-                            className={`h-5 w-5 transition-calm ${
-                              goal.is_focus 
-                                ? "fill-primary text-primary" 
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                        </button>
-
                         {/* Goal content */}
                         <div 
                           className="flex-1 cursor-pointer min-w-0"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Plus, Target, ChevronRight, Star } from "lucide-react";
+import { Plus, Target, ChevronRight } from "lucide-react";
 import EditableTitle from "@/components/EditableTitle";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
@@ -79,7 +79,7 @@ const GoalDetail = () => {
   const [newDescription, setNewDescription] = useState("");
   const [newFrequency, setNewFrequency] = useState("3");
   const [saving, setSaving] = useState(false);
-  const [updatingFocus, setUpdatingFocus] = useState<string | null>(null);
+  
   
   // Undo state
   const [undoItem, setUndoItem] = useState<{ id: string } | null>(null);
@@ -264,52 +264,6 @@ const GoalDetail = () => {
 
     fetchData();
   }, [user, id, navigate, isNewGoal]);
-
-  const toggleGoalFocus = async () => {
-    if (!goal || updatingFocus) return;
-    setUpdatingFocus(goal.id);
-
-    try {
-      const { error } = await supabase
-        .from("goals")
-        .update({ is_focus: !goal.is_focus })
-        .eq("id", goal.id);
-
-      if (error) throw error;
-
-      setGoal(prev => prev ? { ...prev, is_focus: !prev.is_focus } : prev);
-      toast.success(goal.is_focus ? "Removed from focus" : "Added to focus");
-    } catch (error: any) {
-      console.error("Error toggling focus:", error);
-      toast.error("Failed to update focus");
-    } finally {
-      setUpdatingFocus(null);
-    }
-  };
-
-  const toggleChildGoalFocus = async (goalId: string, currentFocus: boolean) => {
-    if (updatingFocus) return;
-    setUpdatingFocus(goalId);
-
-    try {
-      const { error } = await supabase
-        .from("goals")
-        .update({ is_focus: !currentFocus })
-        .eq("id", goalId);
-
-      if (error) throw error;
-
-      setChildGoals(prev =>
-        prev.map(g => g.id === goalId ? { ...g, is_focus: !currentFocus } : g)
-      );
-      toast.success(currentFocus ? "Removed from focus" : "Added to focus");
-    } catch (error: any) {
-      console.error("Error toggling focus:", error);
-      toast.error("Failed to update focus");
-    } finally {
-      setUpdatingFocus(null);
-    }
-  };
 
   const handleAddChild = async () => {
     if (!user || !goal || !newTitle.trim()) return;
@@ -643,20 +597,6 @@ const GoalDetail = () => {
               setGoal(prev => prev ? { ...prev, title: newTitle } : prev);
             }}
           />
-          <button
-            onClick={toggleGoalFocus}
-            disabled={updatingFocus === goal.id}
-            className="p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
-            title={goal.is_focus ? "Remove from focus" : "Add to focus"}
-          >
-            <Star
-              className={`h-5 w-5 transition-calm ${
-                goal.is_focus 
-                  ? "fill-primary text-primary" 
-                  : "text-muted-foreground"
-              }`}
-            />
-          </button>
           <ItemActions
             status={displayStatus as "active" | "completed" | "archived"}
             onComplete={displayStatus === "active" ? handleComplete : undefined}
@@ -824,26 +764,20 @@ const GoalDetail = () => {
                 <Card key={child.id} className="transition-calm">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      {/* Focus toggle */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleChildGoalFocus(child.id, child.is_focus);
-                        }}
-                        disabled={updatingFocus === child.id}
-                        className="flex-shrink-0 p-1 rounded-full hover:bg-muted transition-calm disabled:opacity-50"
-                        title={child.is_focus ? "Remove from focus" : "Add to focus"}
-                      >
-                        <Star
-                          className={`h-5 w-5 transition-calm ${
-                            child.is_focus 
-                              ? "fill-primary text-primary" 
-                              : "text-muted-foreground"
-                          }`}
-                        />
-                      </button>
-                      
                       {/* Goal content - clickable */}
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => navigate(`/goal/${child.id}`)}
+                      >
+                        <h3 className="font-medium text-foreground">{child.title}</h3>
+                        {child.description && (
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{child.description}</p>
+                        )}
+                      </div>
+                      <ChevronRight 
+                        className="h-5 w-5 text-muted-foreground flex-shrink-0 cursor-pointer"
+                        onClick={() => navigate(`/goal/${child.id}`)}
+                      />
                       <div 
                         className="flex-1 cursor-pointer"
                         onClick={() => navigate(`/goal/${child.id}`)}
