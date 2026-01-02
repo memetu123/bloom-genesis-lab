@@ -4,11 +4,10 @@
  * Uses stable cache keys to prevent refetching
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, addDays } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
-import { useAppData } from "@/hooks/useAppData";
 import type { TaskType } from "@/types/scheduling";
 
 export interface DayTask {
@@ -62,8 +61,6 @@ export function useWeeklyData(
   weekEnd: Date
 ): UseWeeklyDataResult {
   const { user } = useAuth();
-  const { goalsMap, visionsMap } = useAppData();
-  
   const [commitments, setCommitments] = useState<CommitmentData[]>([]);
   const [tasksByDate, setTasksByDate] = useState<Record<string, DayTask[]>>({});
   const [loading, setLoading] = useState(true);
@@ -110,10 +107,10 @@ export function useWeeklyData(
         completionsResult,
         taskInstancesResult,
       ] = await Promise.all([
-        // Active weekly commitments
+        // Active weekly commitments (embedded vision focus via goal -> vision)
         supabase
           .from("weekly_commitments")
-          .select("*")
+          .select(`*, goals ( id, life_vision_id, life_visions ( id, is_focus ) )`)
           .eq("user_id", user.id)
           .eq("is_active", true)
           .or("is_deleted.is.null,is_deleted.eq.false"),
@@ -203,12 +200,10 @@ export function useWeeklyData(
       }
 
       // Build enriched commitments
-      const enrichedCommitments: CommitmentData[] = rawCommitments.map(commitment => {
+      const enrichedCommitments: CommitmentData[] = rawCommitments.map((commitment: any) => {
         const frequency = commitment.frequency_json as { times_per_week: number };
         const checkin = checkinByCommitmentId.get(commitment.id);
-        const goal = commitment.goal_id ? goalsMap.get(commitment.goal_id) : null;
-        const vision = goal?.life_vision_id ? visionsMap.get(goal.life_vision_id) : null;
-        const visionIsFocus = vision?.is_focus ?? null;
+        const visionIsFocus = commitment.goals?.life_visions?.is_focus ?? null;
 
         return {
           id: commitment.id,
@@ -336,7 +331,7 @@ export function useWeeklyData(
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [user, weekStart, weekStartStr, weekEndStr, currentCacheKey, goalsMap, visionsMap, commitments.length]);
+  }, [user, weekStart, weekStartStr, weekEndStr, currentCacheKey, commitments.length]);
 
   // Fetch when cache key changes
   useEffect(() => {
