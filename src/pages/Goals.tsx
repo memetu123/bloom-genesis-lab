@@ -76,7 +76,7 @@ const Goals = () => {
   const focusId = searchParams.get("focusId");
   
   useEffect(() => {
-    if (focusId && !appDataLoading) {
+    if (focusId && !appDataLoading && !progressLoading) {
       setStatusFilter("all");
       setVisionFilter("all");
       setHighlightedId(focusId);
@@ -88,7 +88,7 @@ const Goals = () => {
       }, 100);
       setTimeout(() => setHighlightedId(null), 2000);
     }
-  }, [focusId, appDataLoading]);
+  }, [focusId, appDataLoading, progressLoading]);
 
   // Fetch only page-specific data (weekly progress) and enrich goals
   useEffect(() => {
