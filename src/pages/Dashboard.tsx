@@ -725,19 +725,52 @@ const Dashboard = () => {
               <span />
             )}
             
-            <button
-              onClick={() => {
-                if (activePlan) {
-                  navigate(`/weekly?plan=${activePlan.id}`);
-                } else {
-                  navigate("/weekly");
-                }
-              }}
-              className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-            >
-              Plan this week
-              <ArrowRight className="h-4 w-4" />
-            </button>
+            {/* Plan this week - dropdown if multiple 90d plans */}
+            {(() => {
+              const allPlans = getAllNinetyDayGoals(vision.threeYearWithChildren);
+              if (allPlans.length > 1) {
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1 cursor-pointer">
+                        Plan this week
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        Choose a 90-day plan
+                      </div>
+                      <DropdownMenuSeparator />
+                      {allPlans.map(plan => (
+                        <DropdownMenuItem
+                          key={plan.id}
+                          onClick={() => navigate(`/weekly?plan=${plan.id}`)}
+                          className="cursor-pointer"
+                        >
+                          <span className="truncate">{plan.title}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              }
+              return (
+                <button
+                  onClick={() => {
+                    if (allPlans.length === 1) {
+                      navigate(`/weekly?plan=${allPlans[0].id}`);
+                    } else {
+                      navigate("/weekly");
+                    }
+                  }}
+                  className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+                >
+                  Plan this week
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
@@ -869,21 +902,56 @@ const Dashboard = () => {
               <span />
             )}
 
-            {/* Primary: Plan this week */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (activePlan) {
-                  navigate(`/weekly?plan=${activePlan.id}`);
-                } else {
-                  navigate("/weekly");
-                }
-              }}
-              className="text-sm font-medium text-primary hover:text-primary/80 inline-flex items-center gap-1 transition-colors"
-            >
-              Plan this week
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+            {/* Primary: Plan this week - dropdown if multiple 90d plans */}
+            {(() => {
+              const allPlans = getAllNinetyDayGoals(vision.threeYearWithChildren);
+              if (allPlans.length > 1) {
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button 
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sm font-medium text-primary hover:text-primary/80 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        Plan this week
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        Choose a 90-day plan
+                      </div>
+                      <DropdownMenuSeparator />
+                      {allPlans.map(plan => (
+                        <DropdownMenuItem
+                          key={plan.id}
+                          onClick={() => navigate(`/weekly?plan=${plan.id}`)}
+                          className="cursor-pointer"
+                        >
+                          <span className="truncate">{plan.title}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              }
+              return (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (allPlans.length === 1) {
+                      navigate(`/weekly?plan=${allPlans[0].id}`);
+                    } else {
+                      navigate("/weekly");
+                    }
+                  }}
+                  className="text-sm font-medium text-primary hover:text-primary/80 inline-flex items-center gap-1 transition-colors"
+                >
+                  Plan this week
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
