@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Target, ChevronRight, Star } from "lucide-react";
+import { useAppData } from "@/hooks/useAppData";
 import EditableTitle from "@/components/EditableTitle";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
@@ -48,6 +49,7 @@ const VisionDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refetchGoals } = useAppData();
   const [vision, setVision] = useState<Vision | null>(null);
   const [pillar, setPillar] = useState<Pillar | null>(null);
   const [threeYearGoals, setThreeYearGoals] = useState<Goal[]>([]);
@@ -165,6 +167,9 @@ const VisionDetail = () => {
         .single();
 
       if (error) throw error;
+
+      // Refresh global cache so new goal appears everywhere
+      await refetchGoals();
 
       setThreeYearGoals(prev => [...prev, data]);
       setNewGoalTitle("");

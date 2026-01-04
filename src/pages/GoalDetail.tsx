@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
+import { useAppData } from "@/hooks/useAppData";
 
 /**
  * Goal Detail Page
@@ -66,6 +67,7 @@ const GoalDetail = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refetchGoals } = useAppData();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [childGoals, setChildGoals] = useState<Goal[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
@@ -162,6 +164,9 @@ const GoalDetail = () => {
         .single();
 
       if (error) throw error;
+
+      // Refresh global cache so new goal appears everywhere
+      await refetchGoals();
 
       toast.success(`${GOAL_TYPE_LABELS[newGoalType]} created`);
       
@@ -311,6 +316,9 @@ const GoalDetail = () => {
           .single();
 
         if (error) throw error;
+
+        // Refresh global cache so new goal appears everywhere
+        await refetchGoals();
 
         setChildGoals(prev => [...prev, data as Goal]);
         toast.success(`${childType === "one_year" ? "1-Year Goal" : "90-Day Plan"} added`);
