@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus } from "lucide-react";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
@@ -56,8 +56,13 @@ const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals } = useAppData();
+  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals, refetchCommitments } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
+
+  // Ensure commitments (which drive active status) are fresh on mount
+  useEffect(() => {
+    refetchCommitments();
+  }, [refetchCommitments]);
   const [expandedVisionIds, setExpandedVisionIds] = useState<Set<string>>(new Set());
   
   // Read filter from URL params (defaults to "all")
