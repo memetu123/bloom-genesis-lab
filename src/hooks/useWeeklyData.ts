@@ -50,6 +50,7 @@ interface UseWeeklyDataResult {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  updateTaskCompletion: (taskId: string, dateKey: string, isCompleted: boolean) => void;
 }
 
 const DAY_INDEX_TO_NAME: Record<number, string> = {
@@ -352,5 +353,15 @@ export function useWeeklyData(
     await fetchData();
   }, [fetchData]);
 
-  return { commitments, tasksByDate, loading, error, refetch };
+  // Optimistic update helper for instant UI feedback
+  const updateTaskCompletion = useCallback((taskId: string, dateKey: string, isCompleted: boolean) => {
+    setTasksByDate(prev => ({
+      ...prev,
+      [dateKey]: (prev[dateKey] || []).map(t =>
+        t.id === taskId ? { ...t, isCompleted } : t
+      ),
+    }));
+  }, []);
+
+  return { commitments, tasksByDate, loading, error, refetch, updateTaskCompletion };
 }
