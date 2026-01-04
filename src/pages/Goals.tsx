@@ -218,6 +218,9 @@ const Goals = () => {
 
       if (error) throw error;
 
+      // Refresh global cache so new goal appears everywhere
+      await refetchGoals();
+
       setLocalGoals(prev => [...prev, { ...data, vision_title: vision.title, status: "active" as const, is_deleted: false }]);
       setNewTitle("");
       setNewDescription("");
