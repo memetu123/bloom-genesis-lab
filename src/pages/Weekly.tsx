@@ -92,7 +92,7 @@ const Weekly = () => {
   );
 
   // Use centralized data hook
-  const { commitments, tasksByDate, loading, refetch } = useWeeklyData(
+  const { commitments, tasksByDate, loading, refetch, updateTaskCompletion } = useWeeklyData(
     currentWeekStart,
     currentWeekEnd
   );
@@ -119,6 +119,9 @@ const Weekly = () => {
     if (!user) return;
     const dateKey = format(date, "yyyy-MM-dd");
     const newCompleted = !task.isCompleted;
+    
+    // Optimistic update for instant feedback
+    updateTaskCompletion(task.id, dateKey, newCompleted);
     
     try {
       if (task.taskType === "independent") {
@@ -184,13 +187,13 @@ const Weekly = () => {
           }
         }
       }
-      // Refetch to update state
-      refetch();
     } catch (error) {
       console.error("Error toggling completion:", error);
       toast.error("Failed to update task");
+      // Rollback optimistic update on error
+      updateTaskCompletion(task.id, dateKey, !newCompleted);
     }
-  }, [user, refetch, currentWeekStart]);
+  }, [user, currentWeekStart, updateTaskCompletion]);
 
   const goToPreviousWeek = useCallback(() => 
     setCurrentWeekStart(prev => subWeeks(prev, 1)), []);
