@@ -1047,10 +1047,10 @@ const Dashboard = () => {
                   {getConsistencyMessage(planData.consistentWeeks)}
                 </span>
               )}
-              {/* Last week result */}
-              {planData.lastWeekExpected > 0 && (
+              {/* This week result */}
+              {planData.thisWeekExpected > 0 && (
                 <span className="text-[11px] text-muted-foreground/60">
-                  Last week: {planData.lastWeekCompleted} of {planData.lastWeekExpected} sessions
+                  This week: {planData.thisWeekCompleted} of {planData.thisWeekExpected} sessions
                 </span>
               )}
             </div>

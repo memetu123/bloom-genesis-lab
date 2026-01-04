@@ -24,8 +24,8 @@ export interface PlanExecutionData {
   hasTasks: boolean;
   // 90d specific
   consistentWeeks: number;
-  lastWeekCompleted: number;
-  lastWeekExpected: number;
+  thisWeekCompleted: number;
+  thisWeekExpected: number;
   // For ordering tie-breakers
   mostRecentCompletionDate: string | null;
 }
@@ -94,8 +94,7 @@ export function useExecutionStatus(
   // Get date ranges
   const today = useMemo(() => new Date(), []);
   const currentWeekStart = useMemo(() => startOfWeek(today, { weekStartsOn: 1 }), [today]);
-  const lastWeekStart = useMemo(() => subWeeks(currentWeekStart, 1), [currentWeekStart]);
-  const lastWeekEnd = useMemo(() => endOfWeek(lastWeekStart, { weekStartsOn: 1 }), [lastWeekStart]);
+  const currentWeekEnd = useMemo(() => endOfWeek(today, { weekStartsOn: 1 }), [today]);
   const executionWindowStart = useMemo(
     () => new Date(today.getTime() - EXECUTION_WINDOW_DAYS * 24 * 60 * 60 * 1000),
     [today]
@@ -240,8 +239,8 @@ export function useExecutionStatus(
           state: "none",
           hasTasks: false,
           consistentWeeks: 0,
-          lastWeekCompleted: 0,
-          lastWeekExpected: 0,
+          thisWeekCompleted: 0,
+          thisWeekExpected: 0,
           mostRecentCompletionDate: null,
         });
         continue;
@@ -261,11 +260,11 @@ export function useExecutionStatus(
         c.completed_date >= executionWindowStartStr
       );
 
-      // Calculate last week stats
-      const lastWeekStartStr = format(lastWeekStart, "yyyy-MM-dd");
-      const lastWeekEndStr = format(lastWeekEnd, "yyyy-MM-dd");
-      const lastWeekCompletions = planCompletions.filter(c =>
-        c.completed_date >= lastWeekStartStr && c.completed_date <= lastWeekEndStr
+      // Calculate this week stats (current week)
+      const thisWeekStartStr = format(currentWeekStart, "yyyy-MM-dd");
+      const thisWeekEndStr = format(currentWeekEnd, "yyyy-MM-dd");
+      const thisWeekCompletions = planCompletions.filter(c =>
+        c.completed_date >= thisWeekStartStr && c.completed_date <= thisWeekEndStr
       );
 
       // Calculate expected per week
@@ -328,8 +327,8 @@ export function useExecutionStatus(
         state,
         hasTasks: true,
         consistentWeeks,
-        lastWeekCompleted: lastWeekCompletions.length,
-        lastWeekExpected: expectedPerWeek,
+        thisWeekCompleted: thisWeekCompletions.length,
+        thisWeekExpected: expectedPerWeek,
         mostRecentCompletionDate,
       });
     }
@@ -340,9 +339,8 @@ export function useExecutionStatus(
     goalToCommitmentsMap,
     completions,
     executionWindowStart,
-    lastWeekStart,
-    lastWeekEnd,
     currentWeekStart,
+    currentWeekEnd,
     getExpectedPerWeek,
     isWithinGracePeriod,
     today,
