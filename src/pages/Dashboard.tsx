@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -1162,24 +1163,26 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl animate-fade-in pb-24 md:pb-8">
-      {/* ========== HEADER ========== */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-foreground">
-          My North Star
-        </h1>
-        {/* Desktop: Add button in header */}
-        {!isMobile && (
+    <div className={cn(
+      "container mx-auto px-4 max-w-2xl animate-fade-in pb-24 md:pb-8",
+      isMobile ? "pt-3" : "py-8"
+    )}>
+      {/* ========== HEADER - Desktop only ========== */}
+      {!isMobile && (
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-semibold text-foreground">
+            My North Star
+          </h1>
           <AddIconButton
             onClick={() => setAddDialogOpen(true)}
             tooltip="Add vision"
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ========== ORIENTATION LINE ========== */}
       <div 
-        className="mb-6 group"
+        className={cn("group", isMobile ? "mb-4" : "mb-6")}
         onMouseEnter={() => setIsOrientationHovered(true)}
         onMouseLeave={() => setIsOrientationHovered(false)}
         onTouchStart={handleOrientationTouchStart}
