@@ -33,10 +33,10 @@ const desktopNavItems = [
   { label: "Daily", path: "/daily", icon: CalendarDays },
 ];
 
-// Mobile navigation items - only 2 pages
+// Mobile navigation items - icon-only with accessibility labels
 const mobileNavItems = [
-  { label: "North Star", path: "/dashboard", icon: NorthStarIcon },
-  { label: "Today", path: "/daily", icon: CalendarDays },
+  { label: "North Star", path: "/dashboard", icon: NorthStarIcon, ariaLabel: "North Star - orientation and goals" },
+  { label: "Today", path: "/daily", icon: CalendarDays, ariaLabel: "Today - daily tasks and execution" },
 ];
 
 const AppLayout = ({ children }: AppLayoutProps) => {
@@ -136,21 +136,26 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </div>
           </div>
 
-          {/* Mobile Navigation - Only 2 items */}
-          <nav className="sm:hidden flex items-center justify-center gap-4 pb-2 -mt-1">
+          {/* Mobile Navigation - Icon-only mode switching */}
+          <nav className="sm:hidden flex items-center justify-center gap-6 pb-1.5 -mt-1">
             {mobileNavItems.map((item) => (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
+                aria-label={item.ariaLabel}
+                title={item.label}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-md text-xs font-medium transition-calm min-w-[60px]",
+                  "relative p-2 transition-calm",
                   isActive(item.path)
-                    ? "text-primary bg-primary/10"
-                    : "text-muted-foreground"
+                    ? "text-primary"
+                    : "text-muted-foreground/60 hover:text-muted-foreground"
                 )}
               >
-                <item.icon className={item.path === "/dashboard" ? "h-5 w-5" : "h-4 w-4"} />
-                {item.label}
+                <item.icon className="h-5 w-5" />
+                {/* Active indicator - subtle underline */}
+                {isActive(item.path) && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-primary rounded-full" />
+                )}
               </button>
             ))}
           </nav>
