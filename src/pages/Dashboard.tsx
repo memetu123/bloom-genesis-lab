@@ -1169,7 +1169,7 @@ const Dashboard = () => {
     )}>
       {/* ========== HEADER - Desktop only ========== */}
       {!isMobile && (
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1.5">
           <h1 className="text-xl font-semibold text-foreground">
             My North Star
           </h1>
