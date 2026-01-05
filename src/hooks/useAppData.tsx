@@ -19,6 +19,7 @@ export interface UserPreferences {
   startOfWeek: "sunday" | "monday";
   timeFormat: "12h" | "24h";
   dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+  northStarOrientation: string | null;
 }
 
 export interface Pillar {
@@ -64,6 +65,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   startOfWeek: "monday",
   timeFormat: "24h",
   dateFormat: "YYYY-MM-DD",
+  northStarOrientation: null,
 };
 
 // ============ CONTEXT ============
@@ -155,7 +157,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const [prefsResult, pillarsResult, visionsResult, goalsResult, commitmentsResult] = await Promise.all([
         supabase
           .from("user_preferences")
-          .select("start_of_week, time_format, date_format")
+          .select("start_of_week, time_format, date_format, north_star_orientation")
           .eq("user_id", user.id)
           .maybeSingle(),
         supabase
@@ -187,6 +189,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           startOfWeek: (prefsResult.data.start_of_week as "sunday" | "monday") || DEFAULT_PREFERENCES.startOfWeek,
           timeFormat: (prefsResult.data.time_format as "12h" | "24h") || DEFAULT_PREFERENCES.timeFormat,
           dateFormat: (prefsResult.data.date_format as UserPreferences["dateFormat"]) || DEFAULT_PREFERENCES.dateFormat,
+          northStarOrientation: prefsResult.data.north_star_orientation || null,
         });
       } else {
         setPreferences(DEFAULT_PREFERENCES);
@@ -300,7 +303,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     try {
       const { data } = await supabase
         .from("user_preferences")
-        .select("start_of_week, time_format, date_format")
+        .select("start_of_week, time_format, date_format, north_star_orientation")
         .eq("user_id", user.id)
         .maybeSingle();
       
@@ -309,6 +312,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           startOfWeek: (data.start_of_week as "sunday" | "monday") || DEFAULT_PREFERENCES.startOfWeek,
           timeFormat: (data.time_format as "12h" | "24h") || DEFAULT_PREFERENCES.timeFormat,
           dateFormat: (data.date_format as UserPreferences["dateFormat"]) || DEFAULT_PREFERENCES.dateFormat,
+          northStarOrientation: data.north_star_orientation || null,
         });
       }
     } catch (err) {
