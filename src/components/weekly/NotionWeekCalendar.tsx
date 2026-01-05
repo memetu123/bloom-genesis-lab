@@ -3,17 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { Unlink } from "lucide-react";
 import { formatTime, formatDateShort } from "@/lib/formatPreferences";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
- * NotionWeekCalendar - Notion-style 7-day calendar grid
+ * NotionWeekCalendar - Humanized 7-day calendar grid
  * Shows tasks inside each day cell, respects user preferences
  * 
- * Plan differentiation (Calendar views - Interaction-based reveal):
- * - "All tasks" mode: tasks linked to ANY plan get a subtle neutral left border
- * - Tasks without a plan: no border
- * - When a specific plan is selected: NO borders shown (uniform appearance)
- * - Plan identity revealed via hover tooltip (desktop) or long-press (mobile)
+ * Visual philosophy:
+ * - Today column has subtle spatial emphasis
+ * - Soft borders, whitespace-driven separation
+ * - Time-based vertical rhythm (morning/afternoon/evening spacing)
+ * - Repeated habits feel lighter across days
+ * - Completed tasks softly fade
  */
 
 interface DayTask {
@@ -46,11 +48,30 @@ interface NotionWeekCalendarProps {
   timeFormat: UserPreferences["timeFormat"];
   dateFormat: UserPreferences["dateFormat"];
   activePlanId?: string | null;
-  /** Map of plan IDs to plan titles for tooltip display */
   planTitles?: Map<string, string>;
-  /** Map of commitment IDs to their linked goal IDs */
   commitmentGoalMap?: Map<string, string>;
 }
+
+// Time period helpers for visual rhythm
+const getTimePeriod = (timeStart: string | null): 'morning' | 'afternoon' | 'evening' | 'unscheduled' => {
+  if (!timeStart) return 'unscheduled';
+  const hour = parseInt(timeStart.split(':')[0], 10);
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+};
+
+// Check if a task is a repeated habit (appears multiple days)
+const getTaskRepetitionCount = (
+  taskTitle: string,
+  commitmentId: string | null,
+  allWeekTasks: DayTask[][]
+): number => {
+  if (!commitmentId) return 1;
+  return allWeekTasks.filter(dayTasks => 
+    dayTasks.some(t => t.commitmentId === commitmentId)
+  ).length;
+};
 
 const NotionWeekCalendar = ({
   weekStart,
@@ -68,11 +89,6 @@ const NotionWeekCalendar = ({
 }: NotionWeekCalendarProps) => {
   const navigate = useNavigate();
 
-  /**
-   * Get the linked plan ID for a task
-   * For independent tasks: use goalId directly
-   * For recurring tasks: lookup via commitmentGoalMap
-   */
   const getTaskPlanId = (task: DayTask): string | null => {
     if (task.goalId) return task.goalId;
     if (task.commitmentId) return commitmentGoalMap.get(task.commitmentId) || null;
@@ -88,6 +104,9 @@ const NotionWeekCalendar = ({
       tasks: tasksByDate[dateKey] || [],
     };
   });
+
+  // Collect all tasks for repetition detection
+  const allWeekTasks = weekDays.map(d => d.tasks);
 
   const handleDayClick = (date: Date) => {
     navigate(`/daily?date=${format(date, "yyyy-MM-dd")}`);
@@ -106,166 +125,248 @@ const NotionWeekCalendar = ({
   const isToday = (date: Date) => isSameDay(date, new Date());
   const isSelected = (date: Date) => isSameDay(date, selectedDate);
 
+  // Group tasks by time period for visual rhythm
+  const groupTasksByPeriod = (tasks: DayTask[]) => {
+    const sorted = [...tasks].sort((a, b) => {
+      if (a.timeStart && b.timeStart) return a.timeStart.localeCompare(b.timeStart);
+      if (a.timeStart && !b.timeStart) return -1;
+      if (!a.timeStart && b.timeStart) return 1;
+      return 0;
+    });
+
+    const groups: { period: string; tasks: DayTask[] }[] = [];
+    let currentPeriod = '';
+    
+    for (const task of sorted) {
+      const period = getTimePeriod(task.timeStart || null);
+      if (period !== currentPeriod) {
+        groups.push({ period, tasks: [task] });
+        currentPeriod = period;
+      } else {
+        groups[groups.length - 1].tasks.push(task);
+      }
+    }
+    
+    return groups;
+  };
+
   return (
-    <div className="border border-border">
-      {/* Day headers */}
-      <div className="grid grid-cols-7 border-b border-border">
-        {weekDays.map(({ date }) => (
-          <div
-            key={format(date, "yyyy-MM-dd")}
-            className="px-2 py-2 text-center border-r border-border last:border-r-0"
-          >
-            <span className="text-xs font-medium text-muted-foreground uppercase">
-              {format(date, "EEE")}
-            </span>
-          </div>
-        ))}
+    <div className="rounded-lg overflow-hidden">
+      {/* Day headers - softer styling */}
+      <div className="grid grid-cols-7 border-b border-border/40">
+        {weekDays.map(({ date }) => {
+          const dayIsToday = isToday(date);
+          return (
+            <div
+              key={format(date, "yyyy-MM-dd")}
+              className={cn(
+                "px-2 py-2.5 text-center",
+                dayIsToday && "bg-primary/[0.03]"
+              )}
+            >
+              <span className={cn(
+                "text-xs font-medium uppercase tracking-wide",
+                dayIsToday ? "text-primary" : "text-muted-foreground/70"
+              )}>
+                {format(date, "EEE")}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Day cells with tasks */}
       <div className="grid grid-cols-7">
-        {weekDays.map(({ date, tasks }) => {
+        {weekDays.map(({ date, tasks }, dayIndex) => {
           const dateKey = format(date, "yyyy-MM-dd");
           const dayIsToday = isToday(date);
           const dayIsSelected = isSelected(date);
+          const taskGroups = groupTasksByPeriod(tasks);
+          const totalTasks = tasks.length;
+          const completedTasks = tasks.filter(t => t.isCompleted).length;
+          
+          // Visual weight based on activity (empty days feel lighter)
+          const isLowActivity = totalTasks <= 1;
+          const isFullyComplete = totalTasks > 0 && completedTasks === totalTasks;
 
-          // Sort tasks chronologically: scheduled first (by time), then unscheduled
-          const sortedTasks = [...tasks].sort((a, b) => {
-            // Both have times - sort by time
-            if (a.timeStart && b.timeStart) {
-              return a.timeStart.localeCompare(b.timeStart);
-            }
-            // Only a has time - a comes first
-            if (a.timeStart && !b.timeStart) return -1;
-            // Only b has time - b comes first
-            if (!a.timeStart && b.timeStart) return 1;
-            // Neither has time - maintain order
-            return 0;
-          });
-
-          const visibleTasks = sortedTasks.slice(0, 6);
-          const remainingCount = sortedTasks.length - 6;
+          // Count visible tasks (max 6)
+          const allSortedTasks = taskGroups.flatMap(g => g.tasks);
+          const visibleCount = Math.min(allSortedTasks.length, 6);
+          const remainingCount = allSortedTasks.length - 6;
+          let taskCounter = 0;
 
           return (
             <div
               key={dateKey}
-              className={`
-                border-r border-border last:border-r-0 p-2 min-h-[180px]
-                ${dayIsSelected ? "bg-accent/30" : ""}
-              `}
+              className={cn(
+                "p-2.5 min-h-[180px] transition-colors",
+                // Soft vertical separation via subtle left border (except first)
+                dayIndex > 0 && "border-l border-border/20",
+                // Today column emphasis - very subtle background
+                dayIsToday && "bg-primary/[0.02]",
+                // Selected state
+                dayIsSelected && !dayIsToday && "bg-accent/20",
+                // Low activity days feel lighter
+                isLowActivity && "opacity-90"
+              )}
             >
               {/* Date number - clickable to go to daily view */}
               <div 
                 onClick={() => handleDayClick(date)}
-                className="flex items-center justify-between mb-2 cursor-pointer hover:bg-muted/30 -mx-2 -mt-2 px-2 pt-2 pb-1 transition-calm"
+                className={cn(
+                  "flex items-center justify-between mb-3 cursor-pointer rounded-md -mx-1 px-1 py-0.5 transition-calm",
+                  "hover:bg-muted/40"
+                )}
               >
                 <span
-                  className={`
-                    text-sm font-medium
-                    ${dayIsToday ? "text-primary" : "text-foreground"}
-                  `}
+                  className={cn(
+                    "text-sm font-medium",
+                    dayIsToday ? "text-primary" : "text-foreground/80",
+                    isFullyComplete && !dayIsToday && "text-muted-foreground"
+                  )}
                 >
                   {format(date, "d")}
                 </span>
                 {dayIsToday && (
-                  <span className="text-[10px] text-primary font-medium">
+                  <span className="text-[10px] text-primary/80 font-medium tracking-wide">
                     TODAY
                   </span>
                 )}
               </div>
 
-              {/* Tasks - show max 6, no inner scroll */}
-              <div className="space-y-1.5">
-                {visibleTasks.map((task) => {
-                  const timeDisplay = task.timeStart ? formatTime(task.timeStart, timeFormat) : null;
-                  const instanceLabel = task.totalInstances && task.totalInstances > 1
-                    ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
-                    : "";
+              {/* Tasks grouped by time period with visual rhythm */}
+              <div className="space-y-1">
+                {taskGroups.map((group, groupIndex) => {
+                  // Add spacing between time periods (morning→afternoon→evening)
+                  const periodSpacing = groupIndex > 0 ? 'mt-3' : '';
                   
-                  // Get linked plan ID for this task
-                  const taskPlanId = getTaskPlanId(task);
-                  const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
-                  
-                  // Show tooltip with plan name on hover (only in "All tasks" mode when task has a plan)
-                  const showPlanTooltip = !activePlanId && taskPlanId && planTitle;
-                    
-                  const taskElement = (
-                    <div
-                      className={`
-                        w-full text-left text-xs py-1.5 px-2 rounded-md
-                        bg-card border border-border/60
-                        hover:border-border hover:shadow-sm transition-calm
-                        ${task.isCompleted ? "text-muted-foreground" : "text-foreground"}
-                      `}
-                    >
-                      <div className="flex items-start gap-1.5">
-                        <button
-                          onClick={(e) => handleToggleComplete(e, task, date)}
-                          className={`flex-shrink-0 mt-0.5 hover:scale-110 transition-transform ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
-                          aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
-                        >
-                          {task.isCompleted ? "●" : "○"}
-                        </button>
-                        <button
-                          onClick={(e) => handleTaskClick(e, task, date)}
-                          className={`text-left break-words flex-1 ${task.isCompleted ? "line-through" : ""}`}
-                        >
-                          {task.title}{instanceLabel}
-                        </button>
-                      </div>
-                      {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
-                        <button
-                          onClick={(e) => handleTaskClick(e, task, date)}
-                          className="flex items-center gap-1 pl-4 mt-0.5 w-full text-left"
-                        >
-                          {timeDisplay && (
-                            <span className="text-muted-foreground">
-                              {timeDisplay}
-                            </span>
-                          )}
-                          {task.taskType === "independent" && !task.isDetached && (
-                            <span className="text-[9px] bg-muted px-1 rounded">1x</span>
-                          )}
-                          {task.isDetached && (
-                            <Tooltip>
+                  return (
+                    <div key={group.period} className={periodSpacing}>
+                      {group.tasks.map((task) => {
+                        taskCounter++;
+                        if (taskCounter > 6) return null;
+
+                        const timeDisplay = task.timeStart ? formatTime(task.timeStart, timeFormat) : null;
+                        const instanceLabel = task.totalInstances && task.totalInstances > 1
+                          ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
+                          : "";
+                        
+                        const taskPlanId = getTaskPlanId(task);
+                        const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
+                        const showPlanTooltip = !activePlanId && taskPlanId && planTitle;
+
+                        // Check if this is a frequently repeated habit
+                        const repetitionCount = getTaskRepetitionCount(
+                          task.title,
+                          task.commitmentId,
+                          allWeekTasks
+                        );
+                        const isHighlyRepeated = repetitionCount >= 5;
+                        const isModeratelyRepeated = repetitionCount >= 3;
+
+                        const taskElement = (
+                          <div
+                            className={cn(
+                              "w-full text-left text-xs py-1.5 px-2 rounded-md mb-1.5",
+                              "transition-all duration-200",
+                              // Base styling - softer borders
+                              task.isCompleted 
+                                ? "bg-muted/30 border border-transparent" 
+                                : "bg-card border border-border/40 hover:border-border/60 hover:shadow-sm",
+                              // Completed tasks soften visually
+                              task.isCompleted && "opacity-60",
+                              // Repeated habits get lighter treatment
+                              !task.isCompleted && isHighlyRepeated && "opacity-75 border-border/25",
+                              !task.isCompleted && isModeratelyRepeated && !isHighlyRepeated && "opacity-85 border-border/35"
+                            )}
+                          >
+                            <div className="flex items-start gap-1.5">
+                              <button
+                                onClick={(e) => handleToggleComplete(e, task, date)}
+                                className={cn(
+                                  "flex-shrink-0 mt-0.5 transition-transform hover:scale-110",
+                                  task.isCompleted ? "text-primary/70" : "text-muted-foreground/50 hover:text-primary"
+                                )}
+                                aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
+                              >
+                                {task.isCompleted ? "●" : "○"}
+                              </button>
+                              <button
+                                onClick={(e) => handleTaskClick(e, task, date)}
+                                className={cn(
+                                  "text-left break-words flex-1",
+                                  task.isCompleted && "line-through text-muted-foreground/70",
+                                  !task.isCompleted && isHighlyRepeated && "text-foreground/80",
+                                  !task.isCompleted && !isHighlyRepeated && "text-foreground/90"
+                                )}
+                              >
+                                {task.title}{instanceLabel}
+                              </button>
+                            </div>
+                            {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
+                              <button
+                                onClick={(e) => handleTaskClick(e, task, date)}
+                                className="flex items-center gap-1 pl-4 mt-0.5 w-full text-left"
+                              >
+                                {timeDisplay && (
+                                  <span className={cn(
+                                    "text-muted-foreground/60",
+                                    task.isCompleted && "text-muted-foreground/40"
+                                  )}>
+                                    {timeDisplay}
+                                  </span>
+                                )}
+                                {task.taskType === "independent" && !task.isDetached && (
+                                  <span className="text-[9px] bg-muted/50 px-1 rounded text-muted-foreground/60">1x</span>
+                                )}
+                                {task.isDetached && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex">
+                                        <Unlink className="h-3 w-3 text-muted-foreground/40" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">
+                                      Detached from recurring task
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        );
+
+                        if (showPlanTooltip) {
+                          return (
+                            <Tooltip key={task.id}>
                               <TooltipTrigger asChild>
-                                <span className="inline-flex">
-                                  <Unlink className="h-3 w-3 text-muted-foreground/60" />
-                                </span>
+                                {taskElement}
                               </TooltipTrigger>
                               <TooltipContent side="top" className="text-xs">
-                                Detached from recurring task
+                                Plan: {planTitle}
                               </TooltipContent>
                             </Tooltip>
-                          )}
-                        </button>
-                      )}
+                          );
+                        }
+
+                        return <div key={task.id}>{taskElement}</div>;
+                      })}
                     </div>
                   );
-
-                  // Wrap in tooltip if showing plan info
-                  if (showPlanTooltip) {
-                    return (
-                      <Tooltip key={task.id}>
-                        <TooltipTrigger asChild>
-                          {taskElement}
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                          Plan: {planTitle}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
-
-                  return <div key={task.id}>{taskElement}</div>;
                 })}
+                
                 {remainingCount > 0 && (
                   <button
                     onClick={() => handleDayClick(date)}
-                    className="text-[11px] text-primary hover:underline pl-1 pt-1"
+                    className="text-[11px] text-primary/70 hover:text-primary hover:underline pl-1 pt-1 transition-colors"
                   >
                     +{remainingCount} more
                   </button>
+                )}
+                
+                {/* Empty day - subtle placeholder feel */}
+                {totalTasks === 0 && (
+                  <div className="h-12" />
                 )}
               </div>
             </div>
