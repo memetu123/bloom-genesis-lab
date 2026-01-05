@@ -1,7 +1,7 @@
 /**
  * useWeeklyData - Centralized data fetching for Weekly page
  * Fetches all data in a single batch, processes in memory
- * Uses stable cache keys to prevent refetching
+ * Uses module-level cache for instant navigation
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -57,6 +57,47 @@ const DAY_INDEX_TO_NAME: Record<number, string> = {
   0: "sun", 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat"
 };
 
+// Module-level cache for multi-week data persistence
+interface CachedWeekData {
+  commitments: CommitmentData[];
+  tasksByDate: Record<string, DayTask[]>;
+  timestamp: number;
+}
+
+const weekCache = new Map<string, CachedWeekData>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 4; // Keep 4 weeks max
+
+function getCacheKey(userId: string, weekStartStr: string): string {
+  return `${userId}:${weekStartStr}`;
+}
+
+function getValidCache(key: string): CachedWeekData | null {
+  const cached = weekCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached;
+  }
+  return null;
+}
+
+function setCache(key: string, data: CachedWeekData) {
+  // Prune old entries if cache is too large
+  if (weekCache.size >= MAX_CACHE_SIZE) {
+    const entries = Array.from(weekCache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+    weekCache.delete(entries[0][0]);
+  }
+  weekCache.set(key, { ...data, timestamp: Date.now() });
+}
+
+function invalidateCacheForUser(userId: string) {
+  for (const key of weekCache.keys()) {
+    if (key.startsWith(userId)) {
+      weekCache.delete(key);
+    }
+  }
+}
+
 export function useWeeklyData(
   weekStart: Date,
   weekEnd: Date
@@ -67,13 +108,11 @@ export function useWeeklyData(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Cache key to prevent duplicate fetches
-  const cacheKeyRef = useRef<string>("");
   const isFetchingRef = useRef(false);
 
   const weekStartStr = format(weekStart, "yyyy-MM-dd");
   const weekEndStr = format(weekEnd, "yyyy-MM-dd");
-  const currentCacheKey = user ? `${user.id}:${weekStartStr}:${weekEndStr}` : "";
+  const cacheKey = user ? getCacheKey(user.id, weekStartStr) : "";
 
   const fetchData = useCallback(async () => {
     if (!user) {
@@ -83,13 +122,16 @@ export function useWeeklyData(
       return;
     }
 
-    // Skip if already fetching or same cache key
-    if (isFetchingRef.current) return;
-    if (cacheKeyRef.current === currentCacheKey && commitments.length > 0) {
+    // Check cache first - show cached data immediately
+    const cachedData = getValidCache(cacheKey);
+    if (cachedData) {
+      setCommitments(cachedData.commitments);
+      setTasksByDate(cachedData.tasksByDate);
       setLoading(false);
-      return;
+      return; // Use cache, don't refetch
     }
 
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setLoading(true);
     setError(null);
@@ -226,8 +268,6 @@ export function useWeeklyData(
         };
       });
 
-      setCommitments(enrichedCommitments);
-
       // Build commitment details lookup (including date bounds)
       const commitmentDetailsMap = new Map(
         rawCommitments.map(c => [c.id, {
@@ -322,8 +362,16 @@ export function useWeeklyData(
         }
       }
 
+      // Update state
+      setCommitments(enrichedCommitments);
       setTasksByDate(tasksMap);
-      cacheKeyRef.current = currentCacheKey;
+      
+      // Cache the result
+      setCache(cacheKey, {
+        commitments: enrichedCommitments,
+        tasksByDate: tasksMap,
+        timestamp: Date.now(),
+      });
 
     } catch (err: any) {
       console.error("Error fetching weekly data:", err);
@@ -332,36 +380,57 @@ export function useWeeklyData(
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [user, weekStart, weekStartStr, weekEndStr, currentCacheKey, commitments.length]);
+  }, [user, weekStart, weekStartStr, weekEndStr, cacheKey]);
 
-  // Fetch when cache key changes
+  // When week changes, check cache first
   useEffect(() => {
-    if (currentCacheKey && cacheKeyRef.current !== currentCacheKey) {
+    if (!user) return;
+    
+    const cachedData = getValidCache(cacheKey);
+    if (cachedData) {
+      // Instant update from cache
+      setCommitments(cachedData.commitments);
+      setTasksByDate(cachedData.tasksByDate);
+      setLoading(false);
+    } else {
+      // Need to fetch
       fetchData();
     }
-  }, [currentCacheKey, fetchData]);
+  }, [cacheKey, user, fetchData]);
 
   // Initial fetch
   useEffect(() => {
-    if (user && !cacheKeyRef.current) {
+    if (user && commitments.length === 0 && Object.keys(tasksByDate).length === 0) {
       fetchData();
     }
-  }, [user, fetchData]);
+  }, [user, fetchData, commitments.length, tasksByDate]);
 
   const refetch = useCallback(async () => {
-    cacheKeyRef.current = ""; // Force refetch
+    if (user) {
+      invalidateCacheForUser(user.id);
+    }
     await fetchData();
-  }, [fetchData]);
+  }, [fetchData, user]);
 
-  // Optimistic update helper for instant UI feedback
+  // Optimistic update helper - also update cache
   const updateTaskCompletion = useCallback((taskId: string, dateKey: string, isCompleted: boolean) => {
-    setTasksByDate(prev => ({
-      ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t =>
-        t.id === taskId ? { ...t, isCompleted } : t
-      ),
-    }));
-  }, []);
+    setTasksByDate(prev => {
+      const updated = {
+        ...prev,
+        [dateKey]: (prev[dateKey] || []).map(t =>
+          t.id === taskId ? { ...t, isCompleted } : t
+        ),
+      };
+      // Update cache too
+      if (cacheKey) {
+        const cached = weekCache.get(cacheKey);
+        if (cached) {
+          setCache(cacheKey, { ...cached, tasksByDate: updated });
+        }
+      }
+      return updated;
+    });
+  }, [cacheKey]);
 
   return { commitments, tasksByDate, loading, error, refetch, updateTaskCompletion };
 }
