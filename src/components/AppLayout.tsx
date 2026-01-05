@@ -57,9 +57,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     return email.charAt(0).toUpperCase();
   };
 
-  // Check if path is active - for mobile, /weekly also counts as active for "Today"
+  // Check if path is active - mobile-only: /weekly also counts as active for "Today"
   const isActive = (path: string) => {
-    if (path === "/daily" && location.pathname === "/weekly") {
+    if (isMobile && path === "/daily" && location.pathname === "/weekly") {
       return true; // Weekly redirects to daily on mobile
     }
     return location.pathname === path;
