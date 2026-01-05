@@ -1257,21 +1257,19 @@ const Dashboard = () => {
             />
           </div>
         ) : (
-          <div className="flex items-start gap-2">
-            <p className="text-sm italic font-light text-muted-foreground flex-1">
-              {displayedOrientation}
-            </p>
-            {/* Edit button - visible on hover (desktop) */}
+          <p className="text-sm italic font-light text-muted-foreground">
+            {displayedOrientation}
+            {/* Edit button - visible on hover (desktop), inline with text */}
             {!isMobile && isOrientationHovered && (
               <button
                 onClick={startEditingOrientation}
-                className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0"
+                className="inline-flex ml-1.5 p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors align-middle"
                 aria-label="Edit orientation"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
               </button>
             )}
-          </div>
+          </p>
         )}
       </div>
 
