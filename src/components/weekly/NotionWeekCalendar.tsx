@@ -8,14 +8,13 @@ import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
  * NotionWeekCalendar - Humanized 7-day calendar grid
- * Shows tasks inside each day cell, respects user preferences
  * 
  * Visual philosophy:
- * - Today column has subtle spatial emphasis
- * - Soft borders, whitespace-driven separation
- * - Time-based vertical rhythm (morning/afternoon/evening spacing)
- * - Repeated habits feel lighter across days
- * - Completed tasks softly fade
+ * - Today is the primary reading surface with full contrast
+ * - Other days are slightly de-emphasized but remain readable
+ * - Time-based vertical rhythm via spacing (strongest for Today)
+ * - Recurring tasks maintain full legibility (no fading)
+ * - Completed tasks softly recede
  */
 
 interface DayTask {
@@ -52,25 +51,13 @@ interface NotionWeekCalendarProps {
   commitmentGoalMap?: Map<string, string>;
 }
 
-// Time period helpers for visual rhythm
+// Time period helpers for visual rhythm spacing
 const getTimePeriod = (timeStart: string | null): 'morning' | 'afternoon' | 'evening' | 'unscheduled' => {
   if (!timeStart) return 'unscheduled';
   const hour = parseInt(timeStart.split(':')[0], 10);
   if (hour < 12) return 'morning';
   if (hour < 17) return 'afternoon';
   return 'evening';
-};
-
-// Check if a task is a repeated habit (appears multiple days)
-const getTaskRepetitionCount = (
-  taskTitle: string,
-  commitmentId: string | null,
-  allWeekTasks: DayTask[][]
-): number => {
-  if (!commitmentId) return 1;
-  return allWeekTasks.filter(dayTasks => 
-    dayTasks.some(t => t.commitmentId === commitmentId)
-  ).length;
 };
 
 const NotionWeekCalendar = ({
@@ -104,9 +91,6 @@ const NotionWeekCalendar = ({
       tasks: tasksByDate[dateKey] || [],
     };
   });
-
-  // Collect all tasks for repetition detection
-  const allWeekTasks = weekDays.map(d => d.tasks);
 
   const handleDayClick = (date: Date) => {
     navigate(`/daily?date=${format(date, "yyyy-MM-dd")}`);
@@ -152,8 +136,8 @@ const NotionWeekCalendar = ({
 
   return (
     <div className="rounded-lg overflow-hidden">
-      {/* Day headers - softer styling */}
-      <div className="grid grid-cols-7 border-b border-border/40">
+      {/* Day headers */}
+      <div className="grid grid-cols-7 border-b border-border/30">
         {weekDays.map(({ date }) => {
           const dayIsToday = isToday(date);
           return (
@@ -161,12 +145,14 @@ const NotionWeekCalendar = ({
               key={format(date, "yyyy-MM-dd")}
               className={cn(
                 "px-2 py-2.5 text-center",
-                dayIsToday && "bg-primary/[0.03]"
+                dayIsToday && "bg-primary/[0.04]"
               )}
             >
               <span className={cn(
-                "text-xs font-medium uppercase tracking-wide",
-                dayIsToday ? "text-primary" : "text-muted-foreground/70"
+                "text-xs uppercase tracking-wide",
+                dayIsToday 
+                  ? "text-primary font-semibold" 
+                  : "text-muted-foreground font-medium"
               )}>
                 {format(date, "EEE")}
               </span>
@@ -185,13 +171,11 @@ const NotionWeekCalendar = ({
           const totalTasks = tasks.length;
           const completedTasks = tasks.filter(t => t.isCompleted).length;
           
-          // Visual weight based on activity (empty days feel lighter)
-          const isLowActivity = totalTasks <= 1;
+          // Fully complete days get subtle treatment
           const isFullyComplete = totalTasks > 0 && completedTasks === totalTasks;
 
           // Count visible tasks (max 6)
           const allSortedTasks = taskGroups.flatMap(g => g.tasks);
-          const visibleCount = Math.min(allSortedTasks.length, 6);
           const remainingCount = allSortedTasks.length - 6;
           let taskCounter = 0;
 
@@ -200,14 +184,12 @@ const NotionWeekCalendar = ({
               key={dateKey}
               className={cn(
                 "p-2.5 min-h-[180px] transition-colors",
-                // Soft vertical separation via subtle left border (except first)
-                dayIndex > 0 && "border-l border-border/20",
-                // Today column emphasis - very subtle background
-                dayIsToday && "bg-primary/[0.02]",
-                // Selected state
-                dayIsSelected && !dayIsToday && "bg-accent/20",
-                // Low activity days feel lighter
-                isLowActivity && "opacity-90"
+                // Soft vertical separation
+                dayIndex > 0 && "border-l border-border/15",
+                // Today column - subtle but clear emphasis
+                dayIsToday && "bg-primary/[0.035]",
+                // Selected state for non-today
+                dayIsSelected && !dayIsToday && "bg-accent/20"
               )}
             >
               {/* Date number - clickable to go to daily view */}
@@ -220,15 +202,17 @@ const NotionWeekCalendar = ({
               >
                 <span
                   className={cn(
-                    "text-sm font-medium",
-                    dayIsToday ? "text-primary" : "text-foreground/80",
+                    "text-sm",
+                    dayIsToday 
+                      ? "text-primary font-semibold" 
+                      : "text-foreground/70 font-medium",
                     isFullyComplete && !dayIsToday && "text-muted-foreground"
                   )}
                 >
                   {format(date, "d")}
                 </span>
                 {dayIsToday && (
-                  <span className="text-[10px] text-primary/80 font-medium tracking-wide">
+                  <span className="text-[10px] text-primary font-semibold tracking-wide">
                     TODAY
                   </span>
                 )}
@@ -237,8 +221,10 @@ const NotionWeekCalendar = ({
               {/* Tasks grouped by time period with visual rhythm */}
               <div className="space-y-1">
                 {taskGroups.map((group, groupIndex) => {
-                  // Add spacing between time periods (morning→afternoon→evening)
-                  const periodSpacing = groupIndex > 0 ? 'mt-3' : '';
+                  // Spacing between time periods - stronger for Today
+                  const periodSpacing = groupIndex > 0 
+                    ? (dayIsToday ? 'mt-4' : 'mt-2.5') 
+                    : '';
                   
                   return (
                     <div key={group.period} className={periodSpacing}>
@@ -255,29 +241,19 @@ const NotionWeekCalendar = ({
                         const planTitle = taskPlanId ? planTitles.get(taskPlanId) : null;
                         const showPlanTooltip = !activePlanId && taskPlanId && planTitle;
 
-                        // Check if this is a frequently repeated habit
-                        const repetitionCount = getTaskRepetitionCount(
-                          task.title,
-                          task.commitmentId,
-                          allWeekTasks
-                        );
-                        const isHighlyRepeated = repetitionCount >= 5;
-                        const isModeratelyRepeated = repetitionCount >= 3;
-
                         const taskElement = (
                           <div
                             className={cn(
                               "w-full text-left text-xs py-1.5 px-2 rounded-md mb-1.5",
                               "transition-all duration-200",
-                              // Base styling - softer borders
+                              // Base styling
                               task.isCompleted 
-                                ? "bg-muted/30 border border-transparent" 
-                                : "bg-card border border-border/40 hover:border-border/60 hover:shadow-sm",
-                              // Completed tasks soften visually
-                              task.isCompleted && "opacity-60",
-                              // Repeated habits get lighter treatment
-                              !task.isCompleted && isHighlyRepeated && "opacity-75 border-border/25",
-                              !task.isCompleted && isModeratelyRepeated && !isHighlyRepeated && "opacity-85 border-border/35"
+                                ? "bg-muted/25 border border-transparent" 
+                                : "bg-card border border-border/30 hover:border-border/50 hover:shadow-sm",
+                              // Completed tasks recede
+                              task.isCompleted && "opacity-55",
+                              // Non-today columns are slightly de-emphasized
+                              !dayIsToday && !task.isCompleted && "opacity-90"
                             )}
                           >
                             <div className="flex items-start gap-1.5">
@@ -285,7 +261,11 @@ const NotionWeekCalendar = ({
                                 onClick={(e) => handleToggleComplete(e, task, date)}
                                 className={cn(
                                   "flex-shrink-0 mt-0.5 transition-transform hover:scale-110",
-                                  task.isCompleted ? "text-primary/70" : "text-muted-foreground/50 hover:text-primary"
+                                  task.isCompleted 
+                                    ? "text-primary/70" 
+                                    : dayIsToday 
+                                      ? "text-muted-foreground/60 hover:text-primary"
+                                      : "text-muted-foreground/50 hover:text-primary"
                                 )}
                                 aria-label={task.isCompleted ? "Mark incomplete" : "Mark complete"}
                               >
@@ -295,9 +275,11 @@ const NotionWeekCalendar = ({
                                 onClick={(e) => handleTaskClick(e, task, date)}
                                 className={cn(
                                   "text-left break-words flex-1",
-                                  task.isCompleted && "line-through text-muted-foreground/70",
-                                  !task.isCompleted && isHighlyRepeated && "text-foreground/80",
-                                  !task.isCompleted && !isHighlyRepeated && "text-foreground/90"
+                                  task.isCompleted && "line-through text-muted-foreground/60",
+                                  // Today tasks: full contrast
+                                  !task.isCompleted && dayIsToday && "text-foreground font-medium",
+                                  // Other days: slightly lighter
+                                  !task.isCompleted && !dayIsToday && "text-foreground/85"
                                 )}
                               >
                                 {task.title}{instanceLabel}
@@ -310,8 +292,9 @@ const NotionWeekCalendar = ({
                               >
                                 {timeDisplay && (
                                   <span className={cn(
-                                    "text-muted-foreground/60",
-                                    task.isCompleted && "text-muted-foreground/40"
+                                    task.isCompleted && "text-muted-foreground/40",
+                                    !task.isCompleted && dayIsToday && "text-muted-foreground/80",
+                                    !task.isCompleted && !dayIsToday && "text-muted-foreground/60"
                                   )}>
                                     {timeDisplay}
                                   </span>
@@ -364,7 +347,7 @@ const NotionWeekCalendar = ({
                   </button>
                 )}
                 
-                {/* Empty day - subtle placeholder feel */}
+                {/* Empty day placeholder */}
                 {totalTasks === 0 && (
                   <div className="h-12" />
                 )}
