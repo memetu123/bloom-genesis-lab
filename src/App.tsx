@@ -8,6 +8,7 @@ import { AppDataProvider } from "@/hooks/useAppData";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppLayout from "@/components/AppLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import MobileWeeklyRedirect from "@/components/MobileWeeklyRedirect";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
@@ -15,7 +16,6 @@ import Dashboard from "./pages/Dashboard";
 import VisionDetail from "./pages/VisionDetail";
 import Goals from "./pages/Goals";
 import GoalDetail from "./pages/GoalDetail";
-import Weekly from "./pages/Weekly";
 import Daily from "./pages/Daily";
 import RecentlyDeleted from "./pages/RecentlyDeleted";
 import Profile from "./pages/Profile";
@@ -49,7 +49,7 @@ const App = () => (
                 <Route path="/vision/:id" element={<ProtectedRoute><AppLayout><VisionDetail /></AppLayout></ProtectedRoute>} />
                 <Route path="/goals" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/goal/:id" element={<ProtectedRoute><AppLayout><GoalDetail /></AppLayout></ProtectedRoute>} />
-                <Route path="/weekly" element={<ProtectedRoute><AppLayout><Weekly /></AppLayout></ProtectedRoute>} />
+                <Route path="/weekly" element={<ProtectedRoute><MobileWeeklyRedirect /></ProtectedRoute>} />
                 <Route path="/daily" element={<ProtectedRoute><AppLayout><Daily /></AppLayout></ProtectedRoute>} />
                 <Route path="/recently-deleted" element={<ProtectedRoute><AppLayout><RecentlyDeleted /></AppLayout></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
