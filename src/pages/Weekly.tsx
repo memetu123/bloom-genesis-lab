@@ -475,6 +475,24 @@ const Weekly = () => {
               {weeklyProgress.completed}/{weeklyProgress.total}
             </span>
           )}
+          
+          {/* Viewing dropdown - Desktop/Tablet (inline with title) */}
+          {!isMobile && goalOptions.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border/40 rounded-md hover:border-border/60 transition-calm"
+                >
+                  <span className="text-xs text-muted-foreground/70">Viewing:</span>
+                  <span className="font-medium text-foreground truncate max-w-[180px]">
+                    {activePlan?.title || "All Plans"}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
+                </button>
+              </DropdownMenuTrigger>
+              <PlanDropdownContent align="start" />
+            </DropdownMenu>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!activePlanId && !isMobile && (
@@ -489,26 +507,6 @@ const Weekly = () => {
           />
         </div>
       </div>
-
-      {/* Viewing dropdown - Desktop (left-aligned, lightweight) */}
-      {!isMobile && goalOptions.length > 0 && (
-        <div className="mb-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button 
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border/40 rounded-md hover:border-border/60 transition-calm"
-              >
-                <span className="text-xs text-muted-foreground/70">Viewing:</span>
-                <span className="font-medium text-foreground truncate max-w-[180px]">
-                  {activePlan?.title || "All Plans"}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
-              </button>
-            </DropdownMenuTrigger>
-            <PlanDropdownContent align="start" />
-          </DropdownMenu>
-        </div>
-      )}
 
       {/* Mobile Plan Selector Bar */}
       {isMobile && goalOptions.length > 0 && (
