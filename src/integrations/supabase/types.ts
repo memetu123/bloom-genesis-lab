@@ -306,6 +306,7 @@ export type Database = {
           date_format: string | null
           display_name: string | null
           id: string
+          north_star_orientation: string | null
           start_of_week: string | null
           time_format: string | null
           updated_at: string
@@ -316,6 +317,7 @@ export type Database = {
           date_format?: string | null
           display_name?: string | null
           id?: string
+          north_star_orientation?: string | null
           start_of_week?: string | null
           time_format?: string | null
           updated_at?: string
@@ -326,6 +328,7 @@ export type Database = {
           date_format?: string | null
           display_name?: string | null
           id?: string
+          north_star_orientation?: string | null
           start_of_week?: string | null
           time_format?: string | null
           updated_at?: string

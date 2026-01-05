@@ -1,6 +1,6 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus } from "lucide-react";
+import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -56,8 +56,16 @@ const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals, refetchCommitments } = useAppData();
+  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals, refetchCommitments, preferences, refetchPreferences } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
+
+  // Orientation line state
+  const DEFAULT_ORIENTATION = "This is a place to orient yourself, not to rush.";
+  const [isEditingOrientation, setIsEditingOrientation] = useState(false);
+  const [orientationValue, setOrientationValue] = useState("");
+  const orientationInputRef = useRef<HTMLTextAreaElement>(null);
+  const [isOrientationHovered, setIsOrientationHovered] = useState(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Ensure commitments (which drive active status) are fresh on mount
   useEffect(() => {
@@ -383,7 +391,65 @@ const Dashboard = () => {
     }
   };
 
-  // Helper to get label chip styling based on goal type
+  // ============ ORIENTATION LINE HANDLERS ============
+  
+  const displayedOrientation = preferences.northStarOrientation || DEFAULT_ORIENTATION;
+  
+  const startEditingOrientation = () => {
+    setOrientationValue(preferences.northStarOrientation || "");
+    setIsEditingOrientation(true);
+    setTimeout(() => orientationInputRef.current?.focus(), 50);
+  };
+  
+  const saveOrientation = async () => {
+    if (!user) return;
+    
+    const trimmedValue = orientationValue.trim();
+    // If cleared, save null (will show default)
+    const valueToSave = trimmedValue === "" ? null : trimmedValue.slice(0, 120);
+    
+    try {
+      await supabase
+        .from("user_preferences")
+        .upsert(
+          { user_id: user.id, north_star_orientation: valueToSave },
+          { onConflict: "user_id" }
+        );
+      await refetchPreferences();
+    } catch (err) {
+      console.error("Error saving orientation:", err);
+    }
+    
+    setIsEditingOrientation(false);
+  };
+  
+  const cancelEditingOrientation = () => {
+    setIsEditingOrientation(false);
+    setOrientationValue("");
+  };
+  
+  const handleOrientationKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveOrientation();
+    } else if (e.key === "Escape") {
+      cancelEditingOrientation();
+    }
+  };
+  
+  // Long press handlers for mobile
+  const handleOrientationTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      startEditingOrientation();
+    }, 500);
+  };
+  
+  const handleOrientationTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
   const getLabelChip = (goalType: string) => {
     const labels: Record<string, string> = {
       three_year: "3yr",
@@ -1164,6 +1230,48 @@ const Dashboard = () => {
             onClick={() => setAddDialogOpen(true)}
             tooltip="Add vision"
           />
+        )}
+      </div>
+
+      {/* ========== ORIENTATION LINE ========== */}
+      <div 
+        className="mb-6 group"
+        onMouseEnter={() => setIsOrientationHovered(true)}
+        onMouseLeave={() => setIsOrientationHovered(false)}
+        onTouchStart={handleOrientationTouchStart}
+        onTouchEnd={handleOrientationTouchEnd}
+        onTouchCancel={handleOrientationTouchEnd}
+      >
+        {isEditingOrientation ? (
+          <div className="relative">
+            <textarea
+              ref={orientationInputRef}
+              value={orientationValue}
+              onChange={(e) => setOrientationValue(e.target.value.slice(0, 120))}
+              onKeyDown={handleOrientationKeyDown}
+              onBlur={saveOrientation}
+              placeholder="Write a sentence that helps you stay oriented."
+              maxLength={120}
+              rows={2}
+              className="w-full text-sm italic font-light text-muted-foreground bg-transparent border-b border-muted focus:border-primary focus:outline-none resize-none py-1 placeholder:text-muted-foreground/50"
+            />
+          </div>
+        ) : (
+          <div className="flex items-start gap-2">
+            <p className="text-sm italic font-light text-muted-foreground flex-1">
+              {displayedOrientation}
+            </p>
+            {/* Edit button - visible on hover (desktop) */}
+            {!isMobile && isOrientationHovered && (
+              <button
+                onClick={startEditingOrientation}
+                className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0"
+                aria-label="Edit orientation"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
