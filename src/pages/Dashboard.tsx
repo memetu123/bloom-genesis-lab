@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
@@ -73,9 +74,9 @@ const Dashboard = () => {
   }, [refetchCommitments]);
   const [expandedVisionIds, setExpandedVisionIds] = useState<Set<string>>(new Set());
   
-  // Hierarchy filter removed from UI - always show "all" time horizons
-  // Keeping type for any future deep-linking or sub-page usage
-  const hierarchyFilter: HierarchyFilter = "all";
+  // Hierarchy filter - desktop only, mobile always shows "all"
+  const [hierarchyFilter, setHierarchyFilter] = useState<HierarchyFilter>("all");
+  const effectiveFilter: HierarchyFilter = isMobile ? "all" : hierarchyFilter;
   
   // Add vision dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -646,18 +647,18 @@ const Dashboard = () => {
     let showExpandToggle = false;
     let emptyMessage = "Add a goal when it feels right";
 
-    if (hierarchyFilter === "all") {
+    if (effectiveFilter === "all") {
       // "All" mode: collapsed shows 3yr only, expanded shows full hierarchy
       const has3yr = hasThreeYearGoals(vision.threeYearWithChildren);
       hasContent = vision.threeYearWithChildren.length > 0;
       showExpandToggle = canExpand; // Can expand if there are children to show
       emptyMessage = "Add a goal when it feels right";
-    } else if (hierarchyFilter === "1yr") {
+    } else if (effectiveFilter === "1yr") {
       goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "one_year");
       hasContent = goalsToShow.length > 0;
       showExpandToggle = false; // No expand in filtered mode
       emptyMessage = "No 1-year goals";
-    } else if (hierarchyFilter === "90d") {
+    } else if (effectiveFilter === "90d") {
       goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "ninety_day");
       hasContent = goalsToShow.length > 0;
       showExpandToggle = false; // No expand in filtered mode
@@ -751,7 +752,7 @@ const Dashboard = () => {
           </div>
 
           {/* Goal Content */}
-          {hierarchyFilter === "all" ? (
+          {effectiveFilter === "all" ? (
             // "All" mode: collapsed shows 3yr only, expanded shows full hierarchy
             hasThreeYearGoals(vision.threeYearWithChildren) || vision.threeYearWithChildren.length > 0 ? (
               <div className="mb-3">
@@ -852,16 +853,16 @@ const Dashboard = () => {
     let showExpandToggle = false;
     let emptyMessage = "Add your first goal";
 
-    if (hierarchyFilter === "all") {
+    if (effectiveFilter === "all") {
       hasContent = vision.threeYearWithChildren.length > 0;
       showExpandToggle = canExpand;
       emptyMessage = "Add your first goal";
-    } else if (hierarchyFilter === "1yr") {
+    } else if (effectiveFilter === "1yr") {
       goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "one_year");
       hasContent = goalsToShow.length > 0;
       showExpandToggle = false;
       emptyMessage = "No 1-year goals";
-    } else if (hierarchyFilter === "90d") {
+    } else if (effectiveFilter === "90d") {
       goalsToShow = getFilteredGoals(vision.threeYearWithChildren, "ninety_day");
       hasContent = goalsToShow.length > 0;
       showExpandToggle = false;
@@ -919,7 +920,7 @@ const Dashboard = () => {
           </div>
 
           {/* Goal Content */}
-          {hierarchyFilter === "all" ? (
+          {effectiveFilter === "all" ? (
             // "All" mode
             hasContent ? (
               <div className="mt-2.5">
@@ -1170,9 +1171,18 @@ const Dashboard = () => {
       {/* ========== HEADER - Desktop only ========== */}
       {!isMobile && (
         <div className="flex items-center justify-between mb-1.5">
-          <h1 className="text-xl font-semibold text-foreground">
-            My North Star
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-semibold text-foreground">
+              My North Star
+            </h1>
+            <Tabs value={hierarchyFilter} onValueChange={(v) => setHierarchyFilter(v as HierarchyFilter)}>
+              <TabsList className="h-7">
+                <TabsTrigger value="all" className="text-xs px-2.5 h-5">All</TabsTrigger>
+                <TabsTrigger value="1yr" className="text-xs px-2.5 h-5">1yr</TabsTrigger>
+                <TabsTrigger value="90d" className="text-xs px-2.5 h-5">90d</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           <AddIconButton
             onClick={() => setAddDialogOpen(true)}
             tooltip="Add vision"
