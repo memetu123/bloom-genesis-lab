@@ -9,12 +9,14 @@ import { useDailyData, DailyTask } from "@/hooks/useDailyData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { format, addDays, subDays, parseISO } from "date-fns";
+import { format, addDays, subDays, parseISO, startOfWeek } from "date-fns";
 import { formatDateWithDay, formatTime, formatTimeRange } from "@/lib/formatPreferences";
 import FocusFilter from "@/components/FocusFilter";
 import AddIconButton from "@/components/AddIconButton";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
+import MobileWeekStrip from "@/components/mobile/MobileWeekStrip";
+import MobileFAB from "@/components/mobile/MobileFAB";
 
 /**
  * Daily Page - Notion-style daily view with time slots
@@ -420,12 +422,123 @@ const Daily = () => {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <div className={isMobile ? "pt-4" : "container mx-auto px-4 py-8 max-w-3xl"}>
         <p className="text-muted-foreground text-center">Loading...</p>
       </div>
     );
   }
 
+  // Mobile: Minimal chrome, week strip serves as orientation
+  if (isMobile) {
+    return (
+      <div className="flex flex-col min-h-[calc(100vh-100px)]">
+        {/* Mobile Week Strip - serves as primary navigation/orientation */}
+        <MobileWeekStrip
+          selectedDate={selectedDate}
+          onDateSelect={(date) => {
+            setSelectedDate(date);
+            navigate(`/daily?date=${format(date, "yyyy-MM-dd")}`, { replace: true });
+          }}
+          weekStartsOn={weekStartsOn}
+        />
+
+        {/* Task list - minimal top padding */}
+        <div className="flex-1 px-4 pt-3 pb-20">
+          {/* Progress indicator - subtle */}
+          {dailyTotal > 0 && (
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-muted-foreground">
+                {dailyCompleted}/{dailyTotal} completed
+              </span>
+              <FocusFilter
+                showFocusedOnly={showFocusedOnly}
+                onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
+              />
+            </div>
+          )}
+
+          {filteredTasks.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground text-sm">
+                {showFocusedOnly
+                  ? "No focused tasks for this day"
+                  : "No tasks scheduled"}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Scheduled tasks */}
+              {scheduledTasks.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                    Scheduled
+                  </h3>
+                  <div className="space-y-1">
+                    {scheduledTasks.map((task) => (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        timeFormat={preferences.timeFormat}
+                        onToggle={() => handleToggleComplete(task)}
+                        onClick={() => handleTaskClick(task)}
+                        onHierarchyClick={() => handleHierarchyClick(task)}
+                        isMobile={true}
+                        showVisions={showVisions}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Unscheduled tasks */}
+              {unscheduledTasks.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                    No Time Assigned
+                  </h3>
+                  <div className="space-y-1">
+                    {unscheduledTasks.map((task) => (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        timeFormat={preferences.timeFormat}
+                        onToggle={() => handleToggleComplete(task)}
+                        onClick={() => handleTaskClick(task)}
+                        onHierarchyClick={() => handleHierarchyClick(task)}
+                        isMobile={true}
+                        showVisions={showVisions}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Mobile FAB */}
+        <MobileFAB onClick={() => setCreateModalOpen(true)} />
+
+        {/* Modals */}
+        <TaskCreateModal
+          open={createModalOpen}
+          onOpenChange={setCreateModalOpen}
+          defaultDate={selectedDate}
+          goals={goalOptions}
+          onSuccess={refetch}
+        />
+        <TaskDetailModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          task={selectedTask}
+          date={selectedDate}
+          onUpdate={refetch}
+        />
+      </div>
+    );
+  }
+
+  // Desktop/Tablet: Original layout
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl" style={{ maxHeight: '80vh' }}>
       {/* Header */}

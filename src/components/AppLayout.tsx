@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Calendar, CalendarDays, User, Settings, Trash2, LogOut, Compass } from "lucide-react";
 import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import GlobalSearch from "@/components/GlobalSearch";
 import {
@@ -16,22 +17,33 @@ import {
 /**
  * AppLayout - Shared layout with top navigation
  * Provides consistent navigation across all main pages
+ * 
+ * Mobile: 2 pages only - North Star and Today (combined Weekly/Daily)
+ * Desktop/Tablet: Full navigation with Weekly and Daily separate
  */
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
+// Desktop/tablet navigation items
+const desktopNavItems = [
   { label: "North Star", path: "/dashboard", icon: NorthStarIcon },
   { label: "Weekly", path: "/weekly", icon: Calendar },
   { label: "Daily", path: "/daily", icon: CalendarDays },
+];
+
+// Mobile navigation items - only 2 pages
+const mobileNavItems = [
+  { label: "North Star", path: "/dashboard", icon: NorthStarIcon },
+  { label: "Today", path: "/daily", icon: CalendarDays },
 ];
 
 const AppLayout = ({ children }: AppLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const isMobile = useIsMobile();
 
   const handleSignOut = async () => {
     await signOut();
@@ -45,7 +57,13 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     return email.charAt(0).toUpperCase();
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  // Check if path is active - for mobile, /weekly also counts as active for "Today"
+  const isActive = (path: string) => {
+    if (path === "/daily" && location.pathname === "/weekly") {
+      return true; // Weekly redirects to daily on mobile
+    }
+    return location.pathname === path;
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -61,9 +79,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               Todayoum
             </button>
 
-            {/* Navigation Links */}
+            {/* Desktop/Tablet Navigation Links */}
             <nav className="hidden sm:flex items-center gap-1">
-              {navItems.map((item) => (
+              {desktopNavItems.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => navigate(item.path)}
@@ -118,14 +136,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </div>
           </div>
 
-          {/* Mobile Navigation */}
-          <nav className="sm:hidden flex items-center justify-center gap-1 pb-2 -mt-1">
-            {navItems.map((item) => (
+          {/* Mobile Navigation - Only 2 items */}
+          <nav className="sm:hidden flex items-center justify-center gap-4 pb-2 -mt-1">
+            {mobileNavItems.map((item) => (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-md text-xs font-medium transition-calm",
+                  "flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-md text-xs font-medium transition-calm min-w-[60px]",
                   isActive(item.path)
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground"
