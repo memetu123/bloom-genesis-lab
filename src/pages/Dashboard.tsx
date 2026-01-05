@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
 import { useAuth } from "@/hooks/useAuth";
@@ -53,7 +53,6 @@ type HierarchyFilter = "all" | "1yr" | "90d";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals, refetchCommitments, preferences, refetchPreferences } = useAppData();
@@ -73,17 +72,9 @@ const Dashboard = () => {
   }, [refetchCommitments]);
   const [expandedVisionIds, setExpandedVisionIds] = useState<Set<string>>(new Set());
   
-  // Read filter from URL params (defaults to "all")
-  const hierarchyFilter = (searchParams.get("filter") as HierarchyFilter) || "all";
-  
-  const setHierarchyFilter = (filter: HierarchyFilter) => {
-    if (filter === "all") {
-      searchParams.delete("filter");
-    } else {
-      searchParams.set("filter", filter);
-    }
-    setSearchParams(searchParams, { replace: true });
-  };
+  // Hierarchy filter removed from UI - always show "all" time horizons
+  // Keeping type for any future deep-linking or sub-page usage
+  const hierarchyFilter: HierarchyFilter = "all";
   
   // Add vision dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -1036,56 +1027,9 @@ const Dashboard = () => {
       : renderDesktopVisionCard(vision, isMuted);
   };
 
-  // Filter options for segmented control (removed 3yr - "All" shows 3yr by default)
-  const filterOptions: { value: HierarchyFilter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "1yr", label: "1yr" },
-    { value: "90d", label: "90d" },
-  ];
+  // Note: filterOptions removed - North Star always shows all time horizons
 
-  // Collect all goals of a specific type across all visions for flat execution views
-  // Ordered by: vision tier (using sortedFocusedVisions), then execution state within each vision
-  const allGoalsOfType = useMemo(() => {
-    // Use sortedFocusedVisions first, then non-focused visions
-    const orderedVisions = [...sortedFocusedVisions, ...nonFocusedVisions];
-    const goalsWithVision: { goal: GoalWithChildren; visionTitle: string; visionIndex: number }[] = [];
-    
-    for (let visionIndex = 0; visionIndex < orderedVisions.length; visionIndex++) {
-      const vision = orderedVisions[visionIndex];
-      const targetType = hierarchyFilter === "1yr" ? "one_year" : "ninety_day";
-      const collected = collectGoalsByType(vision.threeYearWithChildren, targetType);
-      for (const goal of collected) {
-        goalsWithVision.push({ goal, visionTitle: vision.title, visionIndex });
-      }
-    }
-    
-    // Helper to get execution state priority (lower = higher priority)
-    const getStatePriority = (goal: GoalWithChildren): number => {
-      const isNinetyDay = goal.goal_type === "ninety_day";
-      const planData = isNinetyDay ? planExecutionMap.get(goal.id) : null;
-      const goalData = !isNinetyDay ? goalExecutionMap.get(goal.id) : null;
-      const state = planData?.state || goalData?.state || "none";
-      
-      switch (state) {
-        case "active": return 0;
-        case "planned": return 1;
-        case "dormant": return 2;
-        default: return 3;
-      }
-    };
-    
-    // Sort: by vision order first, then by execution state within each vision
-    goalsWithVision.sort((a, b) => {
-      // First, sort by vision order (tier-based)
-      if (a.visionIndex !== b.visionIndex) {
-        return a.visionIndex - b.visionIndex;
-      }
-      // Within same vision, sort by execution state priority
-      return getStatePriority(a.goal) - getStatePriority(b.goal);
-    });
-    
-    return goalsWithVision;
-  }, [sortedFocusedVisions, nonFocusedVisions, hierarchyFilter, planExecutionMap, goalExecutionMap]);
+  // Note: allGoalsOfType removed - North Star page always shows hierarchical view
 
   // Helper to get execution state label styling
   const getExecutionStateStyle = (state: ExecutionState) => {
@@ -1253,17 +1197,17 @@ const Dashboard = () => {
               placeholder="Write a sentence that helps you stay oriented."
               maxLength={120}
               rows={2}
-              className="w-full text-sm italic font-light text-muted-foreground bg-transparent border-b border-muted focus:border-primary focus:outline-none resize-none py-1 placeholder:text-muted-foreground/50"
+              className="w-full text-sm font-light text-muted-foreground/80 bg-transparent border-b border-muted focus:border-primary focus:outline-none resize-none py-1 placeholder:text-muted-foreground/50"
             />
           </div>
         ) : (
-          <p className="text-sm italic font-light text-muted-foreground">
+          <p className="text-sm font-light text-muted-foreground/70">
             {displayedOrientation}
             {/* Edit button - visible on hover (desktop), inline with text */}
             {!isMobile && isOrientationHovered && (
               <button
                 onClick={startEditingOrientation}
-                className="inline-flex ml-1.5 p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors align-middle"
+                className="inline-flex ml-1.5 p-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors align-middle"
                 aria-label="Edit orientation"
               >
                 <Pencil className="h-3 w-3" />
@@ -1273,71 +1217,28 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* ========== HIERARCHY FILTER ========== */}
-      <div className="mb-6">
-        <p className="text-xs text-muted-foreground/70 mb-2">View by timeframe</p>
-        <div className="flex flex-wrap gap-2">
-          {filterOptions.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => setHierarchyFilter(option.value)}
-              className={`
-                px-4 py-1.5 text-sm rounded-full transition-all
-                ${hierarchyFilter === option.value
-                  ? "bg-[hsl(75,25%,88%)] dark:bg-[hsl(75,20%,25%)] text-[hsl(75,40%,35%)] dark:text-[hsl(75,35%,65%)] font-medium shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]"
-                  : "text-muted-foreground hover:bg-muted/60"
-                }
-              `}
+      {/* ========== HIERARCHICAL VIEW ========== */}
+      {sortedFocusedVisions.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center">
+            <Star className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground mb-4">No focused visions yet</p>
+            <Button 
+              variant="outline" 
+              onClick={() => setAddDialogOpen(true)}
             >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ========== FLAT EXECUTION VIEW (1yr or 90d) ========== */}
-      {hierarchyFilter !== "all" ? (
-        allGoalsOfType.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">
-                No {hierarchyFilter === "1yr" ? "1-year goals" : "90-day plans"} yet
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="divide-y divide-muted/30">
-            {allGoalsOfType.map(({ goal, visionTitle }) => 
-              renderExecutionRow(goal, visionTitle, hierarchyFilter === "1yr" ? "1yr" : "90d")
-            )}
-          </div>
-        )
+              Add your first vision
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
-        /* ========== HIERARCHICAL VIEW (All) ========== */
-        <>
-          {sortedFocusedVisions.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="py-12 text-center">
-                <Star className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground mb-4">No focused visions yet</p>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setAddDialogOpen(true)}
-                >
-                  Add your first vision
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4 md:space-y-6">
-              {sortedFocusedVisions.map((vision) => renderVisionCard(vision, false))}
-            </div>
-          )}
-        </>
+        <div className="space-y-4 md:space-y-6">
+          {sortedFocusedVisions.map((vision) => renderVisionCard(vision, false))}
+        </div>
       )}
 
-      {/* ========== NON-FOCUSED VISIONS (Collapsible) - Only in "All" view ========== */}
-      {hierarchyFilter === "all" && nonFocusedVisions.length > 0 && (
+      {/* ========== NON-FOCUSED VISIONS (Collapsible) ========== */}
+      {nonFocusedVisions.length > 0 && (
         <div className="mt-8">
           <button
             onClick={() => setOtherVisionsExpanded(!otherVisionsExpanded)}
