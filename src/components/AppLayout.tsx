@@ -1,6 +1,6 @@
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Calendar, CalendarDays, User, Settings, Trash2, LogOut, Compass } from "lucide-react";
+import { CalendarDays, User, Settings, Trash2, LogOut, Compass, ChevronDown } from "lucide-react";
 import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -18,20 +18,26 @@ import {
  * AppLayout - Shared layout with top navigation
  * Provides consistent navigation across all main pages
  * 
- * Mobile: 2 pages only - North Star and Today (combined Weekly/Daily)
- * Desktop/Tablet: Full navigation with Weekly and Daily separate
+ * Navigation structure:
+ * - North Star (persistent)
+ * - Calendar view selector (Weekly/Daily/Schedule dropdown)
+ * 
+ * Mobile: Icon-only nav with North Star and Today
+ * Desktop/Tablet: Full navigation with view selector dropdown
  */
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
-// Desktop/tablet navigation items
-const desktopNavItems = [
-  { label: "North Star", path: "/dashboard", icon: NorthStarIcon },
-  { label: "Weekly", path: "/weekly", icon: Calendar },
-  { label: "Daily", path: "/daily", icon: CalendarDays },
-];
+// View labels for the calendar dropdown
+const VIEW_LABELS = {
+  weekly: "Weekly",
+  daily: "Daily",
+  schedule: "Schedule",
+} as const;
+
+type CalendarViewType = keyof typeof VIEW_LABELS;
 
 // Mobile navigation items - icon-only with accessibility labels
 const mobileNavItems = [
@@ -57,6 +63,35 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     return email.charAt(0).toUpperCase();
   };
 
+  // Determine current calendar view from path
+  const currentCalendarView = useMemo((): CalendarViewType => {
+    if (location.pathname.startsWith("/weekly")) return "weekly";
+    if (location.pathname.startsWith("/daily")) return "daily";
+    return "daily"; // default
+  }, [location.pathname]);
+
+  // Check if currently on a calendar view
+  const isOnCalendarView = location.pathname.startsWith("/weekly") || location.pathname.startsWith("/daily");
+
+  // Navigate to a specific calendar view, preserving date param
+  const navigateToCalendarView = (view: CalendarViewType) => {
+    const searchParams = new URLSearchParams(location.search);
+    const dateParam = searchParams.get("date");
+    const queryString = dateParam ? `?date=${dateParam}` : "";
+    
+    switch (view) {
+      case "weekly":
+        navigate(`/weekly${queryString}`);
+        break;
+      case "daily":
+        navigate(`/daily${queryString}`);
+        break;
+      case "schedule":
+        // Placeholder - not implemented yet
+        break;
+    }
+  };
+
   // Check if path is active - mobile-only: /weekly also counts as active for "Today"
   const isActive = (path: string) => {
     if (isMobile && path === "/daily" && location.pathname === "/weekly") {
@@ -66,9 +101,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Top Navigation */}
-      <header className="border-b border-border sticky top-0 bg-background z-50">
+      <header className="border-b border-border sticky top-0 bg-background z-50 shrink-0">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             {/* Logo */}
@@ -81,22 +116,63 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
             {/* Desktop/Tablet Navigation Links */}
             <nav className="hidden sm:flex items-center gap-1">
-              {desktopNavItems.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-calm",
-                    isActive(item.path)
-                      ? "text-primary bg-primary/10"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                    item.path === "/dashboard" && "mr-2"
-                  )}
-                >
-                  <item.icon className={item.path === "/dashboard" ? "h-5 w-5" : "h-4 w-4"} />
-                  {item.label}
-                </button>
-              ))}
+              {/* North Star - persistent nav item */}
+              <button
+                onClick={() => navigate("/dashboard")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-calm mr-2",
+                  location.pathname === "/dashboard"
+                    ? "text-primary bg-primary/10"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <NorthStarIcon className="h-5 w-5" />
+                North Star
+              </button>
+              
+              {/* Calendar View Selector Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-calm",
+                      isOnCalendarView
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    {VIEW_LABELS[currentCalendarView]}
+                    <ChevronDown className="h-3.5 w-3.5 ml-0.5 text-muted-foreground/60" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-40 bg-popover border border-border shadow-md">
+                  <DropdownMenuItem
+                    onClick={() => navigateToCalendarView("daily")}
+                    className={cn(
+                      "cursor-pointer",
+                      currentCalendarView === "daily" && "bg-accent"
+                    )}
+                  >
+                    Daily
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => navigateToCalendarView("weekly")}
+                    className={cn(
+                      "cursor-pointer",
+                      currentCalendarView === "weekly" && "bg-accent"
+                    )}
+                  >
+                    Weekly
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled
+                    className="cursor-not-allowed opacity-50"
+                  >
+                    Schedule (coming soon)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
 
             {/* Global Search and User Menu */}
@@ -162,8 +238,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </div>
       </header>
 
-      {/* Page Content */}
-      <main>{children}</main>
+      {/* Page Content - flex-1 for calendar views to fill height */}
+      <main className="flex-1 overflow-hidden">{children}</main>
     </div>
   );
 };
