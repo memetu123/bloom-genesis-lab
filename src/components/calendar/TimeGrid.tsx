@@ -57,11 +57,11 @@ const timeToMinutes = (time: string): number => {
 };
 
 // Calculate task position and height based on time
-const getTaskStyle = (
+const getTaskPosition = (
   timeStart: string | null | undefined,
   timeEnd: string | null | undefined,
   startHour: number
-): { top: number; height: number } | null => {
+): { top: number; height: number; startMin: number; endMin: number } | null => {
   if (!timeStart) return null;
   
   const startMinutes = timeToMinutes(timeStart);
@@ -73,20 +73,115 @@ const getTaskStyle = (
   return {
     top: (minutesFromStart / 60) * HOUR_HEIGHT,
     height: (duration / 60) * HOUR_HEIGHT,
+    startMin: startMinutes,
+    endMin: endMinutes,
   };
+};
+
+// Group overlapping tasks for side-by-side rendering
+interface TaskWithPosition {
+  task: TimeGridTask;
+  position: { top: number; height: number; startMin: number; endMin: number };
+  column: number;
+  totalColumns: number;
+}
+
+const calculateOverlappingLayout = (
+  tasks: TimeGridTask[],
+  startHour: number
+): TaskWithPosition[] => {
+  // Get positions for all tasks
+  const tasksWithPos = tasks
+    .map(task => {
+      const position = getTaskPosition(task.timeStart, task.timeEnd, startHour);
+      return position ? { task, position } : null;
+    })
+    .filter((t): t is { task: TimeGridTask; position: NonNullable<ReturnType<typeof getTaskPosition>> } => t !== null)
+    .sort((a, b) => a.position.startMin - b.position.startMin);
+  
+  if (tasksWithPos.length === 0) return [];
+  
+  // Find overlapping groups
+  const groups: { task: TimeGridTask; position: TaskWithPosition["position"] }[][] = [];
+  
+  tasksWithPos.forEach(item => {
+    // Find if this task overlaps with any existing group
+    let addedToGroup = false;
+    
+    for (const group of groups) {
+      const overlapsWithGroup = group.some(g => 
+        item.position.startMin < g.position.endMin && 
+        item.position.endMin > g.position.startMin
+      );
+      
+      if (overlapsWithGroup) {
+        group.push(item);
+        addedToGroup = true;
+        break;
+      }
+    }
+    
+    if (!addedToGroup) {
+      groups.push([item]);
+    }
+  });
+  
+  // Merge overlapping groups that transitively overlap
+  const mergedGroups: typeof groups = [];
+  groups.forEach(group => {
+    const overlappingIdx = mergedGroups.findIndex(mg =>
+      mg.some(mgItem =>
+        group.some(gItem =>
+          gItem.position.startMin < mgItem.position.endMin &&
+          gItem.position.endMin > mgItem.position.startMin
+        )
+      )
+    );
+    
+    if (overlappingIdx >= 0) {
+      mergedGroups[overlappingIdx].push(...group);
+    } else {
+      mergedGroups.push([...group]);
+    }
+  });
+  
+  // Assign columns within each group
+  const result: TaskWithPosition[] = [];
+  
+  mergedGroups.forEach(group => {
+    const totalColumns = group.length;
+    
+    // Sort by start time, assign columns
+    group
+      .sort((a, b) => a.position.startMin - b.position.startMin)
+      .forEach((item, idx) => {
+        result.push({
+          task: item.task,
+          position: item.position,
+          column: idx,
+          totalColumns,
+        });
+      });
+  });
+  
+  return result;
 };
 
 // Task card component
 const TaskCard = memo(({
   task,
   date,
-  style,
+  position,
+  column,
+  totalColumns,
   onClick,
   onToggle,
 }: {
   task: TimeGridTask;
   date: Date;
-  style: { top: number; height: number };
+  position: { top: number; height: number };
+  column: number;
+  totalColumns: number;
   onClick: () => void;
   onToggle: () => void;
 }) => {
@@ -94,26 +189,32 @@ const TaskCard = memo(({
     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
     : "";
   
-  const isCompact = style.height < 40;
+  const isCompact = position.height < 40;
+  
+  // Calculate horizontal position for overlapping tasks
+  const widthPercent = 100 / totalColumns;
+  const leftPercent = column * widthPercent;
   
   return (
     <div
       className={cn(
-        "absolute left-1 right-1 rounded-md px-2 transition-all cursor-pointer",
+        "absolute rounded-md px-1.5 transition-all cursor-pointer",
         "border overflow-hidden",
         task.isCompleted
           ? "bg-muted/40 border-muted-foreground/10 opacity-60"
           : "bg-card border-border/50 hover:border-border hover:shadow-sm"
       )}
       style={{
-        top: `${style.top}px`,
-        height: `${Math.max(style.height - 2, 18)}px`,
+        top: `${position.top}px`,
+        height: `${Math.max(position.height - 2, 18)}px`,
         minHeight: "18px",
+        left: `calc(${leftPercent}% + 2px)`,
+        width: `calc(${widthPercent}% - 4px)`,
       }}
       onClick={onClick}
     >
       <div className={cn(
-        "flex items-start gap-1.5 h-full",
+        "flex items-start gap-1 h-full",
         isCompact ? "py-0.5" : "py-1"
       )}>
         <button
@@ -269,22 +370,19 @@ const TimeGrid = ({
                   />
                 ))}
                 
-                {/* Scheduled task cards */}
-                {scheduledTasks.map(task => {
-                  const style = getTaskStyle(task.timeStart, task.timeEnd, startHour);
-                  if (!style) return null;
-                  
-                  return (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      date={column.date}
-                      style={style}
-                      onClick={() => onTaskClick(task, column.date)}
-                      onToggle={() => onToggleComplete(task, column.date)}
-                    />
-                  );
-                })}
+                {/* Scheduled task cards with overlap handling */}
+                {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    date={column.date}
+                    position={position}
+                    column={col}
+                    totalColumns={totalColumns}
+                    onClick={() => onTaskClick(task, column.date)}
+                    onToggle={() => onToggleComplete(task, column.date)}
+                  />
+                ))}
               </div>
               
               {/* Unscheduled tasks section */}
