@@ -1,174 +1,46 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Unlink, Eye, EyeOff } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useDailyData, DailyTask } from "@/hooks/useDailyData";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek } from "date-fns";
-import { formatDateWithDay, formatTime, formatTimeRange } from "@/lib/formatPreferences";
-import FocusFilter from "@/components/FocusFilter";
-import AddIconButton from "@/components/AddIconButton";
+import { formatDateWithDay } from "@/lib/formatPreferences";
+import CalendarLayout from "@/components/calendar/CalendarLayout";
+import CalendarDateNav from "@/components/calendar/CalendarDateNav";
+import TimeGrid, { TimeGridTask } from "@/components/calendar/TimeGrid";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
 import MobileWeekStrip from "@/components/mobile/MobileWeekStrip";
 import MobileFAB from "@/components/mobile/MobileFAB";
+import { Unlink } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 /**
- * Daily Page - Notion-style daily view with time slots
- * OPTIMIZED: Uses useDailyData hook for single-batch fetching
+ * Daily Page - Google Calendar-inspired daily view
+ * Uses shared CalendarLayout with left rail and TimeGrid (single column)
  */
 
-// Meta column component for hierarchy display
-const HierarchyMeta = memo(({ 
+// Mobile task item component
+const MobileTaskItem = memo(({ 
   task, 
-  showVisions,
-  onHierarchyClick 
-}: { 
-  task: DailyTask;
-  showVisions: boolean;
-  onHierarchyClick: () => void;
-}) => {
-  const hasGoal = !!task.goalTitle;
-  
-  // Unlinked state
-  if (!hasGoal) {
-    return (
-      <div className="text-xs text-muted-foreground/50 italic">
-        Unlinked
-      </div>
-    );
-  }
-
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onHierarchyClick(); }}
-      className="text-left hover:opacity-80 transition-opacity w-full"
-    >
-      {/* Plan line */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[hsl(75,20%,90%)] dark:bg-[hsl(75,15%,22%)] text-[hsl(75,30%,40%)] dark:text-[hsl(75,25%,60%)] shrink-0">
-          90d
-        </span>
-        <span className="text-[11px] text-muted-foreground truncate">
-          {task.goalTitle}
-        </span>
-      </div>
-      {/* Vision line - only if enabled and has vision */}
-      {showVisions && task.visionTitle && (
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[10px] text-muted-foreground/40 shrink-0 w-[26px] text-center">⭐</span>
-          <span className="text-[11px] text-muted-foreground/60 truncate">
-            {task.visionTitle}
-          </span>
-        </div>
-      )}
-    </button>
-  );
-});
-HierarchyMeta.displayName = 'HierarchyMeta';
-
-// Memoized task item component with plan border indicator and hierarchy context
-const TaskItem = memo(({ 
-  task, 
-  timeFormat, 
   onToggle, 
   onClick,
-  onHierarchyClick,
-  isMobile,
-  showVisions
 }: { 
   task: DailyTask; 
-  timeFormat: "12h" | "24h";
   onToggle: () => void;
   onClick: () => void;
-  onHierarchyClick: () => void;
-  isMobile: boolean;
-  showVisions: boolean;
 }) => {
-  const timeDisplay = task.timeStart 
-    ? formatTimeRange(task.timeStart, task.timeEnd || null, timeFormat)
-    : null;
-  
   const instanceLabel = task.totalInstances && task.totalInstances > 1
     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
     : "";
 
-  // Border logic (Calendar view - Interaction-based reveal):
-  // Daily view always shows borders for plan-linked tasks (no "plan selection" mode)
-  // Tasks with a plan: subtle neutral left border
-  // Tasks without a plan: no border
-  const showPlanBorder = !!task.goalId;
-
-  // Mobile: stacked layout with hierarchy below time
-  if (isMobile) {
-    return (
-      <div className={`
-        py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
-        ${showPlanBorder ? "border-l-2 border-l-muted-foreground/20 ml-0 pl-3" : ""}
-      `}>
-        <div className="flex items-start gap-3">
-          <button
-            onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
-          >
-            {task.isCompleted ? "●" : "○"}
-          </button>
-          <button
-            onClick={onClick}
-            className="flex-1 text-left"
-          >
-            <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
-              {task.title}{instanceLabel}
-            </span>
-            {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
-              <div className="flex items-center gap-2 mt-0.5">
-                {timeDisplay && (
-                  <span className="text-xs text-muted-foreground">{timeDisplay}</span>
-                )}
-                {task.taskType === "independent" && !task.isDetached && (
-                  <span className="text-[9px] bg-muted px-1 rounded">1x</span>
-                )}
-                {task.isDetached && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex">
-                        <Unlink className="h-3 w-3 text-muted-foreground/60" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      Detached from recurring task
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            )}
-          </button>
-        </div>
-        {/* Hierarchy context - stacked below on mobile */}
-        <div className="mt-1.5 ml-8">
-          <HierarchyMeta 
-            task={task} 
-            showVisions={showVisions} 
-            onHierarchyClick={onHierarchyClick} 
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Desktop: 3-column grid layout
   return (
-    <div className={`
-      grid grid-cols-[1fr_auto] gap-4 items-start py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm
-      ${showPlanBorder ? "border-l-2 border-l-muted-foreground/20 ml-0 pl-3" : ""}
-    `}>
-      {/* Column 2: Main task content */}
-      <div className="flex items-start gap-3 min-w-0">
+    <div className="py-2 hover:bg-muted/30 -mx-2 px-2 rounded transition-calm">
+      <div className="flex items-start gap-3">
         <button
           onClick={(e) => { e.stopPropagation(); onToggle(); }}
           className={`flex-shrink-0 text-lg ${task.isCompleted ? "text-primary" : "hover:text-primary"}`}
@@ -177,15 +49,18 @@ const TaskItem = memo(({
         </button>
         <button
           onClick={onClick}
-          className="flex-1 text-left min-w-0"
+          className="flex-1 text-left"
         >
           <span className={`text-sm ${task.isCompleted ? "text-muted-foreground line-through" : "text-foreground"}`}>
             {task.title}{instanceLabel}
           </span>
-          {(timeDisplay || task.taskType === "independent" || task.isDetached) && (
+          {(task.timeStart || task.taskType === "independent" || task.isDetached) && (
             <div className="flex items-center gap-2 mt-0.5">
-              {timeDisplay && (
-                <span className="text-xs text-muted-foreground">{timeDisplay}</span>
+              {task.timeStart && (
+                <span className="text-xs text-muted-foreground">
+                  {task.timeStart}
+                  {task.timeEnd && ` - ${task.timeEnd}`}
+                </span>
               )}
               {task.taskType === "independent" && !task.isDetached && (
                 <span className="text-[9px] bg-muted px-1 rounded">1x</span>
@@ -206,19 +81,21 @@ const TaskItem = memo(({
           )}
         </button>
       </div>
-      
-      {/* Column 3: Hierarchy/meta column */}
-      <div className="shrink-0 w-[200px] max-w-[280px]">
-        <HierarchyMeta 
-          task={task} 
-          showVisions={showVisions} 
-          onHierarchyClick={onHierarchyClick} 
-        />
-      </div>
+      {/* Goal context */}
+      {task.goalTitle && (
+        <div className="mt-1 ml-8">
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[hsl(75,20%,90%)] dark:bg-[hsl(75,15%,22%)] text-[hsl(75,30%,40%)] dark:text-[hsl(75,25%,60%)]">
+            90d
+          </span>
+          <span className="text-[11px] text-muted-foreground ml-1.5">
+            {task.goalTitle}
+          </span>
+        </div>
+      )}
     </div>
   );
 });
-TaskItem.displayName = 'TaskItem';
+MobileTaskItem.displayName = 'MobileTaskItem';
 
 const Daily = () => {
   const navigate = useNavigate();
@@ -229,7 +106,6 @@ const Daily = () => {
   const isMobile = useIsMobile();
   
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
-  const [showVisions, setShowVisions] = useState(true);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -279,18 +155,12 @@ const Daily = () => {
   const dateKey = format(selectedDate, "yyyy-MM-dd");
 
   // Stable handlers
-  const handleTaskClick = useCallback((task: DailyTask) => {
-    setSelectedTask(task);
+  const handleTaskClick = useCallback((task: DailyTask | TimeGridTask) => {
+    setSelectedTask(task as DailyTask);
     setModalOpen(true);
   }, []);
 
-  // Handler for clicking hierarchy context - opens task detail modal
-  const handleHierarchyClick = useCallback((task: DailyTask) => {
-    setSelectedTask(task);
-    setModalOpen(true);
-  }, []);
-
-  const handleToggleComplete = useCallback(async (task: DailyTask) => {
+  const handleToggleComplete = useCallback(async (task: DailyTask | TimeGridTask) => {
     if (!user) return;
     const newCompleted = !task.isCompleted;
     
@@ -320,11 +190,12 @@ const Daily = () => {
             });
         }
       } else {
+        const dailyTask = task as DailyTask;
         // Check if completion record exists
         const { data: existingCompletion } = await supabase
           .from("commitment_completions")
           .select("id")
-          .eq("commitment_id", task.commitmentId)
+          .eq("commitment_id", dailyTask.commitmentId)
           .eq("completed_date", dateKey)
           .maybeSingle();
 
@@ -340,9 +211,9 @@ const Daily = () => {
             .from("commitment_completions")
             .insert({
               user_id: user.id,
-              commitment_id: task.commitmentId,
+              commitment_id: dailyTask.commitmentId,
               completed_date: dateKey,
-              instance_number: task.instanceNumber || 1,
+              instance_number: dailyTask.instanceNumber || 1,
               is_completed: true,
             });
         }
@@ -376,8 +247,6 @@ const Daily = () => {
   const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
   // Filter tasks based on focus toggle - memoized
-  // Focus is derived ONLY from the parent Vision.
-  // IMPORTANT: treat "unknown" (null) as included; only exclude explicitly unfocused.
   const filteredTasks = useMemo(() =>
     showFocusedOnly
       ? tasks.filter(t => t.visionIsFocus !== false)
@@ -393,46 +262,60 @@ const Daily = () => {
     unscheduledTasks: filteredTasks.filter(t => !t.timeStart)
   }), [filteredTasks]);
 
-  // Time slots - full day coverage (06:00-23:00)
-  const timeSlots = useMemo(() => [
-    "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
-    "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", 
-    "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"
-  ], []);
+  // Daily progress
+  const dailyCompleted = filteredTasks.filter(t => t.isCompleted).length;
+  const dailyTotal = filteredTasks.length;
 
-  // Group tasks by hour - memoized
-  const getTasksForSlot = useCallback((slot: string) => {
-    const slotHour = slot.split(":")[0];
-    return scheduledTasks.filter(t => {
-      if (!t.timeStart) return false;
-      const taskHour = t.timeStart.split(":")[0];
-      return taskHour === slotHour;
-    });
-  }, [scheduledTasks]);
-
-  // Goals for dropdown - memoized
+  // Goals for task creation modal
   const goalOptions = useMemo(() => 
     goals.filter(g => g.goal_type === "ninety_day").map(g => ({ id: g.id, title: g.title })),
     [goals]
   );
 
-  // Daily progress
-  const dailyCompleted = filteredTasks.filter(t => t.isCompleted).length;
-  const dailyTotal = filteredTasks.length;
+  // Build single column for TimeGrid
+  const timeGridColumns = useMemo(() => [{
+    date: selectedDate,
+    dateKey: format(selectedDate, "yyyy-MM-dd"),
+    tasks: filteredTasks as TimeGridTask[],
+  }], [selectedDate, filteredTasks]);
+
+  // Progress items for left rail
+  const progressItems = useMemo(() => {
+    const items: { id: string; title: string; planned: number; actual: number; goalTitle: string | null }[] = [];
+    
+    filteredTasks.forEach(task => {
+      // For daily view, each task is a "progress item" 
+      // We could group by commitment/goal, but for simplicity show task-level
+    });
+    
+    // For now, return empty - the overall progress is sufficient for daily view
+    return items;
+  }, [filteredTasks]);
 
   if (loading) {
     return (
-      <div className={isMobile ? "pt-4" : "container mx-auto px-4 py-8 max-w-3xl"}>
-        <p className="text-muted-foreground text-center">Loading...</p>
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
 
-  // Mobile: Minimal chrome, week strip serves as orientation
+  // Date navigation header content
+  const headerContent = (
+    <CalendarDateNav
+      dateLabel={formattedDate}
+      onPrev={goToPreviousDay}
+      onNext={goToNextDay}
+      onToday={goToToday}
+      showTodayButton={!isToday}
+    />
+  );
+
+  // Mobile: Minimal chrome with week strip
   if (isMobile) {
     return (
-      <div className="flex flex-col min-h-[calc(100vh-100px)]">
-        {/* Mobile Week Strip - serves as primary navigation/orientation */}
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Mobile Week Strip */}
         <MobileWeekStrip
           selectedDate={selectedDate}
           onDateSelect={(date) => {
@@ -442,18 +325,14 @@ const Daily = () => {
           weekStartsOn={weekStartsOn}
         />
 
-        {/* Task list - minimal top padding */}
-        <div className="flex-1 px-4 pt-3 pb-20">
-          {/* Progress indicator - subtle */}
+        {/* Task list */}
+        <div className="flex-1 px-4 pt-3 pb-20 overflow-y-auto">
+          {/* Progress indicator */}
           {dailyTotal > 0 && (
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-muted-foreground">
                 {dailyCompleted}/{dailyTotal} completed
               </span>
-              <FocusFilter
-                showFocusedOnly={showFocusedOnly}
-                onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-              />
             </div>
           )}
 
@@ -475,15 +354,11 @@ const Daily = () => {
                   </h3>
                   <div className="space-y-1">
                     {scheduledTasks.map((task) => (
-                      <TaskItem
+                      <MobileTaskItem
                         key={task.id}
                         task={task}
-                        timeFormat={preferences.timeFormat}
                         onToggle={() => handleToggleComplete(task)}
                         onClick={() => handleTaskClick(task)}
-                        onHierarchyClick={() => handleHierarchyClick(task)}
-                        isMobile={true}
-                        showVisions={showVisions}
                       />
                     ))}
                   </div>
@@ -498,15 +373,11 @@ const Daily = () => {
                   </h3>
                   <div className="space-y-1">
                     {unscheduledTasks.map((task) => (
-                      <TaskItem
+                      <MobileTaskItem
                         key={task.id}
                         task={task}
-                        timeFormat={preferences.timeFormat}
                         onToggle={() => handleToggleComplete(task)}
                         onClick={() => handleTaskClick(task)}
-                        onHierarchyClick={() => handleHierarchyClick(task)}
-                        isMobile={true}
-                        showVisions={showVisions}
                       />
                     ))}
                   </div>
@@ -538,154 +409,27 @@ const Daily = () => {
     );
   }
 
-  // Desktop/Tablet: Original layout
+  // Desktop/Tablet: New CalendarLayout with single-column TimeGrid
   return (
-    <div className="container mx-auto px-4 py-8 max-w-3xl" style={{ maxHeight: '80vh' }}>
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-medium text-foreground">Daily View</h1>
-          {dailyTotal > 0 && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              {dailyCompleted}/{dailyTotal} completed
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <FocusFilter
-            showFocusedOnly={showFocusedOnly}
-            onToggle={() => setShowFocusedOnly(!showFocusedOnly)}
-          />
-          <AddIconButton
-            onClick={() => setCreateModalOpen(true)}
-            tooltip="Add task"
-          />
-        </div>
-      </div>
-
-      {/* Date navigation */}
-      <div className="flex items-center justify-between mb-8 border-b border-border pb-4">
-        <button
-          onClick={goToPreviousDay}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-calm"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Prev
-        </button>
-        <div className="text-center">
-          <h2 className="text-base font-medium text-foreground uppercase tracking-wide">
-            {formattedDate}
-          </h2>
-          {!isToday && (
-            <button
-              onClick={goToToday}
-              className="text-xs text-primary hover:underline mt-1"
-            >
-              Go to today
-            </button>
-          )}
-        </div>
-        <button
-          onClick={goToNextDay}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-calm"
-        >
-          Next
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      {filteredTasks.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground text-sm mb-4">
-            {showFocusedOnly
-              ? "No focused tasks for this day"
-              : "No tasks for this day"}
-          </p>
-          <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(true)}>
-            Add a task
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Scheduled tasks - Timeline view */}
-          {scheduledTasks.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Scheduled
-                </h3>
-                <button
-                  onClick={() => setShowVisions(!showVisions)}
-                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-calm"
-                >
-                  {showVisions ? (
-                    <>
-                      <EyeOff className="h-3 w-3" />
-                      <span>Hide visions</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-3 w-3" />
-                      <span>Show visions</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <div className="border border-border">
-                {timeSlots.map((slot) => {
-                  const slotTasks = getTasksForSlot(slot);
-                  if (slotTasks.length === 0) return null;
-
-                  return (
-                    <div key={slot} className="flex border-b border-border last:border-b-0">
-                      <div className="w-16 py-2 px-2 text-xs text-muted-foreground border-r border-border shrink-0">
-                        {formatTime(slot, preferences.timeFormat)}
-                      </div>
-                      <div className="flex-1 py-1 px-2 min-w-0">
-                        {slotTasks.map((task) => (
-                          <TaskItem
-                            key={task.id}
-                            task={task}
-                            timeFormat={preferences.timeFormat}
-                            onToggle={() => handleToggleComplete(task)}
-                            onClick={() => handleTaskClick(task)}
-                            onHierarchyClick={() => handleHierarchyClick(task)}
-                            isMobile={isMobile}
-                            showVisions={showVisions}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Unscheduled tasks */}
-          {unscheduledTasks.length > 0 && (
-            <div>
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">
-                No Time Assigned
-              </h3>
-              <div className="border border-border p-3 space-y-1">
-                {unscheduledTasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    timeFormat={preferences.timeFormat}
-                    onToggle={() => handleToggleComplete(task)}
-                    onClick={() => handleTaskClick(task)}
-                    onHierarchyClick={() => handleHierarchyClick(task)}
-                    isMobile={isMobile}
-                    showVisions={showVisions}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+    <>
+      <CalendarLayout
+        totalPlanned={dailyTotal}
+        totalActual={dailyCompleted}
+        progressItems={progressItems}
+        onAddTask={() => setCreateModalOpen(true)}
+        showFocusedOnly={showFocusedOnly}
+        onToggleFocus={() => setShowFocusedOnly(!showFocusedOnly)}
+        headerContent={headerContent}
+      >
+        <TimeGrid
+          columns={timeGridColumns}
+          onTaskClick={(task) => handleTaskClick(task)}
+          onToggleComplete={(task) => handleToggleComplete(task)}
+          timeFormat={preferences.timeFormat}
+          minColumnWidth={400}
+          className="max-w-3xl mx-auto"
+        />
+      </CalendarLayout>
 
       {/* Task create modal */}
       <TaskCreateModal
@@ -704,7 +448,7 @@ const Daily = () => {
         date={selectedDate}
         onUpdate={refetch}
       />
-    </div>
+    </>
   );
 };
 

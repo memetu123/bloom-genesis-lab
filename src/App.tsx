@@ -49,7 +49,7 @@ const App = () => (
                 <Route path="/vision/:id" element={<ProtectedRoute><AppLayout><VisionDetail /></AppLayout></ProtectedRoute>} />
                 <Route path="/goals" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/goal/:id" element={<ProtectedRoute><AppLayout><GoalDetail /></AppLayout></ProtectedRoute>} />
-                <Route path="/weekly" element={<ProtectedRoute><MobileWeeklyRedirect /></ProtectedRoute>} />
+                <Route path="/weekly" element={<ProtectedRoute><AppLayout><MobileWeeklyRedirect /></AppLayout></ProtectedRoute>} />
                 <Route path="/daily" element={<ProtectedRoute><AppLayout><Daily /></AppLayout></ProtectedRoute>} />
                 <Route path="/recently-deleted" element={<ProtectedRoute><AppLayout><RecentlyDeleted /></AppLayout></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />

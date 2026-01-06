@@ -1,11 +1,11 @@
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import Weekly from "@/pages/Weekly";
-import AppLayout from "@/components/AppLayout";
 
 /**
  * MobileWeeklyRedirect - Redirects /weekly to /daily on mobile
  * Desktop/tablet users see the full Weekly view
+ * Note: AppLayout is handled at the route level in App.tsx
  */
 const MobileWeeklyRedirect = () => {
   const isMobile = useIsMobile();
@@ -20,11 +20,8 @@ const MobileWeeklyRedirect = () => {
   }
   
   // Desktop/tablet: show normal Weekly view
-  return (
-    <AppLayout>
-      <Weekly />
-    </AppLayout>
-  );
+  // AppLayout is wrapped at the route level
+  return <Weekly />;
 };
 
 export default MobileWeeklyRedirect;
