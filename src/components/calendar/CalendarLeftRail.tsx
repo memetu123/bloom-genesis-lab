@@ -81,8 +81,8 @@ const CalendarLeftRail = ({
             <button
               onClick={onAddTask}
               className={cn(
-                "p-1.5 rounded-md transition-colors",
-                "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                "p-1.5 rounded-full transition-colors",
+                "bg-primary text-primary-foreground hover:bg-primary/90"
               )}
             >
               <Plus className="h-4 w-4" />
