@@ -559,6 +559,35 @@ const Dashboard = () => {
     }
   };
 
+  // Handle completing a goal
+  const handleCompleteGoal = async (goalId: string, goalTitle: string) => {
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "completed" })
+        .eq("id", goalId);
+
+      if (error) throw error;
+      refetchGoals();
+      
+      toast(`"${goalTitle}" marked complete`, {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await supabase
+              .from("goals")
+              .update({ status: "active" })
+              .eq("id", goalId);
+            refetchGoals();
+          }
+        },
+        duration: 5000
+      });
+    } catch (err) {
+      toast.error("Failed to complete goal");
+    }
+  };
+
   // Handle deleting a goal (soft delete)
   const handleDeleteGoal = async (goalId: string, goalTitle: string) => {
     try {
@@ -618,57 +647,75 @@ const Dashboard = () => {
           {labelChip}
         </span>
         
-        {/* Goal title */}
-        <span
-          className={`
-            text-sm cursor-pointer transition-colors break-words flex-1
-            ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
-            hover:text-primary
-          `}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isNinetyDay) {
-              navigate(`/weekly?plan=${goal.id}`);
-            } else {
-              navigate(`/goal/${goal.id}`);
-            }
-          }}
-        >
-          {goal.title}
-        </span>
+        {/* Goal title + action menu inline */}
+        <div className="flex items-center gap-1 min-w-0">
+          <span
+            className={`
+              text-sm cursor-pointer transition-colors break-words
+              ${isMuted ? "text-muted-foreground/60" : "text-foreground/90"}
+              hover:text-primary
+            `}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isNinetyDay) {
+                navigate(`/weekly?plan=${goal.id}`);
+              } else {
+                navigate(`/goal/${goal.id}`);
+              }
+            }}
+          >
+            {goal.title}
+          </span>
 
-        {/* Action menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-6 w-6 shrink-0 ${isMobile ? "opacity-100" : "opacity-0 group-hover/goal:opacity-100"} transition-opacity`}
-            >
-              <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                handleArchiveGoal(goal.id, goal.title);
-              }}
-            >
-              Archive
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteGoal(goal.id, goal.title);
-              }}
-              className="text-destructive focus:text-destructive"
-            >
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          {/* Action menu - next to title */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-5 w-5 shrink-0 ${isMobile ? "opacity-100" : "opacity-0 group-hover/goal:opacity-100"} transition-opacity`}
+              >
+                <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/goal/${goal.id}`);
+                }}
+              >
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCompleteGoal(goal.id, goal.title);
+                }}
+              >
+                Mark complete
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleArchiveGoal(goal.id, goal.title);
+                }}
+              >
+                Archive
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteGoal(goal.id, goal.title);
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     );
   };
