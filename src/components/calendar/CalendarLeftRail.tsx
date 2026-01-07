@@ -11,7 +11,8 @@ import {
  * CalendarLeftRail - Persistent left sidebar for calendar views
  * Contains:
  * - Icon actions at top (Add task, Focus toggle)
- * - Overall progress section (scrollable)
+ * - Overall progress section
+ * - Task list (for daily view)
  */
 
 interface ProgressItem {
@@ -22,11 +23,23 @@ interface ProgressItem {
   goalTitle?: string | null;
 }
 
+export interface TaskListItem {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  goalTitle?: string | null;
+}
+
 interface CalendarLeftRailProps {
   // Progress data
   totalPlanned: number;
   totalActual: number;
   progressItems?: ProgressItem[];
+  
+  // Task list (for daily view)
+  taskList?: TaskListItem[];
+  onTaskClick?: (taskId: string) => void;
+  onTaskToggle?: (taskId: string) => void;
   
   // Actions
   onAddTask: () => void;
@@ -43,6 +56,9 @@ const CalendarLeftRail = ({
   totalPlanned,
   totalActual,
   progressItems = [],
+  taskList = [],
+  onTaskClick,
+  onTaskToggle,
   onAddTask,
   showFocusedOnly,
   onToggleFocus,
@@ -67,6 +83,23 @@ const CalendarLeftRail = ({
   });
   
   const goalGroups = Object.values(groupedByGoal);
+  
+  // Group tasks by goal for task list
+  const tasksByGoal: Record<string, { title: string; tasks: TaskListItem[] }> = {};
+  const standaloneTasks: TaskListItem[] = [];
+  
+  taskList.forEach((task) => {
+    if (task.goalTitle) {
+      if (!tasksByGoal[task.goalTitle]) {
+        tasksByGoal[task.goalTitle] = { title: task.goalTitle, tasks: [] };
+      }
+      tasksByGoal[task.goalTitle].tasks.push(task);
+    } else {
+      standaloneTasks.push(task);
+    }
+  });
+  
+  const taskGoalGroups = Object.values(tasksByGoal);
   
   return (
     <aside className={cn(
@@ -133,13 +166,13 @@ const CalendarLeftRail = ({
           </div>
         </div>
         
-        {/* Grouped progress items */}
+        {/* Grouped progress items (for weekly view) */}
         {(goalGroups.length > 0 || independentItems.length > 0) && (
           <div className="space-y-3 mt-4">
             {/* Goal groups */}
             {goalGroups.map((group) => (
               <div key={group.title}>
-                <h4 className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide mb-1.5 truncate">
+                <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 truncate">
                   {group.title}
                 </h4>
                 <div className="space-y-1 pl-1.5">
@@ -147,13 +180,16 @@ const CalendarLeftRail = ({
                     const isComplete = item.actual >= item.planned;
                     return (
                       <div key={item.id} className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground/50 flex-shrink-0">
+                        <span className={cn(
+                          "text-[10px] flex-shrink-0",
+                          isComplete ? "text-primary" : "text-muted-foreground"
+                        )}>
                           {isComplete ? "●" : "○"}
                         </span>
-                        <span className="text-[11px] text-foreground/80 flex-1 truncate">
+                        <span className="text-[11px] text-foreground flex-1 truncate">
                           {item.title}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/50 flex-shrink-0">
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
                           {item.actual}/{item.planned}
                         </span>
                       </div>
@@ -166,7 +202,7 @@ const CalendarLeftRail = ({
             {/* Independent items */}
             {independentItems.length > 0 && (
               <div>
-                <h4 className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide mb-1.5">
+                <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
                   One-time tasks
                 </h4>
                 <div className="space-y-1 pl-1.5">
@@ -174,13 +210,16 @@ const CalendarLeftRail = ({
                     const isComplete = item.actual >= item.planned;
                     return (
                       <div key={item.id} className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground/50 flex-shrink-0">
+                        <span className={cn(
+                          "text-[10px] flex-shrink-0",
+                          isComplete ? "text-primary" : "text-muted-foreground"
+                        )}>
                           {isComplete ? "●" : "○"}
                         </span>
-                        <span className="text-[11px] text-foreground/80 flex-1 truncate">
+                        <span className="text-[11px] text-foreground flex-1 truncate">
                           {item.title}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/50 flex-shrink-0">
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
                           {item.actual}/{item.planned}
                         </span>
                       </div>
@@ -189,6 +228,98 @@ const CalendarLeftRail = ({
                 </div>
               </div>
             )}
+          </div>
+        )}
+        
+        {/* Task list for daily view */}
+        {taskList.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-border/50">
+            <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Today's Tasks
+            </h3>
+            <div className="space-y-3">
+              {/* Tasks grouped by goal */}
+              {taskGoalGroups.map((group) => (
+                <div key={group.title}>
+                  <h4 className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide mb-1.5 truncate">
+                    {group.title}
+                  </h4>
+                  <div className="space-y-0.5">
+                    {group.tasks.map((task) => (
+                      <div 
+                        key={task.id} 
+                        className={cn(
+                          "flex items-center gap-1.5 py-0.5 px-1 -mx-1 rounded",
+                          "hover:bg-muted/50 cursor-pointer transition-colors"
+                        )}
+                        onClick={() => onTaskClick?.(task.id)}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTaskToggle?.(task.id);
+                          }}
+                          className={cn(
+                            "text-[11px] flex-shrink-0",
+                            task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"
+                          )}
+                        >
+                          {task.isCompleted ? "●" : "○"}
+                        </button>
+                        <span className={cn(
+                          "text-[11px] flex-1 truncate",
+                          task.isCompleted ? "line-through text-muted-foreground" : "text-foreground"
+                        )}>
+                          {task.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Standalone tasks (no goal) */}
+              {standaloneTasks.length > 0 && (
+                <div>
+                  {taskGoalGroups.length > 0 && (
+                    <h4 className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide mb-1.5">
+                      Other
+                    </h4>
+                  )}
+                  <div className="space-y-0.5">
+                    {standaloneTasks.map((task) => (
+                      <div 
+                        key={task.id} 
+                        className={cn(
+                          "flex items-center gap-1.5 py-0.5 px-1 -mx-1 rounded",
+                          "hover:bg-muted/50 cursor-pointer transition-colors"
+                        )}
+                        onClick={() => onTaskClick?.(task.id)}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTaskToggle?.(task.id);
+                          }}
+                          className={cn(
+                            "text-[11px] flex-shrink-0",
+                            task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"
+                          )}
+                        >
+                          {task.isCompleted ? "●" : "○"}
+                        </button>
+                        <span className={cn(
+                          "text-[11px] flex-1 truncate",
+                          task.isCompleted ? "line-through text-muted-foreground" : "text-foreground"
+                        )}>
+                          {task.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
         
