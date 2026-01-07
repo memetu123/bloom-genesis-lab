@@ -509,46 +509,49 @@ const GoalDetail = () => {
         {/* Create goal form */}
         <Card>
           <CardContent className="p-6">
-            <h1 className="text-xl font-semibold mb-6">
-              Create {GOAL_TYPE_LABELS[newGoalType]}
-            </h1>
-
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* 1. Title - Primary input, larger and prominent */}
               <div>
-                <Label htmlFor="create-title">Title</Label>
+                <Label htmlFor="create-title" className="sr-only">Title</Label>
                 <Input
                   id="create-title"
                   value={createTitle}
                   onChange={(e) => setCreateTitle(e.target.value)}
                   placeholder={`Enter ${GOAL_TYPE_LABELS[newGoalType].toLowerCase()} title...`}
-                  className="mt-1"
+                  className="text-lg font-medium border-2 focus:border-primary h-12"
                   autoFocus
                 />
               </div>
 
-              <div>
-                <Label htmlFor="create-description">Description (optional)</Label>
-                <Textarea
-                  id="create-description"
-                  value={createDescription}
-                  onChange={(e) => setCreateDescription(e.target.value)}
-                  placeholder="Add more details about this goal..."
-                  className="mt-1 min-h-[100px]"
-                />
-              </div>
+              {/* 2. Description - Optional, only show after title has content */}
+              {createTitle.trim() && (
+                <div className="space-y-2">
+                  <Label htmlFor="create-description" className="text-sm text-muted-foreground">
+                    Description <span className="text-xs">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="create-description"
+                    value={createDescription}
+                    onChange={(e) => setCreateDescription(e.target.value)}
+                    placeholder="Add more details about this goal..."
+                    className="min-h-[80px] resize-none"
+                  />
+                </div>
+              )}
 
-              <div className="flex gap-3 pt-4">
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => navigate(-1)}
-                  className="flex-1"
+                  className="text-muted-foreground"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateGoal}
                   disabled={!createTitle.trim() || creatingGoal}
-                  className="flex-1"
+                  className="flex-1 h-11"
                 >
                   {creatingGoal ? "Creating..." : `Create ${GOAL_TYPE_LABELS[newGoalType]}`}
                 </Button>
