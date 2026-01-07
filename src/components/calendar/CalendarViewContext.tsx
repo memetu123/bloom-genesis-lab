@@ -24,6 +24,7 @@ export function CalendarViewProvider({ children }: { children: ReactNode }) {
   const getViewFromPath = (): CalendarView => {
     if (location.pathname.startsWith("/daily")) return "daily";
     if (location.pathname.startsWith("/weekly")) return "weekly";
+    if (location.pathname.startsWith("/schedule")) return "schedule";
     return "daily"; // default
   };
   
@@ -49,7 +50,7 @@ export function CalendarViewProvider({ children }: { children: ReactNode }) {
         navigate(`/weekly${queryString}`);
         break;
       case "schedule":
-        // Placeholder - stays on current page for now
+        navigate(`/schedule${queryString}`);
         break;
     }
   }, [navigate, location.search]);

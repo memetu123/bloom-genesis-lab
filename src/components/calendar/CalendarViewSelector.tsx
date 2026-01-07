@@ -62,10 +62,13 @@ const CalendarViewSelector = ({ className }: CalendarViewSelectorProps) => {
           Weekly
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled
-          className="cursor-not-allowed opacity-50"
+          onClick={() => navigateToView("schedule")}
+          className={cn(
+            "cursor-pointer",
+            currentView === "schedule" && "bg-accent"
+          )}
         >
-          Schedule (coming soon)
+          Schedule
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

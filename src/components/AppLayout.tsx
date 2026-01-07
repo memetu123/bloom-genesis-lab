@@ -67,11 +67,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const currentCalendarView = useMemo((): CalendarViewType => {
     if (location.pathname.startsWith("/weekly")) return "weekly";
     if (location.pathname.startsWith("/daily")) return "daily";
+    if (location.pathname.startsWith("/schedule")) return "schedule";
     return "daily"; // default
   }, [location.pathname]);
 
   // Check if currently on a calendar view
-  const isOnCalendarView = location.pathname.startsWith("/weekly") || location.pathname.startsWith("/daily");
+  const isOnCalendarView = location.pathname.startsWith("/weekly") || 
+    location.pathname.startsWith("/daily") || 
+    location.pathname.startsWith("/schedule");
 
   // Navigate to a specific calendar view, preserving date param
   const navigateToCalendarView = (view: CalendarViewType) => {
@@ -87,7 +90,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         navigate(`/daily${queryString}`);
         break;
       case "schedule":
-        // Placeholder - not implemented yet
+        navigate(`/schedule${queryString}`);
         break;
     }
   };
@@ -166,10 +169,13 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     Weekly
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled
-                    className="cursor-not-allowed opacity-50"
+                    onClick={() => navigateToCalendarView("schedule")}
+                    className={cn(
+                      "cursor-pointer",
+                      currentCalendarView === "schedule" && "bg-accent"
+                    )}
                   >
-                    Schedule (coming soon)
+                    Schedule
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
