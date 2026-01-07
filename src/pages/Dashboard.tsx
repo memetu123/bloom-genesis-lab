@@ -530,6 +530,64 @@ const Dashboard = () => {
     setMobileSheetOpen(true);
   };
 
+  // Handle archiving a goal
+  const handleArchiveGoal = async (goalId: string, goalTitle: string) => {
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "archived", archived_at: new Date().toISOString() })
+        .eq("id", goalId);
+
+      if (error) throw error;
+      refetchGoals();
+      
+      toast(`"${goalTitle}" archived`, {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await supabase
+              .from("goals")
+              .update({ status: "active", archived_at: null })
+              .eq("id", goalId);
+            refetchGoals();
+          }
+        },
+        duration: 5000
+      });
+    } catch (err) {
+      toast.error("Failed to archive goal");
+    }
+  };
+
+  // Handle deleting a goal (soft delete)
+  const handleDeleteGoal = async (goalId: string, goalTitle: string) => {
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", goalId);
+
+      if (error) throw error;
+      refetchGoals();
+      
+      toast(`"${goalTitle}" deleted`, {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await supabase
+              .from("goals")
+              .update({ is_deleted: false, deleted_at: null })
+              .eq("id", goalId);
+            refetchGoals();
+          }
+        },
+        duration: 5000
+      });
+    } catch (err) {
+      toast.error("Failed to delete goal");
+    }
+  };
+
   // Render a single goal item with label chip - uses goal's isActive for muting
   const renderGoalItem = (
     goal: GoalWithChildren, 
@@ -544,7 +602,7 @@ const Dashboard = () => {
     return (
       <div
         key={goal.id}
-        className={`flex items-start gap-2 ${isMobile ? "py-1" : "py-1.5"}`}
+        className={`flex items-start gap-2 group/goal ${isMobile ? "py-1" : "py-1.5"}`}
         style={{ paddingLeft: indentLevel * (isMobile ? 16 : 20) }}
       >
         {/* Connector marker */}
@@ -578,6 +636,39 @@ const Dashboard = () => {
         >
           {goal.title}
         </span>
+
+        {/* Action menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-6 w-6 shrink-0 ${isMobile ? "opacity-100" : "opacity-0 group-hover/goal:opacity-100"} transition-opacity`}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                handleArchiveGoal(goal.id, goal.title);
+              }}
+            >
+              Archive
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteGoal(goal.id, goal.title);
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   };
