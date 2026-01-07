@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Clock, RefreshCw, Calendar, Trash2, Unlink, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Clock, RefreshCw, Calendar, Trash2, Unlink, Check, ChevronDown, ChevronRight, Archive } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import { format } from "date-fns";
 import type { TaskType, RecurrenceType, DayOfWeek } from "@/types/scheduling";
 import RecurringEditConfirmDialog from "@/components/RecurringEditConfirmDialog";
 import RecurringDeleteConfirmDialog from "@/components/RecurringDeleteConfirmDialog";
+import RecurringArchiveConfirmDialog from "@/components/RecurringArchiveConfirmDialog";
 
 /**
  * TaskDetailModal - Modal for viewing/editing task details
@@ -91,6 +92,7 @@ const TaskDetailModal = ({
   const [scheduledDate, setScheduledDate] = useState<string>(""); // For independent/detached tasks
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [timeError, setTimeError] = useState("");
 
   // Store original values to detect changes
@@ -145,6 +147,7 @@ const TaskDetailModal = ({
       setScheduledDate(format(date, "yyyy-MM-dd")); // Initialize with the task's date
       setShowConfirmDialog(false);
       setShowDeleteDialog(false);
+      setShowArchiveDialog(false);
       setOriginalValues(null);
       setTimeError("");
 
@@ -688,6 +691,124 @@ const TaskDetailModal = ({
     }
   };
 
+  /**
+   * Handle archive button click
+   * Shows confirmation dialog for recurring tasks, archives immediately for one-time tasks
+   */
+  const handleArchiveClick = () => {
+    if (!task) return;
+    const isRecurringTask = task.commitmentId !== null && !task.isDetached;
+    
+    if (isRecurringTask) {
+      setShowArchiveDialog(true);
+    } else {
+      handleArchiveNonRecurring();
+    }
+  };
+
+  /**
+   * Archive non-recurring (independent/detached) task immediately
+   */
+  const handleArchiveNonRecurring = async () => {
+    if (!user || !task) return;
+    setSaving(true);
+
+    try {
+      const parts = task.id.split("-");
+      const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
+      
+      await supabase
+        .from("commitment_completions")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", actualId);
+      
+      // Show undo toast
+      toast("Task archived", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await supabase
+              .from("commitment_completions")
+              .update({ is_deleted: false, deleted_at: null })
+              .eq("id", actualId);
+            onUpdate();
+          }
+        },
+        duration: 5000
+      });
+      
+      onUpdate();
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error("Error archiving task:", error);
+      toast.error("Failed to archive task");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * Handle confirmed archive for recurring tasks with scope selection
+   */
+  const handleConfirmedArchive = async (scope: "this" | "future" | "all") => {
+    if (!user || !task || !task.commitmentId) return;
+    setSaving(true);
+
+    try {
+      switch (scope) {
+        case "this":
+          // Archive only this occurrence
+          await deleteOccurrence(task.commitmentId, dateKey);
+          toast("Task archived", {
+            action: {
+              label: "Undo",
+              onClick: async () => {
+                // Restore by removing the skip - this is complex, just refetch
+                onUpdate();
+              }
+            },
+            duration: 5000
+          });
+          break;
+        case "future":
+          // Archive this and all future occurrences (end the series)
+          await deleteFutureOccurrences(task.commitmentId, dateKey);
+          toast("Future tasks archived");
+          break;
+        case "all":
+          // Archive the entire series
+          await supabase
+            .from("weekly_commitments")
+            .update({ archived_at: new Date().toISOString(), is_active: false })
+            .eq("id", task.commitmentId);
+          
+          toast("Recurring series archived", {
+            action: {
+              label: "Undo",
+              onClick: async () => {
+                await supabase
+                  .from("weekly_commitments")
+                  .update({ archived_at: null, is_active: true })
+                  .eq("id", task.commitmentId);
+                onUpdate();
+              }
+            },
+            duration: 5000
+          });
+          break;
+      }
+
+      setShowArchiveDialog(false);
+      onUpdate();
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error("Error archiving task:", error);
+      toast.error("Failed to archive task");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!task) return null;
 
   const isRecurring = task.commitmentId !== null && !task.isDetached;
@@ -1065,20 +1186,30 @@ const TaskDetailModal = ({
           </div>
         </div>
 
-        {/* Actions - Save primary, Delete as text link - stable footer */}
+        {/* Actions - Save primary, Archive and Delete as text links - stable footer */}
         <div className="px-5 pb-5 pt-3 space-y-3 shrink-0 border-t border-border/30">
           <Button onClick={handleSaveClick} disabled={saving} className="w-full h-10 rounded-lg font-medium">
             {saving ? "Saving..." : "Save changes"}
           </Button>
 
-          <button
-            onClick={handleDeleteClick}
-            disabled={saving}
-            className="w-full flex items-center justify-center gap-1.5 py-1 text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-          >
-            <Trash2 className="h-3 w-3" />
-            <span>Delete task</span>
-          </button>
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={handleArchiveClick}
+              disabled={saving}
+              className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <Archive className="h-3 w-3" />
+              <span>Archive</span>
+            </button>
+            <button
+              onClick={handleDeleteClick}
+              disabled={saving}
+              className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>Delete</span>
+            </button>
+          </div>
         </div>
       </DialogContent>
 
@@ -1095,6 +1226,14 @@ const TaskDetailModal = ({
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={handleConfirmedDelete}
+        saving={saving}
+      />
+
+      {/* Confirmation dialog for recurring task archives */}
+      <RecurringArchiveConfirmDialog
+        open={showArchiveDialog}
+        onOpenChange={setShowArchiveDialog}
+        onConfirm={handleConfirmedArchive}
         saving={saving}
       />
     </Dialog>

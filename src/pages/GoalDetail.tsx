@@ -354,14 +354,29 @@ const GoalDetail = () => {
 
   const handleArchive = async () => {
     if (!goal) return;
+    const previousStatus = goal.status;
+    
     try {
       const { error } = await supabase
         .from("goals")
-        .update({ status: "archived" })
+        .update({ status: "archived", archived_at: new Date().toISOString() })
         .eq("id", goal.id);
       if (error) throw error;
       setGoal(prev => prev ? { ...prev, status: "archived" } : prev);
-      toast.success("Goal archived");
+      
+      toast("Goal archived", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await supabase
+              .from("goals")
+              .update({ status: previousStatus, archived_at: null })
+              .eq("id", goal.id);
+            setGoal(prev => prev ? { ...prev, status: previousStatus } : prev);
+          }
+        },
+        duration: 5000
+      });
     } catch (error) {
       toast.error("Failed to archive");
     }

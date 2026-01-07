@@ -161,20 +161,51 @@ const Goals = () => {
 
   const loading = appDataLoading || progressLoading;
 
-  const updateStatus = async (goalId: string, newStatus: "active" | "completed" | "archived") => {
+  const updateStatus = async (goalId: string, newStatus: "active" | "completed" | "archived", goalTitle?: string) => {
+    // Get previous status for undo
+    const previousGoal = localGoals.find(g => g.id === goalId);
+    const previousStatus = previousGoal?.status || "active";
+    
     // Optimistic update
     setLocalGoals(prev =>
-      prev.map(g => g.id === goalId ? { ...g, status: newStatus } : g)
+      prev.map(g => g.id === goalId ? { 
+        ...g, 
+        status: newStatus,
+      } : g)
     );
 
     try {
+      const updateData: { status: "active" | "completed" | "archived"; archived_at: string | null } = { 
+        status: newStatus,
+        archived_at: newStatus === "archived" ? new Date().toISOString() : null
+      };
+      
       const { error } = await supabase
         .from("goals")
-        .update({ status: newStatus })
+        .update(updateData)
         .eq("id", goalId);
 
       if (error) throw error;
-      toast.success(`Goal ${newStatus === "completed" ? "completed" : newStatus === "archived" ? "archived" : "reactivated"}`);
+      
+      if (newStatus === "archived") {
+        toast("Goal archived", {
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              await supabase
+                .from("goals")
+                .update({ status: previousStatus as "active" | "completed" | "archived", archived_at: null })
+                .eq("id", goalId);
+              setLocalGoals(prev =>
+                prev.map(g => g.id === goalId ? { ...g, status: previousStatus as "active" | "completed" | "archived" } : g)
+              );
+            }
+          },
+          duration: 5000
+        });
+      } else {
+        toast.success(`Goal ${newStatus === "completed" ? "completed" : "reactivated"}`);
+      }
     } catch (error: any) {
       console.error("Error updating status:", error);
       toast.error("Failed to update status");
