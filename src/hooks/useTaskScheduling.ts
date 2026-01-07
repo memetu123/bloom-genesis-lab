@@ -508,6 +508,7 @@ export const useTaskScheduling = () => {
         timeStart?: string | null;
         timeEnd?: string | null;
         goalId?: string | null;
+        newDate?: string; // New: allow moving to a different date
       }
     ) => {
       if (!user) throw new Error("User not authenticated");
@@ -529,6 +530,9 @@ export const useTaskScheduling = () => {
         .eq("completed_date", occurrenceDate)
         .maybeSingle();
 
+      // Determine the final date (use new date if provided, otherwise keep original)
+      const finalDate = updates.newDate || occurrenceDate;
+
       if (existingCompletion) {
         // Update existing completion with overrides
         await supabase
@@ -539,7 +543,8 @@ export const useTaskScheduling = () => {
             time_end: updates.timeEnd !== undefined ? updates.timeEnd : existingCompletion.time_end,
             is_flexible_time: updates.timeStart !== undefined ? !updates.timeStart : existingCompletion.is_flexible_time,
             is_detached: true, // Mark as exception
-            task_type: "recurring", // Keep as recurring type but detached
+            task_type: "independent", // Changed to independent since it's detached
+            completed_date: finalDate, // Update the date if changed
           })
           .eq("id", existingCompletion.id);
       } else {
@@ -549,13 +554,13 @@ export const useTaskScheduling = () => {
           .insert({
             user_id: user.id,
             commitment_id: commitmentId,
-            completed_date: occurrenceDate,
+            completed_date: finalDate,
             title: updates.title ?? commitment.title,
             time_start: updates.timeStart !== undefined ? updates.timeStart : commitment.default_time_start,
             time_end: updates.timeEnd !== undefined ? updates.timeEnd : commitment.default_time_end,
             is_flexible_time: updates.timeStart !== undefined ? !updates.timeStart : commitment.flexible_time,
             is_detached: true, // Mark as exception
-            task_type: "recurring",
+            task_type: "independent",
             is_completed: false,
           });
       }

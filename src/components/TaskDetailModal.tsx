@@ -88,6 +88,7 @@ const TaskDetailModal = ({
   const [notes, setNotes] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [scheduledDate, setScheduledDate] = useState<string>(""); // For independent/detached tasks
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [timeError, setTimeError] = useState("");
@@ -141,6 +142,7 @@ const TaskDetailModal = ({
       setNotes("");
       setStartDate("");
       setEndDate("");
+      setScheduledDate(format(date, "yyyy-MM-dd")); // Initialize with the task's date
       setShowConfirmDialog(false);
       setShowDeleteDialog(false);
       setOriginalValues(null);
@@ -280,6 +282,7 @@ const TaskDetailModal = ({
             timeStart: timeStart !== originalValues?.timeStart ? (timeStart || null) : undefined,
             timeEnd: timeEnd !== originalValues?.timeEnd ? (timeEnd || null) : undefined,
             goalId: goalChanged ? (goalId || null) : undefined,
+            newDate: scheduledDate !== dateKey ? scheduledDate : undefined, // Support date change
           });
           toast.success("This occurrence updated");
         } else if (scope === "future") {
@@ -433,15 +436,23 @@ const TaskDetailModal = ({
         const updateParts = task.id.split("-");
         const updateId = updateParts.length === 5 ? task.id : updateParts.slice(0, 5).join("-");
         
+        // Build update object - include scheduled date for independent/detached tasks
+        const updateData: Record<string, unknown> = {
+          title,
+          time_start: timeStart || null,
+          time_end: timeEnd || null,
+          is_flexible_time: !timeStart,
+          notes: notes || null,
+        };
+        
+        // Update the completed_date if the scheduled date changed
+        if (scheduledDate && scheduledDate !== dateKey) {
+          updateData.completed_date = scheduledDate;
+        }
+        
         await supabase
           .from("commitment_completions")
-          .update({
-            title,
-            time_start: timeStart || null,
-            time_end: timeEnd || null,
-            is_flexible_time: !timeStart,
-            notes: notes || null,
-          })
+          .update(updateData)
           .eq("id", updateId);
       }
 
@@ -488,6 +499,9 @@ const TaskDetailModal = ({
     if (timeEnd !== originalValues.timeEnd) return true;
     if (goalId !== originalValues.goalId) return true;
     
+    // Check if date was changed (moving this occurrence to a different day)
+    if (scheduledDate && scheduledDate !== dateKey) return true;
+    
     // Check recurrence rule changes only if editor is open
     if (showRepetitionEditor) {
       if (recurrenceType !== originalValues.recurrenceType) return true;
@@ -501,7 +515,7 @@ const TaskDetailModal = ({
     }
     
     return false;
-  }, [title, timeStart, timeEnd, goalId, recurrenceType, timesPerDay, selectedDays, showRepetitionEditor, originalValues, task]);
+  }, [title, timeStart, timeEnd, goalId, recurrenceType, timesPerDay, selectedDays, showRepetitionEditor, originalValues, task, scheduledDate, dateKey]);
 
   /**
    * Handle save button click - validates time and shows confirmation for recurring tasks with changes
@@ -903,8 +917,38 @@ const TaskDetailModal = ({
             )}
           </div>
 
+          {/* Scheduled Date - For all tasks (allows moving individual occurrences) */}
+          <div className="space-y-2">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
+              <Calendar className="h-3 w-3 opacity-30" />
+              Scheduled date
+            </span>
+
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <Input
+                  id="scheduled-date"
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  className="h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                />
+              </div>
+            </div>
+            {isDetached && (
+              <p className="text-[10px] text-muted-foreground/60">
+                This occurrence is detached from the recurring series
+              </p>
+            )}
+            {isRecurring && !isDetached && scheduledDate !== dateKey && (
+              <p className="text-[10px] text-muted-foreground/60">
+                Changing the date will only affect this occurrence
+              </p>
+            )}
+          </div>
+
           {/* Duration (Start/End dates) - Only for recurring tasks */}
-          {isRecurring && (
+          {isRecurring && !isDetached && (
             <div className="space-y-2">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
                 <Calendar className="h-3 w-3 opacity-30" />
