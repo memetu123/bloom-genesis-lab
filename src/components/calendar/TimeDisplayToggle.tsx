@@ -8,15 +8,11 @@ import { cn } from "@/lib/utils";
  */
 
 const TimeDisplayToggle = memo(() => {
-  const { mode, setMode, collapseAllGaps } = useTimeDisplay();
+  const { mode, setMode } = useTimeDisplay();
   
   const handleModeChange = (newMode: TimeDisplayMode) => {
     if (newMode !== mode) {
       setMode(newMode);
-      // Reset expanded gaps when switching modes
-      if (newMode === "compact") {
-        collapseAllGaps();
-      }
     }
   };
   
