@@ -14,7 +14,8 @@ import type { UserPreferences } from "@/hooks/useAppData";
  * - Adaptive time range based on earliest/latest tasks
  * - Task cards positioned by time, scaled by duration
  * - Horizontal scrolling when columns are too narrow
- * - Compact mode: collapses empty gaps >= MIN_GAP_MINUTES
+ * - Compact mode: collapses empty time RANGES (not individual rows)
+ *   spanning full width across all columns
  */
 
 export interface TimeGridTask {
@@ -55,7 +56,7 @@ const DEFAULT_MIN_COLUMN_WIDTH = 140;
 // Minimum gap duration to collapse (in minutes)
 const MIN_GAP_MINUTES = 60;
 // Collapsed gap row height
-const GAP_ROW_HEIGHT = 28;
+const COLLAPSED_GAP_HEIGHT = 28;
 
 // Parse time string to minutes from midnight
 const timeToMinutes = (time: string): number => {
@@ -168,14 +169,11 @@ const calculateOverlappingLayout = (
   return result;
 };
 
-// Gap detection: find empty time ranges across all columns
+// Gap detection: find empty time ranges across ALL columns
 interface TimeGap {
   id: string;
-  startHour: number;
-  endHour: number;
   startMinutes: number;
   endMinutes: number;
-  durationMinutes: number;
 }
 
 const detectGaps = (
@@ -183,7 +181,7 @@ const detectGaps = (
   visibleStartHour: number,
   visibleEndHour: number
 ): TimeGap[] => {
-  // Collect all task time ranges across all columns
+  // Collect all task time ranges across ALL columns
   const occupiedRanges: { start: number; end: number }[] = [];
   
   columns.forEach(col => {
@@ -221,17 +219,14 @@ const detectGaps = (
   const visibleEndMin = visibleEndHour * 60;
   
   // Gap before first task
-  if (merged.length > 0 && merged[0].start > visibleStartMin + MIN_GAP_MINUTES) {
+  if (merged.length > 0 && merged[0].start > visibleStartMin) {
     const gapEnd = merged[0].start;
     const gapStart = visibleStartMin;
     if (gapEnd - gapStart >= MIN_GAP_MINUTES) {
       gaps.push({
         id: `gap-${gapStart}-${gapEnd}`,
-        startHour: Math.floor(gapStart / 60),
-        endHour: Math.ceil(gapEnd / 60),
         startMinutes: gapStart,
         endMinutes: gapEnd,
-        durationMinutes: gapEnd - gapStart,
       });
     }
   }
@@ -244,27 +239,21 @@ const detectGaps = (
     if (gapEnd - gapStart >= MIN_GAP_MINUTES) {
       gaps.push({
         id: `gap-${gapStart}-${gapEnd}`,
-        startHour: Math.floor(gapStart / 60),
-        endHour: Math.ceil(gapEnd / 60),
         startMinutes: gapStart,
         endMinutes: gapEnd,
-        durationMinutes: gapEnd - gapStart,
       });
     }
   }
   
   // Gap after last task
-  if (merged.length > 0 && merged[merged.length - 1].end < visibleEndMin - MIN_GAP_MINUTES) {
+  if (merged.length > 0 && merged[merged.length - 1].end < visibleEndMin) {
     const gapStart = merged[merged.length - 1].end;
     const gapEnd = visibleEndMin;
     if (gapEnd - gapStart >= MIN_GAP_MINUTES) {
       gaps.push({
         id: `gap-${gapStart}-${gapEnd}`,
-        startHour: Math.floor(gapStart / 60),
-        endHour: Math.ceil(gapEnd / 60),
         startMinutes: gapStart,
         endMinutes: gapEnd,
-        durationMinutes: gapEnd - gapStart,
       });
     }
   }
@@ -354,49 +343,12 @@ const TaskCard = memo(({
 });
 TaskCard.displayName = "TaskCard";
 
-// Collapsed gap row component
-const GapRow = memo(({
-  gap,
-  isExpanded,
-  onToggle,
-}: {
-  gap: TimeGap;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) => {
-  return (
-    <button
-      onClick={onToggle}
-      className={cn(
-        "w-full flex items-center gap-2 px-3 py-1",
-        "bg-muted/30 hover:bg-muted/50 border-y border-border/30",
-        "text-xs text-muted-foreground transition-colors",
-        "cursor-pointer select-none"
-      )}
-      style={{ height: GAP_ROW_HEIGHT }}
-    >
-      {isExpanded ? (
-        <ChevronDown className="h-3 w-3 flex-shrink-0" />
-      ) : (
-        <ChevronRight className="h-3 w-3 flex-shrink-0" />
-      )}
-      <span>
-        {formatGapTime(gap.startMinutes)}–{formatGapTime(gap.endMinutes)}
-      </span>
-      <span className="text-muted-foreground/60">
-        (no tasks)
-      </span>
-    </button>
-  );
-});
-GapRow.displayName = "GapRow";
-
-// Build segments for compact mode rendering
+// Build segments for compact mode rendering - shared across all columns
 interface TimeSegment {
-  type: "visible" | "gap";
+  type: "visible" | "collapsed";
   startMinutes: number;
   endMinutes: number;
-  gap?: TimeGap;
+  gapId?: string;
 }
 
 const buildTimeSegments = (
@@ -434,10 +386,10 @@ const buildTimeSegments = (
       });
     } else {
       segments.push({
-        type: "gap",
+        type: "collapsed",
         startMinutes: gap.startMinutes,
         endMinutes: gap.endMinutes,
-        gap,
+        gapId: gap.id,
       });
     }
     
@@ -455,6 +407,72 @@ const buildTimeSegments = (
   
   return segments;
 };
+
+// Calculate the Y offset for a given time in compact mode
+const getCompactYOffset = (
+  targetMinutes: number,
+  segments: TimeSegment[]
+): number => {
+  let offset = 0;
+  
+  for (const seg of segments) {
+    if (targetMinutes <= seg.startMinutes) {
+      return offset;
+    }
+    
+    if (seg.type === "collapsed") {
+      if (targetMinutes <= seg.endMinutes) {
+        // Target is within collapsed gap - shouldn't happen for tasks
+        return offset;
+      }
+      offset += COLLAPSED_GAP_HEIGHT;
+    } else {
+      // Visible segment
+      if (targetMinutes <= seg.endMinutes) {
+        // Target is within this visible segment
+        const minutesIntoSegment = targetMinutes - seg.startMinutes;
+        return offset + (minutesIntoSegment / 60) * HOUR_HEIGHT;
+      }
+      const segmentHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
+      offset += segmentHeight;
+    }
+  }
+  
+  return offset;
+};
+
+// Collapsed gap block component - spans full width
+const CollapsedGapBlock = memo(({
+  segment,
+  onToggle,
+  timeScaleWidth,
+}: {
+  segment: TimeSegment;
+  onToggle: () => void;
+  timeScaleWidth: number;
+}) => {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "w-full flex items-center gap-2 px-3",
+        "bg-muted/20 hover:bg-muted/40 border-y border-border/30",
+        "text-xs text-muted-foreground/70 transition-colors",
+        "cursor-pointer select-none"
+      )}
+      style={{ 
+        height: COLLAPSED_GAP_HEIGHT,
+        paddingLeft: timeScaleWidth + 8,
+      }}
+    >
+      <ChevronRight className="h-3 w-3 flex-shrink-0" />
+      <span className="font-medium">
+        {formatGapTime(segment.startMinutes)} – {formatGapTime(segment.endMinutes)}
+      </span>
+    </button>
+  );
+});
+CollapsedGapBlock.displayName = "CollapsedGapBlock";
 
 const TimeGrid = ({
   columns,
@@ -503,32 +521,33 @@ const TimeGrid = ({
     };
   }, [columns]);
   
-  // Detect gaps for compact mode
+  // Detect gaps for compact mode (shared across all columns)
   const gaps = useMemo(() => {
     if (!isCompactMode) return [];
     return detectGaps(columns, startHour, endHour);
   }, [columns, startHour, endHour, isCompactMode]);
   
-  // Build time segments for compact mode
+  // Build time segments for compact mode (shared)
   const segments = useMemo(() => {
     if (!isCompactMode) return [];
     return buildTimeSegments(startHour, endHour, gaps, isGapExpanded);
   }, [isCompactMode, startHour, endHour, gaps, isGapExpanded]);
   
-  // Calculate total height for compact mode
-  const compactGridHeight = useMemo(() => {
-    if (!isCompactMode) return hours.length * HOUR_HEIGHT;
+  // Calculate total height
+  const gridHeight = useMemo(() => {
+    if (!isCompactMode) {
+      return hours.length * HOUR_HEIGHT;
+    }
     
     return segments.reduce((total, seg) => {
-      if (seg.type === "gap") {
-        return total + GAP_ROW_HEIGHT;
+      if (seg.type === "collapsed") {
+        return total + COLLAPSED_GAP_HEIGHT;
       }
       const durationHours = (seg.endMinutes - seg.startMinutes) / 60;
       return total + durationHours * HOUR_HEIGHT;
     }, 0);
   }, [isCompactMode, segments, hours.length]);
   
-  const gridHeight = isCompactMode ? compactGridHeight : hours.length * HOUR_HEIGHT;
   const today = new Date();
   
   // Handle gap toggle
@@ -540,60 +559,34 @@ const TimeGrid = ({
   const getCompactTaskPosition = useCallback((
     taskStartMin: number,
     taskEndMin: number
-  ): { top: number; height: number } | null => {
-    let accumulatedOffset = 0;
+  ): { top: number; height: number } => {
+    const top = getCompactYOffset(taskStartMin, segments);
+    const bottom = getCompactYOffset(taskEndMin, segments);
+    const height = Math.max(bottom - top, 20);
     
-    for (const seg of segments) {
-      if (seg.type === "gap") {
-        // Task can't be in a collapsed gap, skip
-        accumulatedOffset += GAP_ROW_HEIGHT;
-      } else {
-        // Visible segment
-        const segStart = seg.startMinutes;
-        const segEnd = seg.endMinutes;
-        const segHeight = ((segEnd - segStart) / 60) * HOUR_HEIGHT;
-        
-        if (taskStartMin >= segStart && taskStartMin < segEnd) {
-          // Task starts in this segment
-          const offsetInSeg = ((taskStartMin - segStart) / 60) * HOUR_HEIGHT;
-          const taskDuration = taskEndMin - taskStartMin;
-          const height = (taskDuration / 60) * HOUR_HEIGHT;
-          
-          return {
-            top: accumulatedOffset + offsetInSeg,
-            height: Math.max(height, 20),
-          };
-        }
-        
-        accumulatedOffset += segHeight;
-      }
-    }
-    
-    return null;
+    return { top, height };
   }, [segments]);
   
   // Render time scale for compact mode
   const renderCompactTimeScale = () => {
-    let accumulatedOffset = 0;
     const elements: React.ReactNode[] = [];
+    let accumulatedOffset = 0;
     
     segments.forEach((seg, idx) => {
-      if (seg.type === "gap") {
-        // Gap placeholder in time scale
+      if (seg.type === "collapsed") {
+        // Collapsed gap placeholder in time scale
         elements.push(
           <div
             key={`time-gap-${idx}`}
-            className="flex items-center justify-end pr-2 text-[10px] text-muted-foreground/50 bg-muted/20"
-            style={{ height: GAP_ROW_HEIGHT }}
+            className="flex items-center justify-end pr-2 text-[10px] text-muted-foreground/40"
+            style={{ height: COLLAPSED_GAP_HEIGHT }}
           >
             ···
           </div>
         );
-        accumulatedOffset += GAP_ROW_HEIGHT;
+        accumulatedOffset += COLLAPSED_GAP_HEIGHT;
       } else {
         // Visible time segment - render hour labels
-        const segStartHour = Math.ceil(seg.startMinutes / 60);
-        const segEndHour = Math.floor(seg.endMinutes / 60);
         const segHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
         
         elements.push(
@@ -602,24 +595,109 @@ const TimeGrid = ({
             className="relative"
             style={{ height: segHeight }}
           >
-            {Array.from({ length: segEndHour - segStartHour + 1 }, (_, i) => {
-              const hour = segStartHour + i;
-              const hourMin = hour * 60;
-              if (hourMin < seg.startMinutes || hourMin >= seg.endMinutes) return null;
-              
-              const offsetInSeg = ((hourMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
-              const timeStr = `${hour.toString().padStart(2, "0")}:00`;
+            {(() => {
+              const labels: React.ReactNode[] = [];
+              // Find hours that fall within this segment
+              for (let hour = Math.ceil(seg.startMinutes / 60); hour <= Math.floor(seg.endMinutes / 60); hour++) {
+                const hourMin = hour * 60;
+                if (hourMin < seg.startMinutes || hourMin > seg.endMinutes) continue;
+                
+                const offsetInSeg = ((hourMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
+                const timeStr = `${hour.toString().padStart(2, "0")}:00`;
+                
+                labels.push(
+                  <div
+                    key={hour}
+                    className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
+                    style={{ top: offsetInSeg }}
+                  >
+                    <span className="-translate-y-1/2">
+                      {formatTime(timeStr, timeFormat)}
+                    </span>
+                  </div>
+                );
+              }
+              return labels;
+            })()}
+          </div>
+        );
+        
+        accumulatedOffset += segHeight;
+      }
+    });
+    
+    return elements;
+  };
+  
+  // Render compact grid content for a single column
+  const renderCompactColumnContent = (column: DayColumn) => {
+    const scheduledTasks = column.tasks.filter(t => t.timeStart);
+    const tasksWithLayout = calculateOverlappingLayout(scheduledTasks, startHour);
+    
+    // Map each segment to rendered content
+    const elements: React.ReactNode[] = [];
+    let accumulatedOffset = 0;
+    
+    segments.forEach((seg, idx) => {
+      if (seg.type === "collapsed") {
+        // Just a spacer for the collapsed gap (the actual gap block spans full width)
+        elements.push(
+          <div
+            key={`col-gap-${idx}`}
+            style={{ height: COLLAPSED_GAP_HEIGHT }}
+          />
+        );
+        accumulatedOffset += COLLAPSED_GAP_HEIGHT;
+      } else {
+        // Visible segment with tasks
+        const segHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
+        
+        // Filter tasks that fall in this segment
+        const tasksInSegment = tasksWithLayout.filter(t => {
+          return t.position.startMin >= seg.startMinutes && t.position.startMin < seg.endMinutes;
+        });
+        
+        elements.push(
+          <div
+            key={`col-seg-${idx}`}
+            className="relative"
+            style={{ height: segHeight }}
+          >
+            {/* Hour lines within segment */}
+            {(() => {
+              const lines: React.ReactNode[] = [];
+              for (let hour = Math.ceil(seg.startMinutes / 60); hour <= Math.floor(seg.endMinutes / 60); hour++) {
+                const hourMin = hour * 60;
+                if (hourMin < seg.startMinutes || hourMin > seg.endMinutes) continue;
+                
+                const offsetInSeg = ((hourMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
+                lines.push(
+                  <div
+                    key={hour}
+                    className="absolute left-0 right-0 border-t border-border/50"
+                    style={{ top: offsetInSeg }}
+                  />
+                );
+              }
+              return lines;
+            })()}
+            
+            {/* Tasks in this segment */}
+            {tasksInSegment.map(({ task, position, column: col, totalColumns }) => {
+              // Calculate position relative to segment start
+              const topInSegment = ((position.startMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
               
               return (
-                <div
-                  key={hour}
-                  className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
-                  style={{ top: offsetInSeg + 8 }}
-                >
-                  <span className="-translate-y-1/2">
-                    {formatTime(timeStr, timeFormat)}
-                  </span>
-                </div>
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  date={column.date}
+                  position={{ top: topInSegment, height: position.height }}
+                  column={col}
+                  totalColumns={totalColumns}
+                  onClick={() => onTaskClick(task, column.date)}
+                  onToggle={() => onToggleComplete(task, column.date)}
+                />
               );
             })}
           </div>
@@ -632,84 +710,42 @@ const TimeGrid = ({
     return elements;
   };
   
-  // Render grid content for compact mode
-  const renderCompactGridContent = (column: DayColumn) => {
+  // Render collapsed gap blocks (full width, outside columns)
+  const renderCollapsedGapBlocks = () => {
+    if (!isCompactMode) return null;
+    
     let accumulatedOffset = 0;
-    const elements: React.ReactNode[] = [];
-    const scheduledTasks = column.tasks.filter(t => t.timeStart);
+    const blocks: React.ReactNode[] = [];
     
     segments.forEach((seg, idx) => {
-      if (seg.type === "gap" && seg.gap) {
-        // Render collapsed gap row
-        elements.push(
-          <GapRow
-            key={`gap-${seg.gap.id}`}
-            gap={seg.gap}
-            isExpanded={isGapExpanded(seg.gap.id)}
-            onToggle={() => handleGapToggle(seg.gap!.id)}
-          />
-        );
-        accumulatedOffset += GAP_ROW_HEIGHT;
-      } else {
-        // Render visible segment with tasks
-        const segHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
-        const segStartHour = seg.startMinutes / 60;
-        
-        // Filter tasks that fall in this segment
-        const tasksInSegment = scheduledTasks.filter(t => {
-          if (!t.timeStart) return false;
-          const taskStart = timeToMinutes(t.timeStart);
-          return taskStart >= seg.startMinutes && taskStart < seg.endMinutes;
-        });
-        
-        elements.push(
+      if (seg.type === "collapsed" && seg.gapId) {
+        blocks.push(
           <div
-            key={`seg-${idx}`}
-            className="relative"
-            style={{ height: segHeight }}
+            key={seg.gapId}
+            className="absolute left-0 right-0 z-20"
+            style={{ top: accumulatedOffset }}
           >
-            {/* Hour lines within segment */}
-            {Array.from({ length: Math.ceil(segHeight / HOUR_HEIGHT) }, (_, i) => {
-              const hourMin = seg.startMinutes + i * 60;
-              if (hourMin % 60 !== 0) return null;
-              const offsetInSeg = ((hourMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
-              
-              return (
-                <div
-                  key={i}
-                  className="absolute left-0 right-0 border-t border-border/50"
-                  style={{ top: offsetInSeg + 8 }}
-                />
-              );
-            })}
-            
-            {/* Tasks in this segment */}
-            {calculateOverlappingLayout(tasksInSegment, segStartHour).map(({ task, position, column: col, totalColumns }) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                date={column.date}
-                position={{ top: position.top + 8, height: position.height }}
-                column={col}
-                totalColumns={totalColumns}
-                onClick={() => onTaskClick(task, column.date)}
-                onToggle={() => onToggleComplete(task, column.date)}
-              />
-            ))}
+            <CollapsedGapBlock
+              segment={seg}
+              onToggle={() => handleGapToggle(seg.gapId!)}
+              timeScaleWidth={TIME_SCALE_WIDTH}
+            />
           </div>
         );
-        
+        accumulatedOffset += COLLAPSED_GAP_HEIGHT;
+      } else {
+        const segHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
         accumulatedOffset += segHeight;
       }
     });
     
-    return elements;
+    return blocks;
   };
   
   return (
     <div className={cn("flex-1 overflow-auto", className)}>
       <div 
-        className="flex min-w-max"
+        className="flex min-w-max relative"
         style={{ minWidth: TIME_SCALE_WIDTH + columns.length * minColumnWidth }}
       >
         {/* Time scale - fixed left column */}
@@ -722,16 +758,16 @@ const TimeGrid = ({
           
           {/* Hour labels */}
           {isCompactMode ? (
-            <div className="pt-2">
+            <div>
               {renderCompactTimeScale()}
             </div>
           ) : (
-            <div className="relative pt-2" style={{ height: gridHeight }}>
+            <div className="relative" style={{ height: gridHeight }}>
               {hours.map((hour, i) => (
                 <div
                   key={hour}
                   className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
-                  style={{ top: i * HOUR_HEIGHT + 8, height: HOUR_HEIGHT }}
+                  style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
                 >
                   <span className="-translate-y-1/2">
                     {formatTime(hour, timeFormat)}
@@ -742,118 +778,124 @@ const TimeGrid = ({
           )}
         </div>
         
-        {/* Day columns */}
-        {columns.map((column, colIndex) => {
-          const isToday = isSameDay(column.date, today);
-          const scheduledTasks = column.tasks.filter(t => t.timeStart);
-          const unscheduledTasks = column.tasks.filter(t => !t.timeStart);
+        {/* Day columns container */}
+        <div className="flex flex-1 relative">
+          {/* Collapsed gap blocks spanning all columns */}
+          {renderCollapsedGapBlocks()}
           
-          return (
-            <div
-              key={column.dateKey}
-              className="flex-1 border-r border-border/50 last:border-r-0"
-              style={{ minWidth: minColumnWidth }}
-            >
-              {/* Day header */}
-              <div className={cn(
-                "h-10 px-2 flex items-center justify-center border-b",
-                isToday 
-                  ? "border-b-2 border-primary bg-primary/[0.02]" 
-                  : "border-border"
-              )}>
-                <div className="text-center">
-                  <span className={cn(
-                    "text-xs uppercase tracking-wide block",
-                    isToday ? "text-primary font-semibold" : "text-muted-foreground font-medium"
-                  )}>
-                    {format(column.date, "EEE")}
-                  </span>
-                  <span className={cn(
-                    "text-sm block",
-                    isToday 
-                      ? "text-primary font-bold" 
-                      : "text-foreground"
-                  )}>
-                    {format(column.date, "d")}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Time grid area */}
-              {isCompactMode ? (
-                <div className="pt-2">
-                  {renderCompactGridContent(column)}
-                </div>
-              ) : (
-                <div className="relative pt-2" style={{ height: gridHeight }}>
-                  {/* Hour lines */}
-                  {hours.map((_, i) => (
-                    <div
-                      key={i}
-                      className="absolute left-0 right-0 border-t border-border/50"
-                      style={{ top: i * HOUR_HEIGHT + 8 }}
-                    />
-                  ))}
-                  
-                  {/* Scheduled task cards */}
-                  {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      date={column.date}
-                      position={{ top: position.top + 8, height: position.height }}
-                      column={col}
-                      totalColumns={totalColumns}
-                      onClick={() => onTaskClick(task, column.date)}
-                      onToggle={() => onToggleComplete(task, column.date)}
-                    />
-                  ))}
-                </div>
-              )}
-              
-              {/* Unscheduled tasks section */}
-              {unscheduledTasks.length > 0 && (
-                <div className="border-t border-border p-2 bg-muted/20">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
-                    No time
+          {/* Day columns */}
+          {columns.map((column) => {
+            const isToday = isSameDay(column.date, today);
+            const scheduledTasks = column.tasks.filter(t => t.timeStart);
+            const unscheduledTasks = column.tasks.filter(t => !t.timeStart);
+            
+            return (
+              <div
+                key={column.dateKey}
+                className="flex-1 border-r border-border/50 last:border-r-0"
+                style={{ minWidth: minColumnWidth }}
+              >
+                {/* Day header */}
+                <div className={cn(
+                  "h-10 px-2 flex items-center justify-center border-b",
+                  isToday 
+                    ? "border-b-2 border-primary bg-primary/[0.02]" 
+                    : "border-border"
+                )}>
+                  <div className="text-center">
+                    <span className={cn(
+                      "text-xs uppercase tracking-wide block",
+                      isToday ? "text-primary font-semibold" : "text-muted-foreground font-medium"
+                    )}>
+                      {format(column.date, "EEE")}
+                    </span>
+                    <span className={cn(
+                      "text-sm block",
+                      isToday 
+                        ? "text-primary font-bold" 
+                        : "text-foreground"
+                    )}>
+                      {format(column.date, "d")}
+                    </span>
                   </div>
-                  <div className="space-y-1">
-                    {unscheduledTasks.map(task => (
+                </div>
+                
+                {/* Time grid area */}
+                {isCompactMode ? (
+                  <div>
+                    {renderCompactColumnContent(column)}
+                  </div>
+                ) : (
+                  <div className="relative" style={{ height: gridHeight }}>
+                    {/* Hour lines */}
+                    {hours.map((_, i) => (
                       <div
+                        key={i}
+                        className="absolute left-0 right-0 border-t border-border/50"
+                        style={{ top: i * HOUR_HEIGHT }}
+                      />
+                    ))}
+                    
+                    {/* Scheduled task cards */}
+                    {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => (
+                      <TaskCard
                         key={task.id}
-                        className={cn(
-                          "flex items-center gap-1.5 text-[11px] px-1.5 py-1 rounded cursor-pointer",
-                          "hover:bg-muted/50 transition-colors",
-                          task.isCompleted && "opacity-60"
-                        )}
+                        task={task}
+                        date={column.date}
+                        position={{ top: position.top, height: position.height }}
+                        column={col}
+                        totalColumns={totalColumns}
                         onClick={() => onTaskClick(task, column.date)}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleComplete(task, column.date);
-                          }}
-                          className={cn(
-                            "flex-shrink-0",
-                            task.isCompleted ? "text-primary/70" : "text-muted-foreground/50 hover:text-primary"
-                          )}
-                        >
-                          {task.isCompleted ? "●" : "○"}
-                        </button>
-                        <span className={cn(
-                          "truncate",
-                          task.isCompleted && "line-through text-muted-foreground/60"
-                        )}>
-                          {task.title}
-                        </span>
-                      </div>
+                        onToggle={() => onToggleComplete(task, column.date)}
+                      />
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                )}
+                
+                {/* Unscheduled tasks section */}
+                {unscheduledTasks.length > 0 && (
+                  <div className="border-t border-border p-2 bg-muted/20">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
+                      No time
+                    </div>
+                    <div className="space-y-1">
+                      {unscheduledTasks.map(task => (
+                        <div
+                          key={task.id}
+                          className={cn(
+                            "flex items-center gap-1.5 text-[11px] px-1.5 py-1 rounded cursor-pointer",
+                            "hover:bg-muted/50 transition-colors",
+                            task.isCompleted && "opacity-60"
+                          )}
+                          onClick={() => onTaskClick(task, column.date)}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleComplete(task, column.date);
+                            }}
+                            className={cn(
+                              "flex-shrink-0",
+                              task.isCompleted ? "text-primary/70" : "text-muted-foreground/50 hover:text-primary"
+                            )}
+                          >
+                            {task.isCompleted ? "●" : "○"}
+                          </button>
+                          <span className={cn(
+                            "truncate",
+                            task.isCompleted && "line-through text-muted-foreground/60"
+                          )}>
+                            {task.title}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
