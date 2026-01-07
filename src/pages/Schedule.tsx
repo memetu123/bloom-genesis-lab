@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, memo } from "react";
+import { useState, useCallback, useMemo, memo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
@@ -18,7 +18,23 @@ import { cn } from "@/lib/utils";
 /**
  * Schedule Page - Agenda-style chronological list view
  * Groups tasks by day with vertical scrolling
+ * 
+ * NOTE: This view is currently disabled for MVP.
+ * Direct access to /schedule will redirect to /weekly with a toast notification.
+ * The code is kept intact for future activation.
  */
+
+// Redirect component for MVP - keeps architecture intact
+const ScheduleRedirect = () => {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    toast.info("Schedule view is coming soon");
+    navigate("/weekly", { replace: true });
+  }, [navigate]);
+  
+  return null;
+};
 
 // Format day header - "Today", "Tomorrow", or date
 const formatDayHeader = (date: Date, dateFormat: string): string => {
@@ -181,6 +197,11 @@ const DayGroup = memo(({
 DayGroup.displayName = "DayGroup";
 
 const Schedule = () => {
+  // MVP: Redirect to weekly view - Schedule is coming soon
+  // Remove this line and the ScheduleRedirect return to re-enable
+  return <ScheduleRedirect />;
+  
+  // Original implementation below (kept for future activation)
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
