@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppDataProvider } from "@/hooks/useAppData";
+import { TimeDisplayProvider } from "@/components/calendar/TimeDisplayContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppLayout from "@/components/AppLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -38,7 +39,8 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <AppDataProvider>
-              <Routes>
+              <TimeDisplayProvider>
+                <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<Auth />} />
@@ -58,7 +60,8 @@ const App = () => (
                 <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
-              </Routes>
+                </Routes>
+              </TimeDisplayProvider>
             </AppDataProvider>
           </AuthProvider>
         </BrowserRouter>

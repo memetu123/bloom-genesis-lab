@@ -6,5 +6,8 @@ export { default as CalendarDateNav } from "./CalendarDateNav";
 export { default as CalendarViewSelector } from "./CalendarViewSelector";
 export { default as TimeGrid } from "./TimeGrid";
 export type { TimeGridTask } from "./TimeGrid";
+export { default as TimeDisplayToggle } from "./TimeDisplayToggle";
 export { CalendarViewProvider, useCalendarView } from "./CalendarViewContext";
 export type { CalendarView } from "./CalendarViewContext";
+export { TimeDisplayProvider, useTimeDisplay } from "./TimeDisplayContext";
+export type { TimeDisplayMode } from "./TimeDisplayContext";
