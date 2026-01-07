@@ -88,6 +88,7 @@ const TaskDetailModal = ({
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [timeError, setTimeError] = useState("");
 
   // Store original values to detect changes
   const [originalValues, setOriginalValues] = useState<{
@@ -140,6 +141,7 @@ const TaskDetailModal = ({
       setEndDate("");
       setShowConfirmDialog(false);
       setOriginalValues(null);
+      setTimeError("");
 
       // Fetch notes and other data
       fetchTaskNotes(task);
@@ -499,10 +501,19 @@ const TaskDetailModal = ({
   }, [title, timeStart, timeEnd, goalId, recurrenceType, timesPerDay, selectedDays, showRepetitionEditor, originalValues, task]);
 
   /**
-   * Handle save button click - shows confirmation for recurring tasks with changes
+   * Handle save button click - validates time and shows confirmation for recurring tasks with changes
    */
   const handleSaveClick = () => {
     if (!task) return;
+    
+    // Clear previous errors
+    setTimeError("");
+    
+    // Validate time slot - both start and end are required
+    if (!timeStart || !timeEnd) {
+      setTimeError("Please choose a start and end time.");
+      return;
+    }
     
     const isRecurring = task.commitmentId !== null && !task.isDetached;
     
@@ -570,10 +581,7 @@ const TaskDetailModal = ({
     }
   };
 
-  const handleClearTime = () => {
-    setTimeStart("");
-    setTimeEnd("");
-  };
+  // handleClearTime removed - time is now required
 
   const handleToggleComplete = () => {
     const newValue = !isCompleted;
@@ -813,20 +821,10 @@ const TaskDetailModal = ({
 
           {/* 4. Schedule Time - flat layout, no container */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
-                <Clock className="h-3 w-3 opacity-30" />
-                Schedule time
-              </span>
-              {(timeStart || timeEnd) && (
-                <button
-                  onClick={handleClearTime}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
+              <Clock className="h-3 w-3 opacity-30" />
+              Schedule time
+            </span>
 
             <div className="flex gap-3 items-end">
               <div className="flex-1">
@@ -837,8 +835,11 @@ const TaskDetailModal = ({
                   id="time-start"
                   type="time"
                   value={timeStart}
-                  onChange={(e) => setTimeStart(e.target.value)}
-                  className="h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  onChange={(e) => {
+                    setTimeStart(e.target.value);
+                    setTimeError("");
+                  }}
+                  className={`h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20 ${timeError && !timeStart ? "border-destructive" : ""}`}
                 />
               </div>
               <div className="flex-1">
@@ -849,11 +850,17 @@ const TaskDetailModal = ({
                   id="time-end"
                   type="time"
                   value={timeEnd}
-                  onChange={(e) => setTimeEnd(e.target.value)}
-                  className="h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  onChange={(e) => {
+                    setTimeEnd(e.target.value);
+                    setTimeError("");
+                  }}
+                  className={`h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20 ${timeError && !timeEnd ? "border-destructive" : ""}`}
                 />
               </div>
             </div>
+            {timeError && (
+              <p className="text-sm text-destructive">{timeError}</p>
+            )}
           </div>
 
           {/* Duration (Start/End dates) - Only for recurring tasks */}

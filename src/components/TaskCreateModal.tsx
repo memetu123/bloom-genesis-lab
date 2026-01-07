@@ -156,11 +156,23 @@ const TaskCreateModal = ({
     setEndDate("");
     setScheduledDate(format(defaultDate, "yyyy-MM-dd"));
     setRelatedExpanded(false);
+    setTimeError("");
   };
 
+  const [timeError, setTimeError] = useState("");
+
   const handleSubmit = async () => {
+    // Clear previous errors
+    setTimeError("");
+
     if (!title.trim()) {
       toast.error("Please enter a task title");
+      return;
+    }
+
+    // Validate time slot - both start and end are required
+    if (!timeStart || !timeEnd) {
+      setTimeError("Please choose a start and end time.");
       return;
     }
 
@@ -378,9 +390,9 @@ const TaskCreateModal = ({
             </div>
           )}
 
-          {/* Time slot (optional) */}
+          {/* Time slot (required) */}
           <div>
-            <Label className="mb-2 block text-sm text-muted-foreground">Time slot (optional)</Label>
+            <Label className="mb-2 block text-sm text-muted-foreground">Time slot</Label>
             <div className="flex gap-2 items-center">
               <div className="flex-1">
                 <Label htmlFor="time-start" className="text-xs text-muted-foreground">
@@ -390,8 +402,11 @@ const TaskCreateModal = ({
                   id="time-start"
                   type="time"
                   value={timeStart}
-                  onChange={(e) => setTimeStart(e.target.value)}
-                  className="h-9"
+                  onChange={(e) => {
+                    setTimeStart(e.target.value);
+                    setTimeError("");
+                  }}
+                  className={`h-9 ${timeError && !timeStart ? "border-destructive" : ""}`}
                 />
               </div>
               <div className="flex-1">
@@ -402,11 +417,17 @@ const TaskCreateModal = ({
                   id="time-end"
                   type="time"
                   value={timeEnd}
-                  onChange={(e) => setTimeEnd(e.target.value)}
-                  className="h-9"
+                  onChange={(e) => {
+                    setTimeEnd(e.target.value);
+                    setTimeError("");
+                  }}
+                  className={`h-9 ${timeError && !timeEnd ? "border-destructive" : ""}`}
                 />
               </div>
             </div>
+            {timeError && (
+              <p className="text-sm text-destructive mt-1">{timeError}</p>
+            )}
           </div>
 
           {/* Related to (optional) - Collapsible */}
