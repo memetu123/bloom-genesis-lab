@@ -1,7 +1,9 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useCallback } from "react";
 import { format, isSameDay } from "date-fns";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/formatPreferences";
+import { useTimeDisplay } from "./TimeDisplayContext";
 import type { UserPreferences } from "@/hooks/useAppData";
 
 /**
@@ -12,6 +14,7 @@ import type { UserPreferences } from "@/hooks/useAppData";
  * - Adaptive time range based on earliest/latest tasks
  * - Task cards positioned by time, scaled by duration
  * - Horizontal scrolling when columns are too narrow
+ * - Compact mode: collapses empty gaps >= MIN_GAP_MINUTES
  */
 
 export interface TimeGridTask {
@@ -39,7 +42,7 @@ interface TimeGridProps {
   onTaskClick: (task: TimeGridTask, date: Date) => void;
   onToggleComplete: (task: TimeGridTask, date: Date) => void;
   timeFormat: UserPreferences["timeFormat"];
-  minColumnWidth?: number; // Minimum width per day column in pixels
+  minColumnWidth?: number;
   className?: string;
 }
 
@@ -49,6 +52,10 @@ const HOUR_HEIGHT = 60;
 const TIME_SCALE_WIDTH = 56;
 // Minimum column width
 const DEFAULT_MIN_COLUMN_WIDTH = 140;
+// Minimum gap duration to collapse (in minutes)
+const MIN_GAP_MINUTES = 60;
+// Collapsed gap row height
+const GAP_ROW_HEIGHT = 28;
 
 // Parse time string to minutes from midnight
 const timeToMinutes = (time: string): number => {
@@ -65,10 +72,10 @@ const getTaskPosition = (
   if (!timeStart) return null;
   
   const startMinutes = timeToMinutes(timeStart);
-  const endMinutes = timeEnd ? timeToMinutes(timeEnd) : startMinutes + 30; // Default 30min duration
+  const endMinutes = timeEnd ? timeToMinutes(timeEnd) : startMinutes + 30;
   
   const minutesFromStart = startMinutes - startHour * 60;
-  const duration = Math.max(endMinutes - startMinutes, 20); // Minimum 20min visual height
+  const duration = Math.max(endMinutes - startMinutes, 20);
   
   return {
     top: (minutesFromStart / 60) * HOUR_HEIGHT,
@@ -90,7 +97,6 @@ const calculateOverlappingLayout = (
   tasks: TimeGridTask[],
   startHour: number
 ): TaskWithPosition[] => {
-  // Get positions for all tasks
   const tasksWithPos = tasks
     .map(task => {
       const position = getTaskPosition(task.timeStart, task.timeEnd, startHour);
@@ -101,11 +107,9 @@ const calculateOverlappingLayout = (
   
   if (tasksWithPos.length === 0) return [];
   
-  // Find overlapping groups
   const groups: { task: TimeGridTask; position: TaskWithPosition["position"] }[][] = [];
   
   tasksWithPos.forEach(item => {
-    // Find if this task overlaps with any existing group
     let addedToGroup = false;
     
     for (const group of groups) {
@@ -126,7 +130,6 @@ const calculateOverlappingLayout = (
     }
   });
   
-  // Merge overlapping groups that transitively overlap
   const mergedGroups: typeof groups = [];
   groups.forEach(group => {
     const overlappingIdx = mergedGroups.findIndex(mg =>
@@ -145,15 +148,11 @@ const calculateOverlappingLayout = (
     }
   });
   
-  // Assign columns within each group
-  // Limit visual compression - max 3 side-by-side, after that they overlap slightly
   const result: TaskWithPosition[] = [];
   
   mergedGroups.forEach(group => {
-    // Cap at 3 columns for readability, beyond that tasks will overlap
     const totalColumns = Math.min(group.length, 3);
     
-    // Sort by start time, assign columns
     group
       .sort((a, b) => a.position.startMin - b.position.startMin)
       .forEach((item, idx) => {
@@ -167,6 +166,117 @@ const calculateOverlappingLayout = (
   });
   
   return result;
+};
+
+// Gap detection: find empty time ranges across all columns
+interface TimeGap {
+  id: string;
+  startHour: number;
+  endHour: number;
+  startMinutes: number;
+  endMinutes: number;
+  durationMinutes: number;
+}
+
+const detectGaps = (
+  columns: DayColumn[],
+  visibleStartHour: number,
+  visibleEndHour: number
+): TimeGap[] => {
+  // Collect all task time ranges across all columns
+  const occupiedRanges: { start: number; end: number }[] = [];
+  
+  columns.forEach(col => {
+    col.tasks.forEach(task => {
+      if (task.timeStart) {
+        const start = timeToMinutes(task.timeStart);
+        const end = task.timeEnd ? timeToMinutes(task.timeEnd) : start + 30;
+        occupiedRanges.push({ start, end });
+      }
+    });
+  });
+  
+  if (occupiedRanges.length === 0) return [];
+  
+  // Sort and merge overlapping ranges
+  occupiedRanges.sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  
+  occupiedRanges.forEach(range => {
+    if (merged.length === 0) {
+      merged.push({ ...range });
+    } else {
+      const last = merged[merged.length - 1];
+      if (range.start <= last.end) {
+        last.end = Math.max(last.end, range.end);
+      } else {
+        merged.push({ ...range });
+      }
+    }
+  });
+  
+  // Find gaps between merged ranges (within visible bounds)
+  const gaps: TimeGap[] = [];
+  const visibleStartMin = visibleStartHour * 60;
+  const visibleEndMin = visibleEndHour * 60;
+  
+  // Gap before first task
+  if (merged.length > 0 && merged[0].start > visibleStartMin + MIN_GAP_MINUTES) {
+    const gapEnd = merged[0].start;
+    const gapStart = visibleStartMin;
+    if (gapEnd - gapStart >= MIN_GAP_MINUTES) {
+      gaps.push({
+        id: `gap-${gapStart}-${gapEnd}`,
+        startHour: Math.floor(gapStart / 60),
+        endHour: Math.ceil(gapEnd / 60),
+        startMinutes: gapStart,
+        endMinutes: gapEnd,
+        durationMinutes: gapEnd - gapStart,
+      });
+    }
+  }
+  
+  // Gaps between tasks
+  for (let i = 0; i < merged.length - 1; i++) {
+    const gapStart = merged[i].end;
+    const gapEnd = merged[i + 1].start;
+    
+    if (gapEnd - gapStart >= MIN_GAP_MINUTES) {
+      gaps.push({
+        id: `gap-${gapStart}-${gapEnd}`,
+        startHour: Math.floor(gapStart / 60),
+        endHour: Math.ceil(gapEnd / 60),
+        startMinutes: gapStart,
+        endMinutes: gapEnd,
+        durationMinutes: gapEnd - gapStart,
+      });
+    }
+  }
+  
+  // Gap after last task
+  if (merged.length > 0 && merged[merged.length - 1].end < visibleEndMin - MIN_GAP_MINUTES) {
+    const gapStart = merged[merged.length - 1].end;
+    const gapEnd = visibleEndMin;
+    if (gapEnd - gapStart >= MIN_GAP_MINUTES) {
+      gaps.push({
+        id: `gap-${gapStart}-${gapEnd}`,
+        startHour: Math.floor(gapStart / 60),
+        endHour: Math.ceil(gapEnd / 60),
+        startMinutes: gapStart,
+        endMinutes: gapEnd,
+        durationMinutes: gapEnd - gapStart,
+      });
+    }
+  }
+  
+  return gaps;
+};
+
+// Format time for gap label
+const formatGapTime = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 };
 
 // Task card component
@@ -193,8 +303,6 @@ const TaskCard = memo(({
   
   const isCompact = position.height < 40;
   
-  // Calculate horizontal position for overlapping tasks
-  // Add small gap between overlapping tasks for clarity
   const gapPx = 3;
   const widthPercent = 100 / totalColumns;
   const leftPercent = column * widthPercent;
@@ -246,6 +354,108 @@ const TaskCard = memo(({
 });
 TaskCard.displayName = "TaskCard";
 
+// Collapsed gap row component
+const GapRow = memo(({
+  gap,
+  isExpanded,
+  onToggle,
+}: {
+  gap: TimeGap;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "w-full flex items-center gap-2 px-3 py-1",
+        "bg-muted/30 hover:bg-muted/50 border-y border-border/30",
+        "text-xs text-muted-foreground transition-colors",
+        "cursor-pointer select-none"
+      )}
+      style={{ height: GAP_ROW_HEIGHT }}
+    >
+      {isExpanded ? (
+        <ChevronDown className="h-3 w-3 flex-shrink-0" />
+      ) : (
+        <ChevronRight className="h-3 w-3 flex-shrink-0" />
+      )}
+      <span>
+        {formatGapTime(gap.startMinutes)}–{formatGapTime(gap.endMinutes)}
+      </span>
+      <span className="text-muted-foreground/60">
+        (no tasks)
+      </span>
+    </button>
+  );
+});
+GapRow.displayName = "GapRow";
+
+// Build segments for compact mode rendering
+interface TimeSegment {
+  type: "visible" | "gap";
+  startMinutes: number;
+  endMinutes: number;
+  gap?: TimeGap;
+}
+
+const buildTimeSegments = (
+  startHour: number,
+  endHour: number,
+  gaps: TimeGap[],
+  isGapExpanded: (id: string) => boolean
+): TimeSegment[] => {
+  const segments: TimeSegment[] = [];
+  const visibleStartMin = startHour * 60;
+  const visibleEndMin = endHour * 60;
+  
+  if (gaps.length === 0) {
+    return [{ type: "visible", startMinutes: visibleStartMin, endMinutes: visibleEndMin }];
+  }
+  
+  let currentMin = visibleStartMin;
+  
+  gaps.forEach(gap => {
+    // Add visible segment before this gap
+    if (gap.startMinutes > currentMin) {
+      segments.push({
+        type: "visible",
+        startMinutes: currentMin,
+        endMinutes: gap.startMinutes,
+      });
+    }
+    
+    // Add the gap (either collapsed or expanded as visible)
+    if (isGapExpanded(gap.id)) {
+      segments.push({
+        type: "visible",
+        startMinutes: gap.startMinutes,
+        endMinutes: gap.endMinutes,
+      });
+    } else {
+      segments.push({
+        type: "gap",
+        startMinutes: gap.startMinutes,
+        endMinutes: gap.endMinutes,
+        gap,
+      });
+    }
+    
+    currentMin = gap.endMinutes;
+  });
+  
+  // Add final visible segment after last gap
+  if (currentMin < visibleEndMin) {
+    segments.push({
+      type: "visible",
+      startMinutes: currentMin,
+      endMinutes: visibleEndMin,
+    });
+  }
+  
+  return segments;
+};
+
 const TimeGrid = ({
   columns,
   onTaskClick,
@@ -254,10 +464,13 @@ const TimeGrid = ({
   minColumnWidth = DEFAULT_MIN_COLUMN_WIDTH,
   className,
 }: TimeGridProps) => {
+  const { mode, toggleGap, isGapExpanded } = useTimeDisplay();
+  const isCompactMode = mode === "compact";
+  
   // Calculate adaptive time range based on tasks
   const { startHour, endHour, hours } = useMemo(() => {
-    let earliestHour = 9; // Default start
-    let latestHour = 18; // Default end
+    let earliestHour = 9;
+    let latestHour = 18;
     
     columns.forEach(col => {
       col.tasks.forEach(task => {
@@ -275,11 +488,9 @@ const TimeGrid = ({
       });
     });
     
-    // Add buffer
     earliestHour = Math.max(0, earliestHour - 1);
     latestHour = Math.min(24, latestHour + 1);
     
-    // Generate hour labels
     const hourLabels: string[] = [];
     for (let h = earliestHour; h < latestHour; h++) {
       hourLabels.push(`${h.toString().padStart(2, "0")}:00`);
@@ -292,8 +503,208 @@ const TimeGrid = ({
     };
   }, [columns]);
   
-  const gridHeight = hours.length * HOUR_HEIGHT;
+  // Detect gaps for compact mode
+  const gaps = useMemo(() => {
+    if (!isCompactMode) return [];
+    return detectGaps(columns, startHour, endHour);
+  }, [columns, startHour, endHour, isCompactMode]);
+  
+  // Build time segments for compact mode
+  const segments = useMemo(() => {
+    if (!isCompactMode) return [];
+    return buildTimeSegments(startHour, endHour, gaps, isGapExpanded);
+  }, [isCompactMode, startHour, endHour, gaps, isGapExpanded]);
+  
+  // Calculate total height for compact mode
+  const compactGridHeight = useMemo(() => {
+    if (!isCompactMode) return hours.length * HOUR_HEIGHT;
+    
+    return segments.reduce((total, seg) => {
+      if (seg.type === "gap") {
+        return total + GAP_ROW_HEIGHT;
+      }
+      const durationHours = (seg.endMinutes - seg.startMinutes) / 60;
+      return total + durationHours * HOUR_HEIGHT;
+    }, 0);
+  }, [isCompactMode, segments, hours.length]);
+  
+  const gridHeight = isCompactMode ? compactGridHeight : hours.length * HOUR_HEIGHT;
   const today = new Date();
+  
+  // Handle gap toggle
+  const handleGapToggle = useCallback((gapId: string) => {
+    toggleGap(gapId);
+  }, [toggleGap]);
+  
+  // Get task position in compact mode
+  const getCompactTaskPosition = useCallback((
+    taskStartMin: number,
+    taskEndMin: number
+  ): { top: number; height: number } | null => {
+    let accumulatedOffset = 0;
+    
+    for (const seg of segments) {
+      if (seg.type === "gap") {
+        // Task can't be in a collapsed gap, skip
+        accumulatedOffset += GAP_ROW_HEIGHT;
+      } else {
+        // Visible segment
+        const segStart = seg.startMinutes;
+        const segEnd = seg.endMinutes;
+        const segHeight = ((segEnd - segStart) / 60) * HOUR_HEIGHT;
+        
+        if (taskStartMin >= segStart && taskStartMin < segEnd) {
+          // Task starts in this segment
+          const offsetInSeg = ((taskStartMin - segStart) / 60) * HOUR_HEIGHT;
+          const taskDuration = taskEndMin - taskStartMin;
+          const height = (taskDuration / 60) * HOUR_HEIGHT;
+          
+          return {
+            top: accumulatedOffset + offsetInSeg,
+            height: Math.max(height, 20),
+          };
+        }
+        
+        accumulatedOffset += segHeight;
+      }
+    }
+    
+    return null;
+  }, [segments]);
+  
+  // Render time scale for compact mode
+  const renderCompactTimeScale = () => {
+    let accumulatedOffset = 0;
+    const elements: React.ReactNode[] = [];
+    
+    segments.forEach((seg, idx) => {
+      if (seg.type === "gap") {
+        // Gap placeholder in time scale
+        elements.push(
+          <div
+            key={`time-gap-${idx}`}
+            className="flex items-center justify-end pr-2 text-[10px] text-muted-foreground/50 bg-muted/20"
+            style={{ height: GAP_ROW_HEIGHT }}
+          >
+            ···
+          </div>
+        );
+        accumulatedOffset += GAP_ROW_HEIGHT;
+      } else {
+        // Visible time segment - render hour labels
+        const segStartHour = Math.ceil(seg.startMinutes / 60);
+        const segEndHour = Math.floor(seg.endMinutes / 60);
+        const segHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
+        
+        elements.push(
+          <div
+            key={`time-seg-${idx}`}
+            className="relative"
+            style={{ height: segHeight }}
+          >
+            {Array.from({ length: segEndHour - segStartHour + 1 }, (_, i) => {
+              const hour = segStartHour + i;
+              const hourMin = hour * 60;
+              if (hourMin < seg.startMinutes || hourMin >= seg.endMinutes) return null;
+              
+              const offsetInSeg = ((hourMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
+              const timeStr = `${hour.toString().padStart(2, "0")}:00`;
+              
+              return (
+                <div
+                  key={hour}
+                  className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
+                  style={{ top: offsetInSeg + 8 }}
+                >
+                  <span className="-translate-y-1/2">
+                    {formatTime(timeStr, timeFormat)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+        
+        accumulatedOffset += segHeight;
+      }
+    });
+    
+    return elements;
+  };
+  
+  // Render grid content for compact mode
+  const renderCompactGridContent = (column: DayColumn) => {
+    let accumulatedOffset = 0;
+    const elements: React.ReactNode[] = [];
+    const scheduledTasks = column.tasks.filter(t => t.timeStart);
+    
+    segments.forEach((seg, idx) => {
+      if (seg.type === "gap" && seg.gap) {
+        // Render collapsed gap row
+        elements.push(
+          <GapRow
+            key={`gap-${seg.gap.id}`}
+            gap={seg.gap}
+            isExpanded={isGapExpanded(seg.gap.id)}
+            onToggle={() => handleGapToggle(seg.gap!.id)}
+          />
+        );
+        accumulatedOffset += GAP_ROW_HEIGHT;
+      } else {
+        // Render visible segment with tasks
+        const segHeight = ((seg.endMinutes - seg.startMinutes) / 60) * HOUR_HEIGHT;
+        const segStartHour = seg.startMinutes / 60;
+        
+        // Filter tasks that fall in this segment
+        const tasksInSegment = scheduledTasks.filter(t => {
+          if (!t.timeStart) return false;
+          const taskStart = timeToMinutes(t.timeStart);
+          return taskStart >= seg.startMinutes && taskStart < seg.endMinutes;
+        });
+        
+        elements.push(
+          <div
+            key={`seg-${idx}`}
+            className="relative"
+            style={{ height: segHeight }}
+          >
+            {/* Hour lines within segment */}
+            {Array.from({ length: Math.ceil(segHeight / HOUR_HEIGHT) }, (_, i) => {
+              const hourMin = seg.startMinutes + i * 60;
+              if (hourMin % 60 !== 0) return null;
+              const offsetInSeg = ((hourMin - seg.startMinutes) / 60) * HOUR_HEIGHT;
+              
+              return (
+                <div
+                  key={i}
+                  className="absolute left-0 right-0 border-t border-border/50"
+                  style={{ top: offsetInSeg + 8 }}
+                />
+              );
+            })}
+            
+            {/* Tasks in this segment */}
+            {calculateOverlappingLayout(tasksInSegment, segStartHour).map(({ task, position, column: col, totalColumns }) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                date={column.date}
+                position={{ top: position.top + 8, height: position.height }}
+                column={col}
+                totalColumns={totalColumns}
+                onClick={() => onTaskClick(task, column.date)}
+                onToggle={() => onToggleComplete(task, column.date)}
+              />
+            ))}
+          </div>
+        );
+        
+        accumulatedOffset += segHeight;
+      }
+    });
+    
+    return elements;
+  };
   
   return (
     <div className={cn("flex-1 overflow-auto", className)}>
@@ -309,27 +720,31 @@ const TimeGrid = ({
           {/* Empty header cell */}
           <div className="h-10 border-b border-border" />
           
-          {/* Hour labels - with top padding to prevent overlap */}
-          <div className="relative pt-2" style={{ height: gridHeight }}>
-            {hours.map((hour, i) => (
-              <div
-                key={hour}
-                className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
-                style={{ top: i * HOUR_HEIGHT + 8, height: HOUR_HEIGHT }}
-              >
-                <span className="-translate-y-1/2">
-                  {formatTime(hour, timeFormat)}
-                </span>
-              </div>
-            ))}
-          </div>
+          {/* Hour labels */}
+          {isCompactMode ? (
+            <div className="pt-2">
+              {renderCompactTimeScale()}
+            </div>
+          ) : (
+            <div className="relative pt-2" style={{ height: gridHeight }}>
+              {hours.map((hour, i) => (
+                <div
+                  key={hour}
+                  className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
+                  style={{ top: i * HOUR_HEIGHT + 8, height: HOUR_HEIGHT }}
+                >
+                  <span className="-translate-y-1/2">
+                    {formatTime(hour, timeFormat)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         
         {/* Day columns */}
         {columns.map((column, colIndex) => {
           const isToday = isSameDay(column.date, today);
-          
-          // Separate scheduled and unscheduled tasks
           const scheduledTasks = column.tasks.filter(t => t.timeStart);
           const unscheduledTasks = column.tasks.filter(t => !t.timeStart);
           
@@ -339,7 +754,7 @@ const TimeGrid = ({
               className="flex-1 border-r border-border/50 last:border-r-0"
               style={{ minWidth: minColumnWidth }}
             >
-              {/* Day header - subtle highlight for today */}
+              {/* Day header */}
               <div className={cn(
                 "h-10 px-2 flex items-center justify-center border-b",
                 isToday 
@@ -364,31 +779,37 @@ const TimeGrid = ({
                 </div>
               </div>
               
-              {/* Time grid area - with top padding to align with time labels */}
-              <div className="relative pt-2" style={{ height: gridHeight }}>
-                {/* Hour lines - improved visibility */}
-                {hours.map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute left-0 right-0 border-t border-border/50"
-                    style={{ top: i * HOUR_HEIGHT + 8 }}
-                  />
-                ))}
-                
-                {/* Scheduled task cards with overlap handling */}
-                {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    date={column.date}
-                    position={position}
-                    column={col}
-                    totalColumns={totalColumns}
-                    onClick={() => onTaskClick(task, column.date)}
-                    onToggle={() => onToggleComplete(task, column.date)}
-                  />
-                ))}
-              </div>
+              {/* Time grid area */}
+              {isCompactMode ? (
+                <div className="pt-2">
+                  {renderCompactGridContent(column)}
+                </div>
+              ) : (
+                <div className="relative pt-2" style={{ height: gridHeight }}>
+                  {/* Hour lines */}
+                  {hours.map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute left-0 right-0 border-t border-border/50"
+                      style={{ top: i * HOUR_HEIGHT + 8 }}
+                    />
+                  ))}
+                  
+                  {/* Scheduled task cards */}
+                  {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      date={column.date}
+                      position={{ top: position.top + 8, height: position.height }}
+                      column={col}
+                      totalColumns={totalColumns}
+                      onClick={() => onTaskClick(task, column.date)}
+                      onToggle={() => onToggleComplete(task, column.date)}
+                    />
+                  ))}
+                </div>
+              )}
               
               {/* Unscheduled tasks section */}
               {unscheduledTasks.length > 0 && (
