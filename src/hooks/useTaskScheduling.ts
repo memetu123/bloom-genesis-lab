@@ -495,6 +495,161 @@ export const useTaskScheduling = () => {
     [user]
   );
 
+  /**
+   * Create an exception for a single occurrence of a recurring task.
+   * This preserves the original series but overrides values for just one date.
+   */
+  const createOccurrenceException = useCallback(
+    async (
+      commitmentId: string,
+      occurrenceDate: string,
+      updates: {
+        title?: string;
+        timeStart?: string | null;
+        timeEnd?: string | null;
+        goalId?: string | null;
+      }
+    ) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Get the original commitment for default values
+      const { data: commitment, error: fetchError } = await supabase
+        .from("weekly_commitments")
+        .select("*")
+        .eq("id", commitmentId)
+        .single();
+
+      if (fetchError || !commitment) throw fetchError;
+
+      // Check if there's already a completion record for this date
+      const { data: existingCompletion } = await supabase
+        .from("commitment_completions")
+        .select("*")
+        .eq("commitment_id", commitmentId)
+        .eq("completed_date", occurrenceDate)
+        .maybeSingle();
+
+      if (existingCompletion) {
+        // Update existing completion with overrides
+        await supabase
+          .from("commitment_completions")
+          .update({
+            title: updates.title ?? existingCompletion.title ?? commitment.title,
+            time_start: updates.timeStart !== undefined ? updates.timeStart : existingCompletion.time_start,
+            time_end: updates.timeEnd !== undefined ? updates.timeEnd : existingCompletion.time_end,
+            is_flexible_time: updates.timeStart !== undefined ? !updates.timeStart : existingCompletion.is_flexible_time,
+            is_detached: true, // Mark as exception
+            task_type: "recurring", // Keep as recurring type but detached
+          })
+          .eq("id", existingCompletion.id);
+      } else {
+        // Create new completion record as an exception
+        await supabase
+          .from("commitment_completions")
+          .insert({
+            user_id: user.id,
+            commitment_id: commitmentId,
+            completed_date: occurrenceDate,
+            title: updates.title ?? commitment.title,
+            time_start: updates.timeStart !== undefined ? updates.timeStart : commitment.default_time_start,
+            time_end: updates.timeEnd !== undefined ? updates.timeEnd : commitment.default_time_end,
+            is_flexible_time: updates.timeStart !== undefined ? !updates.timeStart : commitment.flexible_time,
+            is_detached: true, // Mark as exception
+            task_type: "recurring",
+            is_completed: false,
+          });
+      }
+    },
+    [user]
+  );
+
+  /**
+   * Split a recurring series at a given date.
+   * - Ends the original series the day before the split date
+   * - Creates a new series starting from the split date with updated values
+   */
+  const splitRecurringSeries = useCallback(
+    async (
+      commitmentId: string,
+      splitDate: string,
+      updates: {
+        title?: string;
+        timeStart?: string | null;
+        timeEnd?: string | null;
+        goalId?: string | null;
+        recurrenceType?: RecurrenceType;
+        timesPerDay?: number;
+        daysOfWeek?: DayOfWeek[];
+      }
+    ) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Get the original commitment
+      const { data: commitment, error: fetchError } = await supabase
+        .from("weekly_commitments")
+        .select("*")
+        .eq("id", commitmentId)
+        .single();
+
+      if (fetchError || !commitment) throw fetchError;
+
+      // Calculate the day before the split date
+      const splitDateObj = new Date(splitDate);
+      const dayBefore = new Date(splitDateObj);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      const endDateStr = format(dayBefore, "yyyy-MM-dd");
+
+      // End the original series
+      await supabase
+        .from("weekly_commitments")
+        .update({
+          end_date: endDateStr,
+        })
+        .eq("id", commitmentId);
+
+      // Create the new series with updated values
+      const newRecurrenceType = updates.recurrenceType ?? (commitment.recurrence_type as RecurrenceType) ?? "weekly";
+      const newTimesPerDay = updates.timesPerDay ?? commitment.times_per_day ?? 1;
+      const newDaysOfWeek = updates.daysOfWeek ?? (commitment.repeat_days_of_week as DayOfWeek[]) ?? null;
+
+      const { data: newCommitment, error: insertError } = await supabase
+        .from("weekly_commitments")
+        .insert({
+          user_id: user.id,
+          title: updates.title ?? commitment.title,
+          goal_id: updates.goalId !== undefined ? updates.goalId : commitment.goal_id,
+          task_type: "recurring",
+          recurrence_type: newRecurrenceType,
+          times_per_day: newTimesPerDay,
+          repeat_days_of_week: newDaysOfWeek,
+          default_time_start: updates.timeStart !== undefined ? updates.timeStart : commitment.default_time_start,
+          default_time_end: updates.timeEnd !== undefined ? updates.timeEnd : commitment.default_time_end,
+          flexible_time: updates.timeStart !== undefined ? !updates.timeStart : commitment.flexible_time,
+          commitment_type: commitment.commitment_type,
+          is_active: true,
+          start_date: splitDate,
+          end_date: commitment.end_date, // Preserve original end date if any
+          // Legacy fields
+          repeat_frequency: newRecurrenceType === 'daily' ? 'daily' : 'weekly',
+          repeat_times_per_period: newRecurrenceType === 'daily' 
+            ? newTimesPerDay 
+            : (newDaysOfWeek?.length || 1),
+          frequency_json: { 
+            times_per_week: newRecurrenceType === 'daily' 
+              ? 7 
+              : (newDaysOfWeek?.length || 1) 
+          },
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      return newCommitment;
+    },
+    [user]
+  );
+
   return {
     createRecurringTask,
     createIndependentTask,
@@ -505,5 +660,7 @@ export const useTaskScheduling = () => {
     updateRecurrenceRules,
     convertToRecurring,
     convertToIndependent,
+    createOccurrenceException,
+    splitRecurringSeries,
   };
 };

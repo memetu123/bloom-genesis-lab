@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Clock, RefreshCw, Calendar, Trash2, Unlink, Check, ChevronDown, ChevronRight } from "lucide-react";
 import {
   Dialog,
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -24,6 +23,7 @@ import { formatDateWithDay } from "@/lib/formatPreferences";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { TaskType, RecurrenceType, DayOfWeek } from "@/types/scheduling";
+import RecurringEditConfirmDialog from "@/components/RecurringEditConfirmDialog";
 
 /**
  * TaskDetailModal - Modal for viewing/editing task details
@@ -68,7 +68,7 @@ const TaskDetailModal = ({
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
   const { preferences, goals: allGoals, visionsMap } = useAppData();
-  const { convertToRecurring, detachInstance, updateRecurrenceRules } =
+  const { convertToRecurring, updateRecurrenceRules, createOccurrenceException, splitRecurringSeries } =
     useTaskScheduling();
 
   const [title, setTitle] = useState("");
@@ -87,6 +87,18 @@ const TaskDetailModal = ({
   const [notes, setNotes] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Store original values to detect changes
+  const [originalValues, setOriginalValues] = useState<{
+    title: string;
+    timeStart: string;
+    timeEnd: string;
+    recurrenceType: RecurrenceType;
+    timesPerDay: string;
+    selectedDays: DayOfWeek[];
+    goalId: string;
+  } | null>(null);
 
   const dateKey = format(date, "yyyy-MM-dd");
 
@@ -126,6 +138,8 @@ const TaskDetailModal = ({
       setNotes("");
       setStartDate("");
       setEndDate("");
+      setShowConfirmDialog(false);
+      setOriginalValues(null);
 
       // Fetch notes and other data
       fetchTaskNotes(task);
@@ -177,18 +191,35 @@ const TaskDetailModal = ({
   const fetchRecurrenceRulesAndGoal = async (commitmentId: string) => {
     const { data } = await supabase
       .from("weekly_commitments")
-      .select("recurrence_type, times_per_day, repeat_days_of_week, goal_id, start_date, end_date")
+      .select("recurrence_type, times_per_day, repeat_days_of_week, goal_id, start_date, end_date, title, default_time_start, default_time_end")
       .eq("id", commitmentId)
       .maybeSingle();
 
     if (data) {
-      setRecurrenceType((data.recurrence_type as RecurrenceType) || "weekly");
-      setTimesPerDay((data.times_per_day || 1).toString());
-      setSelectedDays((data.repeat_days_of_week as DayOfWeek[]) || []);
-      setGoalId(data.goal_id || "");
-      setOriginalGoalId(data.goal_id || "");
+      const recType = (data.recurrence_type as RecurrenceType) || "weekly";
+      const tpd = (data.times_per_day || 1).toString();
+      const days = (data.repeat_days_of_week as DayOfWeek[]) || [];
+      const gId = data.goal_id || "";
+      
+      setRecurrenceType(recType);
+      setTimesPerDay(tpd);
+      setSelectedDays(days);
+      setGoalId(gId);
+      setOriginalGoalId(gId);
       setStartDate(data.start_date || "");
       setEndDate(data.end_date || "");
+      
+      // Store original values for change detection
+      // Use commitment's default values as the baseline
+      setOriginalValues({
+        title: data.title || task?.title || "",
+        timeStart: data.default_time_start || "",
+        timeEnd: data.default_time_end || "",
+        recurrenceType: recType,
+        timesPerDay: tpd,
+        selectedDays: days,
+        goalId: gId,
+      });
     }
   };
 
@@ -224,114 +255,87 @@ const TaskDetailModal = ({
     );
   };
 
-  const handleSave = async () => {
+  /**
+   * Handle save with scope selection
+   * @param scope - "all" for all occurrences, "this" for only this date, "future" for this and future
+   */
+  const handleSave = async (scope: "all" | "this" | "future") => {
     if (!user || !task) return;
     setSaving(true);
 
     try {
-      const isRecurring = task.commitmentId !== null;
+      const isRecurring = task.commitmentId !== null && !task.isDetached;
       const goalChanged = goalId !== originalGoalId;
 
       if (isRecurring && task.commitmentId) {
-        // Update weekly commitment (including goal_id and dates if changed)
-        await supabase
-          .from("weekly_commitments")
-          .update({
-            title,
-            default_time_start: timeStart || null,
-            default_time_end: timeEnd || null,
-            flexible_time: !timeStart,
-            start_date: startDate || null,
-            end_date: endDate || null,
-            ...(goalChanged ? { goal_id: goalId || null } : {}),
-          })
-          .eq("id", task.commitmentId);
-
-        // Update recurrence rules if changed
-        if (showRepetitionEditor) {
-          await updateRecurrenceRules(task.commitmentId, {
-            recurrenceType,
-            timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
-            daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
+        if (scope === "this") {
+          // Only this occurrence - create an exception
+          await createOccurrenceException(task.commitmentId, dateKey, {
+            title: title !== originalValues?.title ? title : undefined,
+            timeStart: timeStart !== originalValues?.timeStart ? (timeStart || null) : undefined,
+            timeEnd: timeEnd !== originalValues?.timeEnd ? (timeEnd || null) : undefined,
+            goalId: goalChanged ? (goalId || null) : undefined,
           });
+          toast.success("This occurrence updated");
+        } else if (scope === "future") {
+          // This and future occurrences - split the series
+          await splitRecurringSeries(task.commitmentId, dateKey, {
+            title,
+            timeStart: timeStart || null,
+            timeEnd: timeEnd || null,
+            goalId: goalId || null,
+            recurrenceType: showRepetitionEditor ? recurrenceType : undefined,
+            timesPerDay: showRepetitionEditor && recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
+            daysOfWeek: showRepetitionEditor && recurrenceType === "weekly" ? selectedDays : undefined,
+          });
+          toast.success("This and future occurrences updated");
+        } else {
+          // scope === "all" - update the entire series (existing behavior for non-shared changes)
+          await supabase
+            .from("weekly_commitments")
+            .update({
+              title,
+              default_time_start: timeStart || null,
+              default_time_end: timeEnd || null,
+              flexible_time: !timeStart,
+              start_date: startDate || null,
+              end_date: endDate || null,
+              ...(goalChanged ? { goal_id: goalId || null } : {}),
+            })
+            .eq("id", task.commitmentId);
+
+          // Update recurrence rules if changed
+          if (showRepetitionEditor) {
+            await updateRecurrenceRules(task.commitmentId, {
+              recurrenceType,
+              timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
+              daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
+            });
+          }
         }
-      } else if (!isRecurring && goalChanged) {
-        // For independent tasks, handle goal linking via weekly_commitment
-        // UUIDs have 5 parts, recurring task IDs have 8 parts ({uuid}-{dateKey})
-        const parts = task.id.split("-");
-        const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
-        
-        // Get the completion record to check if it has a commitment_id
-        const { data: completion } = await supabase
+
+        // Handle completion status and notes regardless of scope
+        // (completion changes don't need scope confirmation)
+        const { data: existingCompletion } = await supabase
           .from("commitment_completions")
-          .select("commitment_id")
-          .eq("id", actualId)
+          .select("*")
+          .eq("commitment_id", task.commitmentId)
+          .eq("completed_date", dateKey)
           .maybeSingle();
 
-        if (completion?.commitment_id) {
-          // Already has a linking commitment - update or remove goal_id
-          if (goalId) {
-            await supabase
-              .from("weekly_commitments")
-              .update({ goal_id: goalId })
-              .eq("id", completion.commitment_id);
-          } else {
-            // Clear goal_id
-            await supabase
-              .from("weekly_commitments")
-              .update({ goal_id: null })
-              .eq("id", completion.commitment_id);
-          }
-        } else if (goalId) {
-          // No linking commitment exists - create one to link the task to the goal
-          const { data: newCommitment } = await supabase
-            .from("weekly_commitments")
-            .insert({
-              user_id: user.id,
-              title: title,
-              goal_id: goalId,
-              is_active: false, // Mark as inactive since it's just for linking
-              recurrence_type: "none",
-              task_type: "independent",
-            })
-            .select("id")
-            .single();
-
-          if (newCommitment) {
-            // Link the completion to this new commitment
-            await supabase
-              .from("commitment_completions")
-              .update({ commitment_id: newCommitment.id })
-              .eq("id", actualId);
-          }
-        }
-      }
-
-      // Handle completion status and notes
-      const idParts = task.id.split("-");
-      const completionId = idParts.length === 5 ? task.id : idParts.slice(0, 5).join("-");
-      const { data: existingCompletion } = await supabase
-        .from("commitment_completions")
-        .select("*")
-        .eq(isRecurring ? "commitment_id" : "id", isRecurring ? task.commitmentId : completionId)
-        .eq("completed_date", dateKey)
-        .maybeSingle();
-
-      if (isRecurring && task.commitmentId) {
         if (existingCompletion) {
-          if (!isCompleted && !notes) {
-            // No completion, no notes - delete the record
+          if (!isCompleted && !notes && scope === "all") {
+            // No completion, no notes - delete the record (only if not creating exception)
             await supabase
               .from("commitment_completions")
               .delete()
               .eq("id", existingCompletion.id);
 
-            // Update weekly checkin if it was previously completed (task.isCompleted was true)
             if (task.isCompleted) {
               await updateCheckinCount(task.commitmentId, -1);
             }
           } else {
-            // Update existing completion - keep the record for notes or completion status
+            // Update existing completion
             const wasCompleted = task.isCompleted;
             const nowCompleted = isCompleted;
             
@@ -343,10 +347,10 @@ const TaskDetailModal = ({
                 is_flexible_time: !timeStart,
                 notes: notes || null,
                 is_completed: isCompleted,
+                title: scope === "this" ? title : undefined,
               })
               .eq("id", existingCompletion.id);
 
-            // Update checkin count only if completion status changed
             if (!wasCompleted && nowCompleted) {
               await updateCheckinCount(task.commitmentId, 1);
             } else if (wasCompleted && !nowCompleted) {
@@ -354,7 +358,7 @@ const TaskDetailModal = ({
             }
           }
         } else if (isCompleted || notes) {
-          // Create completion record for recurring task (either completed or has notes)
+          // Create completion record
           await supabase.from("commitment_completions").insert({
             user_id: user.id,
             commitment_id: task.commitmentId,
@@ -365,15 +369,62 @@ const TaskDetailModal = ({
             task_type: "recurring",
             notes: notes || null,
             is_completed: isCompleted,
+            title: scope === "this" ? title : undefined,
+            is_detached: scope === "this",
           });
 
-          // Update weekly checkin actual_count only if completing
           if (isCompleted) {
             await updateCheckinCount(task.commitmentId, 1);
           }
         }
-      } else if (!isRecurring) {
-        // Independent task - just update it
+      } else {
+        // Independent or detached task - handle goal linking
+        if (goalChanged) {
+          const parts = task.id.split("-");
+          const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
+          
+          const { data: completion } = await supabase
+            .from("commitment_completions")
+            .select("commitment_id")
+            .eq("id", actualId)
+            .maybeSingle();
+
+          if (completion?.commitment_id) {
+            if (goalId) {
+              await supabase
+                .from("weekly_commitments")
+                .update({ goal_id: goalId })
+                .eq("id", completion.commitment_id);
+            } else {
+              await supabase
+                .from("weekly_commitments")
+                .update({ goal_id: null })
+                .eq("id", completion.commitment_id);
+            }
+          } else if (goalId) {
+            const { data: newCommitment } = await supabase
+              .from("weekly_commitments")
+              .insert({
+                user_id: user.id,
+                title: title,
+                goal_id: goalId,
+                is_active: false,
+                recurrence_type: "none",
+                task_type: "independent",
+              })
+              .select("id")
+              .single();
+
+            if (newCommitment) {
+              await supabase
+                .from("commitment_completions")
+                .update({ commitment_id: newCommitment.id })
+                .eq("id", actualId);
+            }
+          }
+        }
+
+        // Update the task directly
         const updateParts = task.id.split("-");
         const updateId = updateParts.length === 5 ? task.id : updateParts.slice(0, 5).join("-");
         
@@ -421,68 +472,93 @@ const TaskDetailModal = ({
   };
 
   /**
-   * Handle detaching this instance from recurring series (only affects this day)
+   * Detect if any shared attributes have changed for recurring tasks
    */
-  const handleDetachInstance = async () => {
-    if (!user || !task || !task.commitmentId) return;
-    setSaving(true);
-
-    try {
-      await detachInstance(task.commitmentId, dateKey);
-      toast.success("This day is now independent from the recurring series");
-      onUpdate();
-      onOpenChange(false);
-    } catch (error: any) {
-      console.error("Error detaching instance:", error);
-      toast.error("Failed to detach instance");
-    } finally {
-      setSaving(false);
+  const hasSharedAttributeChanges = useMemo(() => {
+    if (!originalValues || !task?.commitmentId || task.isDetached) return false;
+    
+    // Compare current values with original
+    if (title !== originalValues.title) return true;
+    if (timeStart !== originalValues.timeStart) return true;
+    if (timeEnd !== originalValues.timeEnd) return true;
+    if (goalId !== originalValues.goalId) return true;
+    
+    // Check recurrence rule changes only if editor is open
+    if (showRepetitionEditor) {
+      if (recurrenceType !== originalValues.recurrenceType) return true;
+      if (timesPerDay !== originalValues.timesPerDay) return true;
+      
+      // Compare selectedDays arrays
+      const sortedCurrent = [...selectedDays].sort();
+      const sortedOriginal = [...originalValues.selectedDays].sort();
+      if (sortedCurrent.length !== sortedOriginal.length) return true;
+      if (sortedCurrent.some((day, i) => day !== sortedOriginal[i])) return true;
     }
+    
+    return false;
+  }, [title, timeStart, timeEnd, goalId, recurrenceType, timesPerDay, selectedDays, showRepetitionEditor, originalValues, task]);
+
+  /**
+   * Handle save button click - shows confirmation for recurring tasks with changes
+   */
+  const handleSaveClick = () => {
+    if (!task) return;
+    
+    const isRecurring = task.commitmentId !== null && !task.isDetached;
+    
+    // If it's a recurring task with shared attribute changes, show confirmation
+    if (isRecurring && hasSharedAttributeChanges) {
+      setShowConfirmDialog(true);
+      return;
+    }
+    
+    // Otherwise, save directly (for independent tasks, or just completion/notes changes)
+    handleSave("all");
   };
 
   /**
-   * Handle converting task type (full conversion - deactivates series)
+   * Handle confirmed save with scope selection
+   */
+  const handleConfirmedSave = async (scope: "this" | "future") => {
+    setShowConfirmDialog(false);
+    await handleSave(scope);
+  };
+
+  /**
+   * Handle converting independent task to recurring
    */
   const handleConvertTaskType = async () => {
     if (!user || !task) return;
     setSaving(true);
 
     try {
-      const isCurrentlyRecurring = task.commitmentId !== null && !task.isDetached;
-      
-      if (isCurrentlyRecurring && task.commitmentId) {
-        // For recurring tasks, use detachInstance
-        await detachInstance(task.commitmentId, dateKey);
-        toast.success("This day is now independent");
-      } else {
-        // Convert independent to recurring - need recurrence rules first
-        if (!showRepetitionEditor) {
-          // Show the recurrence editor first so user can configure rules
-          setShowRepetitionEditor(true);
-          setRecurrenceType("weekly");
-          setSaving(false);
-          return;
-        }
-        
-        // Validate weekly recurrence has days selected
-        if (recurrenceType === "weekly" && selectedDays.length === 0) {
-          toast.error("Please select at least one day for weekly recurrence");
-          setSaving(false);
-          return;
-        }
-        
-        // Now actually convert with the configured rules
-        // UUIDs have 5 parts, recurring task IDs have 8 parts ({uuid}-{dateKey})
-        const convertParts = task.id.split("-");
-        const convertId = convertParts.length === 5 ? task.id : convertParts.slice(0, 5).join("-");
-        
-        await convertToRecurring(convertId, {
-          recurrenceType,
-          timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
-          daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
-        });
-        toast.success("Converted to recurring task");
+      // Convert independent to recurring - need recurrence rules first
+      if (!showRepetitionEditor) {
+        // Show the recurrence editor first so user can configure rules
+        setShowRepetitionEditor(true);
+        setRecurrenceType("weekly");
+        setSaving(false);
+        return;
       }
+      
+      // Validate weekly recurrence has days selected
+      if (recurrenceType === "weekly" && selectedDays.length === 0) {
+        toast.error("Please select at least one day for weekly recurrence");
+        setSaving(false);
+        return;
+      }
+      
+      // Now actually convert with the configured rules
+      // UUIDs have 5 parts, recurring task IDs have 8 parts ({uuid}-{dateKey})
+      const convertParts = task.id.split("-");
+      const convertId = convertParts.length === 5 ? task.id : convertParts.slice(0, 5).join("-");
+      
+      await convertToRecurring(convertId, {
+        recurrenceType,
+        timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
+        daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
+      });
+      toast.success("Converted to recurring task");
 
       onUpdate();
       onOpenChange(false);
@@ -632,18 +708,11 @@ const TaskDetailModal = ({
               )}
             </div>
 
-            {/* Detach toggle row */}
-            {isRecurring && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground/80">Detach this instance</span>
-                <Switch
-                  id="detach-toggle"
-                  checked={false}
-                  onCheckedChange={handleDetachInstance}
-                  disabled={saving}
-                  className="scale-90"
-                />
-              </div>
+            {/* Info for recurring tasks - shows they can edit rules */}
+            {isRecurring && !showRepetitionEditor && (
+              <p className="text-[10px] text-muted-foreground/70 leading-tight">
+                Changes to this task will prompt you to choose which occurrences to update.
+              </p>
             )}
 
             {/* Convert to recurring for independent tasks */}
@@ -907,7 +976,7 @@ const TaskDetailModal = ({
 
         {/* Actions - Save primary, Delete as text link - stable footer */}
         <div className="px-5 pb-5 pt-3 space-y-3 shrink-0 border-t border-border/30">
-          <Button onClick={handleSave} disabled={saving} className="w-full h-10 rounded-lg font-medium">
+          <Button onClick={handleSaveClick} disabled={saving} className="w-full h-10 rounded-lg font-medium">
             {saving ? "Saving..." : "Save changes"}
           </Button>
 
@@ -921,6 +990,14 @@ const TaskDetailModal = ({
           </button>
         </div>
       </DialogContent>
+
+      {/* Confirmation dialog for recurring task edits */}
+      <RecurringEditConfirmDialog
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+        onConfirm={handleConfirmedSave}
+        saving={saving}
+      />
     </Dialog>
   );
 };
