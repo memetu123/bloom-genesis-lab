@@ -1,11 +1,12 @@
-import { ReactNode, useMemo } from "react";
+import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { CalendarDays, User, Settings, Trash2, LogOut, Compass, ChevronDown } from "lucide-react";
+import { CalendarDays, User, Settings, Trash2, LogOut, Compass } from "lucide-react";
 import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import GlobalSearch from "@/components/GlobalSearch";
+import CalendarViewSelector from "@/components/calendar/CalendarViewSelector";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,15 +30,6 @@ import {
 interface AppLayoutProps {
   children: ReactNode;
 }
-
-// View labels for the calendar dropdown
-const VIEW_LABELS = {
-  weekly: "Weekly",
-  daily: "Daily",
-  schedule: "Schedule",
-} as const;
-
-type CalendarViewType = keyof typeof VIEW_LABELS;
 
 // Mobile navigation items - icon-only with accessibility labels
 const mobileNavItems = [
@@ -63,37 +55,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     return email.charAt(0).toUpperCase();
   };
 
-  // Determine current calendar view from path
-  const currentCalendarView = useMemo((): CalendarViewType => {
-    if (location.pathname.startsWith("/weekly")) return "weekly";
-    if (location.pathname.startsWith("/daily")) return "daily";
-    if (location.pathname.startsWith("/schedule")) return "schedule";
-    return "daily"; // default
-  }, [location.pathname]);
-
-  // Check if currently on a calendar view
-  const isOnCalendarView = location.pathname.startsWith("/weekly") || 
-    location.pathname.startsWith("/daily") || 
-    location.pathname.startsWith("/schedule");
-
-  // Navigate to a specific calendar view, preserving date param
-  const navigateToCalendarView = (view: CalendarViewType) => {
-    const searchParams = new URLSearchParams(location.search);
-    const dateParam = searchParams.get("date");
-    const queryString = dateParam ? `?date=${dateParam}` : "";
-    
-    switch (view) {
-      case "weekly":
-        navigate(`/weekly${queryString}`);
-        break;
-      case "daily":
-        navigate(`/daily${queryString}`);
-        break;
-      case "schedule":
-        navigate(`/schedule${queryString}`);
-        break;
-    }
-  };
 
   // Check if path is active - mobile-only: /weekly also counts as active for "Today"
   const isActive = (path: string) => {
@@ -133,52 +94,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 North Star
               </button>
               
-              {/* Calendar View Selector Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-calm",
-                      isOnCalendarView
-                        ? "text-primary bg-primary/10"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    )}
-                  >
-                    <CalendarDays className="h-4 w-4" />
-                    {VIEW_LABELS[currentCalendarView]}
-                    <ChevronDown className="h-3.5 w-3.5 ml-0.5 text-muted-foreground/60" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40 bg-popover border border-border shadow-md">
-                  <DropdownMenuItem
-                    onClick={() => navigateToCalendarView("daily")}
-                    className={cn(
-                      "cursor-pointer",
-                      currentCalendarView === "daily" && "bg-accent"
-                    )}
-                  >
-                    Daily
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => navigateToCalendarView("weekly")}
-                    className={cn(
-                      "cursor-pointer",
-                      currentCalendarView === "weekly" && "bg-accent"
-                    )}
-                  >
-                    Weekly
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => navigateToCalendarView("schedule")}
-                    className={cn(
-                      "cursor-pointer",
-                      currentCalendarView === "schedule" && "bg-accent"
-                    )}
-                  >
-                    Schedule
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Calendar View Selector - Split Button */}
+              <CalendarViewSelector />
             </nav>
 
             {/* Global Search and User Menu */}
