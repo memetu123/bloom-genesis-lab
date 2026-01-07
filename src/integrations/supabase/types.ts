@@ -119,6 +119,7 @@ export type Database = {
       }
       goals: {
         Row: {
+          archived_at: string | null
           created_at: string | null
           deleted_at: string | null
           description: string | null
@@ -137,6 +138,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -155,6 +157,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -198,6 +201,7 @@ export type Database = {
       }
       life_visions: {
         Row: {
+          archived_at: string | null
           created_at: string | null
           deleted_at: string | null
           description: string | null
@@ -211,6 +215,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -224,6 +229,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -385,6 +391,7 @@ export type Database = {
       }
       weekly_commitments: {
         Row: {
+          archived_at: string | null
           commitment_type: Database["public"]["Enums"]["commitment_type"]
           created_at: string | null
           default_time_end: string | null
@@ -409,6 +416,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           commitment_type?: Database["public"]["Enums"]["commitment_type"]
           created_at?: string | null
           default_time_end?: string | null
@@ -433,6 +441,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           commitment_type?: Database["public"]["Enums"]["commitment_type"]
           created_at?: string | null
           default_time_end?: string | null
