@@ -354,16 +354,29 @@ const Dashboard = () => {
     }
   };
 
-  const handleArchiveVision = async (visionId: string) => {
+  const handleArchiveVision = async (visionId: string, visionTitle: string) => {
     try {
       const { error } = await supabase
         .from("life_visions")
-        .update({ status: "archived" })
+        .update({ status: "archived", archived_at: new Date().toISOString() })
         .eq("id", visionId);
 
       if (error) throw error;
       refetchVisions();
-      toast.success("Vision archived");
+      
+      toast("Vision archived", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await supabase
+              .from("life_visions")
+              .update({ status: "active", archived_at: null })
+              .eq("id", visionId);
+            refetchVisions();
+          }
+        },
+        duration: 5000
+      });
     } catch (err) {
       toast.error("Failed to archive vision");
     }
@@ -731,7 +744,7 @@ const Dashboard = () => {
                   <DropdownMenuSeparator />
                   {/* Section 3: Destructive */}
                   <DropdownMenuItem 
-                    onClick={() => handleArchiveVision(vision.id)}
+                    onClick={() => handleArchiveVision(vision.id, vision.title)}
                     className="text-muted-foreground"
                   >
                     Archive vision
@@ -1338,7 +1351,7 @@ const Dashboard = () => {
             <button
               onClick={() => {
                 setMobileSheetOpen(false);
-                if (mobileSheetVision) handleArchiveVision(mobileSheetVision.id);
+                if (mobileSheetVision) handleArchiveVision(mobileSheetVision.id, mobileSheetVision.title);
               }}
               className="w-full text-left px-4 py-3 text-sm text-muted-foreground hover:bg-muted rounded-md transition-colors"
             >
