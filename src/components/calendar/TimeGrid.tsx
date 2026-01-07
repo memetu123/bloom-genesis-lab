@@ -1,5 +1,5 @@
-import { memo, useMemo } from "react";
-import { format, isSameDay } from "date-fns";
+import { memo, useMemo, useState, useCallback, useRef } from "react";
+import { format, isSameDay, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/formatPreferences";
 import { useTimeDisplay } from "./TimeDisplayContext";
@@ -14,6 +14,7 @@ import type { UserPreferences } from "@/hooks/useAppData";
  * - Task cards positioned by time, scaled by duration
  * - Horizontal scrolling when columns are too narrow
  * - Compact mode: hides all empty time, shows only tasks stacked chronologically
+ * - Drag and drop to reschedule tasks
  */
 
 export interface TimeGridTask {
@@ -36,10 +37,26 @@ interface DayColumn {
   tasks: TimeGridTask[];
 }
 
+interface DragInfo {
+  task: TimeGridTask;
+  sourceDate: Date;
+  sourceDateKey: string;
+  offsetY: number; // Mouse offset from top of card
+  startY: number; // Initial mouse Y position
+  startX: number; // Initial mouse X position
+}
+
+interface DropTarget {
+  dateKey: string;
+  date: Date;
+  timeMinutes: number;
+}
+
 interface TimeGridProps {
   columns: DayColumn[];
   onTaskClick: (task: TimeGridTask, date: Date) => void;
   onToggleComplete: (task: TimeGridTask, date: Date) => void;
+  onTaskDrop?: (task: TimeGridTask, sourceDate: Date, targetDate: Date, newTimeStart: string, newTimeEnd: string) => void;
   timeFormat: UserPreferences["timeFormat"];
   minColumnWidth?: number;
   className?: string;
@@ -167,23 +184,29 @@ const calculateOverlappingLayout = (
   return result;
 };
 
-// Task card component for Full mode
+// Task card component for Full mode with drag support
 const TaskCard = memo(({
   task,
   date,
+  dateKey,
   position,
   column,
   totalColumns,
   onClick,
   onToggle,
+  onDragStart,
+  isDragging,
 }: {
   task: TimeGridTask;
   date: Date;
+  dateKey: string;
   position: { top: number; height: number };
   column: number;
   totalColumns: number;
   onClick: () => void;
   onToggle: () => void;
+  onDragStart: (e: React.MouseEvent | React.TouchEvent) => void;
+  isDragging: boolean;
 }) => {
   const instanceLabel = task.totalInstances && task.totalInstances > 1
     ? ` (${task.instanceNumber || 1}/${task.totalInstances})`
@@ -195,14 +218,27 @@ const TaskCard = memo(({
   const widthPercent = 100 / totalColumns;
   const leftPercent = column * widthPercent;
   
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Don't start drag if clicking the toggle button
+    if ((e.target as HTMLElement).closest('button')) return;
+    onDragStart(e);
+  };
+  
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Don't start drag if clicking the toggle button
+    if ((e.target as HTMLElement).closest('button')) return;
+    onDragStart(e);
+  };
+  
   return (
     <div
       className={cn(
-        "absolute rounded-md px-2 transition-all cursor-pointer",
+        "absolute rounded-md px-2 transition-all select-none",
         "border overflow-hidden",
+        isDragging && "opacity-30",
         task.isCompleted
           ? "bg-muted/50 border-muted-foreground/20"
-          : "bg-card border-border hover:border-foreground/20 hover:shadow-sm"
+          : "bg-card border-border hover:border-foreground/20 hover:shadow-sm cursor-grab active:cursor-grabbing"
       )}
       style={{
         top: `${position.top}px`,
@@ -211,7 +247,14 @@ const TaskCard = memo(({
         left: `calc(${leftPercent}% + ${gapPx}px)`,
         width: `calc(${widthPercent}% - ${gapPx * 2}px)`,
       }}
-      onClick={onClick}
+      onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
+      onClick={(e) => {
+        // Only trigger click if not dragging
+        if (!isDragging) {
+          onClick();
+        }
+      }}
     >
       <div className={cn(
         "flex items-start gap-1.5 h-full",
@@ -309,12 +352,20 @@ const TimeGrid = ({
   columns,
   onTaskClick,
   onToggleComplete,
+  onTaskDrop,
   timeFormat,
   minColumnWidth = DEFAULT_MIN_COLUMN_WIDTH,
   className,
 }: TimeGridProps) => {
   const { mode } = useTimeDisplay();
   const isCompactMode = mode === "compact";
+  
+  // Drag state
+  const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const columnsRef = useRef<HTMLDivElement>(null);
   
   // Calculate adaptive time range based on tasks (Full mode only)
   const { startHour, endHour, hours } = useMemo(() => {
@@ -379,6 +430,163 @@ const TimeGrid = ({
   
   const today = new Date();
   
+  // Helper: Convert pixel position to time
+  const pixelToTime = useCallback((pixelY: number): { hours: number; minutes: number } => {
+    const minutesFromStart = (pixelY / HOUR_HEIGHT) * 60;
+    const totalMinutes = startHour * 60 + minutesFromStart;
+    const hours = Math.floor(totalMinutes / 60);
+    // Snap to 15-minute increments
+    const minutes = Math.round((totalMinutes % 60) / 15) * 15;
+    return { hours: Math.max(0, Math.min(23, hours)), minutes: minutes % 60 };
+  }, [startHour]);
+  
+  // Helper: Format time from hours and minutes
+  const formatTimeFromParts = (hours: number, minutes: number): string => {
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+  };
+  
+  // Start dragging
+  const handleDragStart = useCallback((task: TimeGridTask, date: Date, dateKey: string, e: React.MouseEvent | React.TouchEvent) => {
+    if (isCompactMode) return; // No drag in compact mode
+    
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    
+    // Calculate offset from top of card
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const offsetY = clientY - rect.top;
+    
+    setDragInfo({
+      task,
+      sourceDate: date,
+      sourceDateKey: dateKey,
+      offsetY,
+      startY: clientY,
+      startX: clientX,
+    });
+    setIsDragging(true);
+    
+    // Prevent text selection
+    e.preventDefault();
+  }, [isCompactMode]);
+  
+  // Handle drag movement
+  const handleMouseMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!dragInfo || !columnsRef.current) return;
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    // Find which column we're over
+    const columnsContainer = columnsRef.current;
+    const columnElements = columnsContainer.querySelectorAll('[data-column-key]');
+    
+    let targetColumn: DayColumn | null = null;
+    let targetColumnElement: Element | null = null;
+    
+    columnElements.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right) {
+        const dateKey = el.getAttribute('data-column-key');
+        const col = columns.find(c => c.dateKey === dateKey);
+        if (col) {
+          targetColumn = col;
+          targetColumnElement = el;
+        }
+      }
+    });
+    
+    if (targetColumn && targetColumnElement) {
+      const rect = targetColumnElement.getBoundingClientRect();
+      const headerHeight = 40; // Height of day header
+      const relativeY = clientY - rect.top - headerHeight;
+      const { hours, minutes } = pixelToTime(Math.max(0, relativeY));
+      
+      setDropTarget({
+        dateKey: targetColumn.dateKey,
+        date: targetColumn.date,
+        timeMinutes: hours * 60 + minutes,
+      });
+    } else {
+      setDropTarget(null);
+    }
+  }, [dragInfo, columns, pixelToTime]);
+  
+  // Handle drag end
+  const handleMouseUp = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!dragInfo || !dropTarget || !onTaskDrop) {
+      setDragInfo(null);
+      setDropTarget(null);
+      setIsDragging(false);
+      return;
+    }
+    
+    // Calculate new time
+    const newStartHours = Math.floor(dropTarget.timeMinutes / 60);
+    const newStartMinutes = dropTarget.timeMinutes % 60;
+    const newTimeStart = formatTimeFromParts(newStartHours, newStartMinutes);
+    
+    // Calculate duration and new end time
+    let duration = 30; // Default 30 min
+    if (dragInfo.task.timeStart && dragInfo.task.timeEnd) {
+      const startMin = timeToMinutes(dragInfo.task.timeStart);
+      const endMin = timeToMinutes(dragInfo.task.timeEnd);
+      duration = endMin - startMin;
+    }
+    
+    const newEndMinutes = dropTarget.timeMinutes + duration;
+    const newEndHours = Math.floor(newEndMinutes / 60);
+    const newEndMins = newEndMinutes % 60;
+    const newTimeEnd = formatTimeFromParts(Math.min(23, newEndHours), newEndMins % 60);
+    
+    // Trigger the drop callback
+    onTaskDrop(
+      dragInfo.task,
+      dragInfo.sourceDate,
+      dropTarget.date,
+      newTimeStart,
+      newTimeEnd
+    );
+    
+    setDragInfo(null);
+    setDropTarget(null);
+    setIsDragging(false);
+  }, [dragInfo, dropTarget, onTaskDrop]);
+  
+  // Set up global mouse/touch listeners for dragging
+  useState(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleMouseMove);
+      document.addEventListener('touchend', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleMouseMove);
+        document.removeEventListener('touchend', handleMouseUp);
+      };
+    }
+  });
+  
+  // Use effect for drag listeners
+  const dragListenersRef = useRef<boolean>(false);
+  if (isDragging && !dragListenersRef.current) {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchmove', handleMouseMove, { passive: false });
+    document.addEventListener('touchend', handleMouseUp);
+    dragListenersRef.current = true;
+  } else if (!isDragging && dragListenersRef.current) {
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+    document.removeEventListener('touchmove', handleMouseMove);
+    document.removeEventListener('touchend', handleMouseUp);
+    dragListenersRef.current = false;
+  }
+  
   // Render compact mode column content
   const renderCompactColumn = (column: DayColumn) => {
     // Sort tasks chronologically by time
@@ -420,6 +628,12 @@ const TimeGrid = ({
     const scheduledTasks = column.tasks.filter(t => t.timeStart);
     const unscheduledTasks = column.tasks.filter(t => !t.timeStart);
     
+    // Calculate drop indicator position
+    const showDropIndicator = dropTarget && dropTarget.dateKey === column.dateKey;
+    const dropIndicatorTop = showDropIndicator 
+      ? ((dropTarget.timeMinutes - startHour * 60) / 60) * HOUR_HEIGHT
+      : 0;
+    
     return (
       <>
         {/* Time grid area */}
@@ -433,19 +647,34 @@ const TimeGrid = ({
             />
           ))}
           
-          {/* Scheduled task cards */}
-          {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              date={column.date}
-              position={{ top: position.top, height: position.height }}
-              column={col}
-              totalColumns={totalColumns}
-              onClick={() => onTaskClick(task, column.date)}
-              onToggle={() => onToggleComplete(task, column.date)}
+          {/* Drop indicator */}
+          {showDropIndicator && (
+            <div 
+              className="absolute left-1 right-1 h-0.5 bg-primary rounded-full z-20 pointer-events-none"
+              style={{ top: dropIndicatorTop }}
             />
-          ))}
+          )}
+          
+          {/* Scheduled task cards */}
+          {calculateOverlappingLayout(scheduledTasks, startHour).map(({ task, position, column: col, totalColumns }) => {
+            const isBeingDragged = dragInfo?.task.id === task.id && dragInfo?.sourceDateKey === column.dateKey;
+            
+            return (
+              <TaskCard
+                key={task.id}
+                task={task}
+                date={column.date}
+                dateKey={column.dateKey}
+                position={{ top: position.top, height: position.height }}
+                column={col}
+                totalColumns={totalColumns}
+                onClick={() => onTaskClick(task, column.date)}
+                onToggle={() => onToggleComplete(task, column.date)}
+                onDragStart={(e) => handleDragStart(task, column.date, column.dateKey, e)}
+                isDragging={isBeingDragged}
+              />
+            );
+          })}
         </div>
         
         {/* Unscheduled tasks section */}
@@ -525,13 +754,14 @@ const TimeGrid = ({
         )}
         
         {/* Day columns */}
-        <div className="flex flex-1">
+        <div className="flex flex-1" ref={columnsRef}>
           {columns.map((column) => {
             const isToday = isSameDay(column.date, today);
             
             return (
               <div
                 key={column.dateKey}
+                data-column-key={column.dateKey}
                 className="flex-1 border-r border-border/50 last:border-r-0"
                 style={{ minWidth: minColumnWidth }}
               >

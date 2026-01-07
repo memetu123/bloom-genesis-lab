@@ -319,8 +319,8 @@ export function useWeeklyData(
           const completionKey = `${commitment.id}-${dateKey}`;
           const completion = completionMap.get(completionKey);
 
-          // Skip if detached
-          if (completion?.is_detached) continue;
+          // Skip if detached (exception moved elsewhere) or deleted (skip marker)
+          if (completion?.is_detached || completion?.is_deleted) continue;
 
           const instanceCount = details.recurrenceType === 'daily' ? details.timesPerDay : 1;
           
