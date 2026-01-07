@@ -4,6 +4,7 @@ import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useWeeklyData, DayTask } from "@/hooks/useWeeklyData";
+import { useTaskScheduling } from "@/hooks/useTaskScheduling";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
 import MobileFAB from "@/components/mobile/MobileFAB";
 import MobileWeekStrip from "@/components/mobile/MobileWeekStrip";
+import TaskDragScopeDialog from "@/components/calendar/TaskDragScopeDialog";
 
 /**
  * Weekly Page - Google Calendar-inspired weekly view
@@ -45,6 +47,18 @@ const Weekly = () => {
   const [selectedTask, setSelectedTask] = useState<DayTask | null>(null);
   const [selectedTaskDate, setSelectedTaskDate] = useState<Date>(new Date());
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+
+  // Drag-drop scope dialog state
+  const [dragScopeDialogOpen, setDragScopeDialogOpen] = useState(false);
+  const [pendingDrop, setPendingDrop] = useState<{
+    task: TimeGridTask;
+    sourceDate: Date;
+    targetDate: Date;
+    newTimeStart: string;
+    newTimeEnd: string;
+  } | null>(null);
+
+  const { createOccurrenceException, updateInstanceTime } = useTaskScheduling();
 
   // Calculate week end
   const currentWeekEnd = useMemo(() => 
