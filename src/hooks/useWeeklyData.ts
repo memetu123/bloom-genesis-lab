@@ -165,14 +165,13 @@ export function useWeeklyData(
           .eq("user_id", user.id)
           .eq("period_start_date", weekStartStr),
         
-        // All completions for this week
+        // All completions for this week (include deleted markers for exclusion logic)
         supabase
           .from("commitment_completions")
           .select("*")
           .eq("user_id", user.id)
           .gte("completed_date", weekStartStr)
-          .lte("completed_date", weekEndStr)
-          .or("is_deleted.is.null,is_deleted.eq.false"),
+          .lte("completed_date", weekEndStr),
         
         // Task instances for completion tracking
         supabase
@@ -205,10 +204,10 @@ export function useWeeklyData(
         }
       }
 
-      // Independent/detached tasks by date
+      // Independent/detached tasks by date (exclude deleted markers)
       const independentByDate = new Map<string, any[]>();
       for (const c of allCompletions) {
-        if (c.task_type === "independent" || c.is_detached) {
+        if (!c.is_deleted && (c.task_type === "independent" || c.is_detached)) {
           const list = independentByDate.get(c.completed_date) || [];
           list.push(c);
           independentByDate.set(c.completed_date, list);
