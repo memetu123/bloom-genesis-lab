@@ -1512,15 +1512,29 @@ const Dashboard = () => {
 
       {/* ========== ADD VISION DIALOG ========== */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add New Vision</DialogTitle>
+            <DialogTitle className="sr-only">Add Vision</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label htmlFor="pillar">Pillar</Label>
+          <div className="space-y-6 pt-2">
+            {/* 1. Title - Primary input, larger and prominent */}
+            <div className="pr-8">
+              <Label htmlFor="vision-title" className="sr-only">Vision Title</Label>
+              <Input
+                id="vision-title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="Who do you want to become?"
+                className="text-lg font-medium border-2 focus:border-primary h-12"
+                autoFocus
+              />
+            </div>
+
+            {/* 2. Pillar - Required context */}
+            <div className="space-y-2">
+              <Label htmlFor="pillar" className="text-sm font-medium">Life area</Label>
               <Select value={selectedPillarId} onValueChange={setSelectedPillarId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Select a pillar" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1532,32 +1546,34 @@ const Dashboard = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Who do you want to become?"
-              />
+
+            {/* 3. Description - Optional, collapsed by default */}
+            {(newDescription || newTitle.trim()) && (
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-sm text-muted-foreground">
+                  Description <span className="text-xs">(optional)</span>
+                </Label>
+                <Textarea
+                  id="description"
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Add more details about your vision..."
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+            )}
+
+            {/* Submit */}
+            <div className="pt-2">
+              <Button 
+                onClick={handleAddVision} 
+                disabled={saving || !newTitle.trim() || !selectedPillarId}
+                className="w-full h-11"
+              >
+                {saving ? "Saving..." : "Add Vision"}
+              </Button>
             </div>
-            <div>
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Describe your vision..."
-                rows={3}
-              />
-            </div>
-            <Button 
-              onClick={handleAddVision} 
-              disabled={saving || !newTitle.trim() || !selectedPillarId}
-              className="w-full"
-            >
-              {saving ? "Saving..." : "Add Vision"}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

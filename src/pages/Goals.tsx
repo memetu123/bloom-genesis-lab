@@ -442,15 +442,48 @@ const Goals = () => {
 
       {/* Add goal dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add New Goal</DialogTitle>
+            <DialogTitle className="sr-only">Add Goal</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label>Vision</Label>
+          <div className="space-y-6 pt-2">
+            {/* 1. Title - Primary input, larger and prominent */}
+            <div className="pr-8">
+              <Label htmlFor="goal-title" className="sr-only">Goal Title</Label>
+              <Input
+                id="goal-title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="What do you want to achieve?"
+                className="text-lg font-medium border-2 focus:border-primary h-12"
+                autoFocus
+              />
+            </div>
+
+            {/* 2. Goal Type */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Type</Label>
+              <div className="flex gap-2">
+                {(["three_year", "one_year", "ninety_day"] as GoalType[]).map((type) => (
+                  <Button
+                    key={type}
+                    type="button"
+                    variant={selectedGoalType === type ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedGoalType(type)}
+                    className="flex-1"
+                  >
+                    {type === "three_year" ? "3-Year" : type === "one_year" ? "1-Year" : "90-Day"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Vision - Required context */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Vision</Label>
               <Select value={selectedVisionId} onValueChange={setSelectedVisionId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Select a vision" />
                 </SelectTrigger>
                 <SelectContent>
@@ -462,45 +495,34 @@ const Goals = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Goal Type</Label>
-              <Select value={selectedGoalType} onValueChange={(v) => setSelectedGoalType(v as GoalType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="three_year">3-Year Goal</SelectItem>
-                  <SelectItem value="one_year">1-Year Goal</SelectItem>
-                  <SelectItem value="ninety_day">90-Day Plan</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* 4. Description - Optional, only show after title has content */}
+            {newTitle.trim() && (
+              <div className="space-y-2">
+                <Label htmlFor="goal-description" className="text-sm text-muted-foreground">
+                  Description <span className="text-xs">(optional)</span>
+                </Label>
+                <Textarea
+                  id="goal-description"
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Add more details..."
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+            )}
+
+            {/* Submit */}
+            <div className="pt-2">
+              <Button 
+                onClick={handleAddGoal} 
+                disabled={saving || !newTitle.trim() || !selectedVisionId}
+                className="w-full h-11"
+              >
+                {saving ? "Saving..." : `Create ${selectedGoalType === "ninety_day" ? "90-Day Plan" : selectedGoalType === "one_year" ? "1-Year Goal" : "3-Year Goal"}`}
+              </Button>
             </div>
-            <div>
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="What do you want to achieve?"
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Add more details..."
-                rows={3}
-              />
-            </div>
-            <Button 
-              onClick={handleAddGoal} 
-              disabled={saving || !newTitle.trim() || !selectedVisionId}
-              className="w-full"
-            >
-              {saving ? "Saving..." : "Add Goal"}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

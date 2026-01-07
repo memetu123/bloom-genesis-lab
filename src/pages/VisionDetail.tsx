@@ -438,37 +438,51 @@ const VisionDetail = () => {
                 Add 3-Year Goal
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Add 3-Year Goal</DialogTitle>
+                <DialogTitle className="sr-only">Add 3-Year Goal</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 mt-4">
-                <div>
-                  <Label htmlFor="goal-title">Title</Label>
+              <div className="space-y-6 pt-2">
+                {/* 1. Title - Primary input, larger and prominent */}
+                <div className="pr-8">
+                  <Label htmlFor="goal-title" className="sr-only">Goal Title</Label>
                   <Input
                     id="goal-title"
                     value={newGoalTitle}
                     onChange={(e) => setNewGoalTitle(e.target.value)}
                     placeholder="What do you want to achieve in 3 years?"
+                    className="text-lg font-medium border-2 focus:border-primary h-12"
+                    autoFocus
                   />
                 </div>
-                <div>
-                  <Label htmlFor="goal-description">Description (optional)</Label>
-                  <Textarea
-                    id="goal-description"
-                    value={newGoalDescription}
-                    onChange={(e) => setNewGoalDescription(e.target.value)}
-                    placeholder="Add more details..."
-                    rows={3}
-                  />
+
+                {/* 2. Description - Optional, only show after title has content */}
+                {newGoalTitle.trim() && (
+                  <div className="space-y-2">
+                    <Label htmlFor="goal-description" className="text-sm text-muted-foreground">
+                      Description <span className="text-xs">(optional)</span>
+                    </Label>
+                    <Textarea
+                      id="goal-description"
+                      value={newGoalDescription}
+                      onChange={(e) => setNewGoalDescription(e.target.value)}
+                      placeholder="Add more details..."
+                      rows={2}
+                      className="resize-none"
+                    />
+                  </div>
+                )}
+
+                {/* Submit */}
+                <div className="pt-2">
+                  <Button 
+                    onClick={handleAddGoal} 
+                    disabled={saving || !newGoalTitle.trim()}
+                    className="w-full h-11"
+                  >
+                    {saving ? "Saving..." : "Create 3-Year Goal"}
+                  </Button>
                 </div>
-                <Button 
-                  onClick={handleAddGoal} 
-                  disabled={saving || !newGoalTitle.trim()}
-                  className="w-full"
-                >
-                  {saving ? "Saving..." : "Add Goal"}
-                </Button>
               </div>
             </DialogContent>
           </Dialog>

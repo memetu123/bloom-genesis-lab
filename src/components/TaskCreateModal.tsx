@@ -9,7 +9,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
-import { useAppData, Goal, Vision } from "@/hooks/useAppData";
+import { useAppData, Goal } from "@/hooks/useAppData";
 import type { RecurrenceType, DayOfWeek } from "@/types/scheduling";
 
 /**
@@ -66,11 +66,12 @@ const TaskCreateModal = ({
   defaultGoalId,
 }: TaskCreateModalProps) => {
   const { createRecurringTask, createIndependentTask } = useTaskScheduling();
-  const { goals: allGoals, visions, visionsMap } = useAppData();
+  const { goals: allGoals, visionsMap } = useAppData();
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
-  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("none");
+  const [repeats, setRepeats] = useState(false);
+  const [recurrenceType, setRecurrenceType] = useState<"daily" | "weekly">("weekly");
   const [timesPerDay, setTimesPerDay] = useState("1");
   const [selectedDays, setSelectedDays] = useState<DayOfWeek[]>([]);
   const [goalId, setGoalId] = useState<string>("");
@@ -83,26 +84,21 @@ const TaskCreateModal = ({
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [relatedExpanded, setRelatedExpanded] = useState(false);
+  const [timeError, setTimeError] = useState("");
 
   // Get filtered and sorted 90-day plans for "Related to" section
   const relatedGoals = (() => {
-    // Filter to active 90-day plans only, excluding plans from deleted visions
     let filtered = allGoals.filter((g) => {
-      // Skip deleted, archived, or completed plans
       if (g.is_deleted || g.status === "archived" || g.status === "completed") return false;
-      // Only include 90-day plans
       if (g.goal_type !== "ninety_day") return false;
-      // Skip plans belonging to deleted visions (vision not in map means it was deleted)
       if (g.life_vision_id && !visionsMap.has(g.life_vision_id)) return false;
       return true;
     });
 
-    // If we have a vision context, filter to that vision's plans
     if (contextVisionId) {
       filtered = filtered.filter((g) => g.life_vision_id === contextVisionId);
     }
 
-    // Sort alphabetically
     return filtered.sort((a, b) => a.title.localeCompare(b.title));
   })();
 
@@ -117,21 +113,19 @@ const TaskCreateModal = ({
   useEffect(() => {
     if (open) {
       setScheduledDate(format(defaultDate, "yyyy-MM-dd"));
-      // Reset to independent task by default
-      setRecurrenceType("none");
+      setRepeats(false);
+      setRecurrenceType("weekly");
       setTitle("");
       setTimesPerDay("1");
       setSelectedDays([]);
-      // Auto-select goal if defaultGoalId is provided (e.g., from 90-day plan context)
       setGoalId(defaultGoalId || "");
       setTimeStart("");
       setTimeEnd("");
       setStartDate("");
       setEndDate("");
-      // Auto-expand related section if goal is pre-selected
       setRelatedExpanded(!!defaultGoalId);
+      setTimeError("");
       
-      // Auto-focus the title input
       setTimeout(() => {
         titleInputRef.current?.focus();
       }, 50);
@@ -146,7 +140,8 @@ const TaskCreateModal = ({
 
   const resetForm = () => {
     setTitle("");
-    setRecurrenceType("none");
+    setRepeats(false);
+    setRecurrenceType("weekly");
     setTimesPerDay("1");
     setSelectedDays([]);
     setGoalId("");
@@ -159,10 +154,7 @@ const TaskCreateModal = ({
     setTimeError("");
   };
 
-  const [timeError, setTimeError] = useState("");
-
   const handleSubmit = async () => {
-    // Clear previous errors
     setTimeError("");
 
     if (!title.trim()) {
@@ -177,7 +169,7 @@ const TaskCreateModal = ({
     }
 
     // Validation for weekly recurrence
-    if (recurrenceType === "weekly" && selectedDays.length === 0) {
+    if (repeats && recurrenceType === "weekly" && selectedDays.length === 0) {
       toast.error("Please select at least one day for weekly recurrence");
       return;
     }
@@ -185,9 +177,8 @@ const TaskCreateModal = ({
     setSaving(true);
 
     try {
-      if (recurrenceType === "none") {
+      if (!repeats) {
         // Create independent (one-time) task
-        // If goalId is provided, a weekly_commitment will be created to link the task
         await createIndependentTask({
           title: title.trim(),
           scheduledDate,
@@ -197,12 +188,13 @@ const TaskCreateModal = ({
         });
         toast.success("Task created");
       } else {
-        // Create recurring task - supports goal linking
+        // Create recurring task
+        const effectiveRecurrenceType: RecurrenceType = recurrenceType;
         await createRecurringTask({
           title: title.trim(),
           goalId: goalId || null,
           recurrence: {
-            recurrenceType,
+            recurrenceType: effectiveRecurrenceType,
             timesPerDay: recurrenceType === "daily" ? parseInt(timesPerDay) || 1 : undefined,
             daysOfWeek: recurrenceType === "weekly" ? selectedDays : undefined,
           },
@@ -227,15 +219,17 @@ const TaskCreateModal = ({
   };
 
   const selectedGoal = goalId ? relatedGoals.find((g) => g.id === goalId) : null;
+  const isValid = title.trim() && timeStart && timeEnd && (!repeats || recurrenceType !== "weekly" || selectedDays.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" aria-describedby={undefined}>
         <VisuallyHidden.Root>
-          <DialogTitle>Add Task</DialogTitle>
+          <DialogTitle>Create Task</DialogTitle>
         </VisuallyHidden.Root>
-        <div className="space-y-5 pt-2">
-          {/* Title - Entry point, no header above */}
+        
+        <div className="space-y-6 pt-2">
+          {/* 1. Title - Primary input, larger and prominent */}
           <div className="pr-8">
             <Label htmlFor="task-title" className="sr-only">Task Title</Label>
             <Input
@@ -243,10 +237,10 @@ const TaskCreateModal = ({
               id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Task title"
-              className="text-base"
+              placeholder="What do you need to do?"
+              className="text-lg font-medium border-2 focus:border-primary h-12"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && title.trim()) {
+                if (e.key === "Enter" && !e.shiftKey && isValid) {
                   e.preventDefault();
                   handleSubmit();
                 }
@@ -254,150 +248,11 @@ const TaskCreateModal = ({
             />
           </div>
 
-           {/* Recurrence Type */}
-          <div>
-            <Label className="mb-2 block text-sm text-muted-foreground">Task Type</Label>
-            <RadioGroup
-              value={recurrenceType}
-              onValueChange={(val) => setRecurrenceType(val as RecurrenceType)}
-              className="flex flex-col gap-3"
-            >
-              {/* Independent (default) */}
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="none" id="recurrence-none" className="mt-0.5" />
-                <div>
-                  <Label htmlFor="recurrence-none" className="font-normal cursor-pointer">
-                    One-time
-                  </Label>
-                  <p className="text-xs text-muted-foreground">One-time task for this date only</p>
-                </div>
-              </div>
-
-              {/* Daily recurring */}
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="daily" id="recurrence-daily" className="mt-0.5" />
-                <div className="flex-1">
-                  <Label htmlFor="recurrence-daily" className="font-normal cursor-pointer">
-                    Recurring daily
-                  </Label>
-                  <p className="text-xs text-muted-foreground">Repeats every day</p>
-                  
-                  {recurrenceType === "daily" && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <Label className="text-sm whitespace-nowrap">Times per day:</Label>
-                      <Select value={timesPerDay} onValueChange={setTimesPerDay}>
-                        <SelectTrigger className="w-20 h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <SelectItem key={n} value={n.toString()}>
-                              {n}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Weekly recurring */}
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="weekly" id="recurrence-weekly" className="mt-0.5" />
-                <div className="flex-1">
-                  <Label htmlFor="recurrence-weekly" className="font-normal cursor-pointer">
-                    Recurring weekly
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedDays.length > 0 
-                      ? `${selectedDays.length} day${selectedDays.length > 1 ? "s" : ""} per week`
-                      : "Select days below"}
-                  </p>
-                  
-                  {recurrenceType === "weekly" && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {DAYS_OF_WEEK.map((day) => (
-                        <button
-                          key={day.value}
-                          type="button"
-                          onClick={() => handleDayToggle(day.value)}
-                          className={`
-                            px-2 py-1 text-xs rounded border transition-colors
-                            ${selectedDays.includes(day.value)
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background border-border hover:bg-muted"
-                            }
-                          `}
-                        >
-                          {day.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </RadioGroup>
-          </div>
-
-          {/* Date for one-time tasks */}
-          {recurrenceType === "none" && (
-            <div>
-              <Label htmlFor="scheduled-date" className="text-sm text-muted-foreground">Date</Label>
-              <Input
-                id="scheduled-date"
-                type="date"
-                value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          )}
-
-          {/* Start/End dates for recurring tasks */}
-          {recurrenceType !== "none" && (
-            <div className="space-y-3">
-              <Label className="text-sm text-muted-foreground">Duration (optional)</Label>
-              <div className="flex gap-2 items-center">
-                <div className="flex-1">
-                  <Label htmlFor="start-date" className="text-xs text-muted-foreground">
-                    Start date
-                  </Label>
-                  <Input
-                    id="start-date"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-                <div className="flex-1">
-                  <Label htmlFor="end-date" className="text-xs text-muted-foreground">
-                    End date
-                  </Label>
-                  <Input
-                    id="end-date"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Leave empty to repeat indefinitely
-              </p>
-            </div>
-          )}
-
-          {/* Time slot (required) */}
-          <div>
-            <Label className="mb-2 block text-sm text-muted-foreground">Time slot</Label>
-            <div className="flex gap-2 items-center">
+          {/* 2. Time slot (required) - Clear visual emphasis */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Time slot <span className="text-destructive">*</span></Label>
+            <div className="flex gap-3 items-center">
               <div className="flex-1">
-                <Label htmlFor="time-start" className="text-xs text-muted-foreground">
-                  Start
-                </Label>
                 <Input
                   id="time-start"
                   type="time"
@@ -406,13 +261,12 @@ const TaskCreateModal = ({
                     setTimeStart(e.target.value);
                     setTimeError("");
                   }}
-                  className={`h-9 ${timeError && !timeStart ? "border-destructive" : ""}`}
+                  className={`h-10 ${timeError && !timeStart ? "border-destructive" : ""}`}
+                  aria-label="Start time"
                 />
               </div>
+              <span className="text-muted-foreground text-sm">to</span>
               <div className="flex-1">
-                <Label htmlFor="time-end" className="text-xs text-muted-foreground">
-                  End
-                </Label>
                 <Input
                   id="time-end"
                   type="time"
@@ -421,38 +275,188 @@ const TaskCreateModal = ({
                     setTimeEnd(e.target.value);
                     setTimeError("");
                   }}
-                  className={`h-9 ${timeError && !timeEnd ? "border-destructive" : ""}`}
+                  className={`h-10 ${timeError && !timeEnd ? "border-destructive" : ""}`}
+                  aria-label="End time"
                 />
               </div>
             </div>
             {timeError && (
-              <p className="text-sm text-destructive mt-1">{timeError}</p>
+              <p className="text-sm text-destructive">{timeError}</p>
             )}
           </div>
 
-          {/* Related to (optional) - Collapsible */}
+          {/* 3. Date - Only for one-time tasks */}
+          {!repeats && (
+            <div className="space-y-2">
+              <Label htmlFor="scheduled-date" className="text-sm font-medium">Date</Label>
+              <Input
+                id="scheduled-date"
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                className="h-10"
+              />
+            </div>
+          )}
+
+          {/* 4. Repeats toggle - Simple switch instead of radio buttons */}
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <Label htmlFor="repeats-toggle" className="text-sm font-medium cursor-pointer">Repeats</Label>
+              <p className="text-xs text-muted-foreground">Make this a recurring task</p>
+            </div>
+            <Switch
+              id="repeats-toggle"
+              checked={repeats}
+              onCheckedChange={setRepeats}
+            />
+          </div>
+
+          {/* 5. Recurrence options - Only shown when repeats is enabled */}
+          {repeats && (
+            <div className="space-y-4 p-4 rounded-lg bg-muted/30">
+              {/* Recurrence type selector */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={recurrenceType === "daily" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setRecurrenceType("daily")}
+                  className="flex-1"
+                >
+                  Daily
+                </Button>
+                <Button
+                  type="button"
+                  variant={recurrenceType === "weekly" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setRecurrenceType("weekly")}
+                  className="flex-1"
+                >
+                  Weekly
+                </Button>
+              </div>
+
+              {/* Daily options */}
+              {recurrenceType === "daily" && (
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm whitespace-nowrap">Times per day:</Label>
+                  <Select value={timesPerDay} onValueChange={setTimesPerDay}>
+                    <SelectTrigger className="w-20 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <SelectItem key={n} value={n.toString()}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Weekly day selector */}
+              {recurrenceType === "weekly" && (
+                <div className="space-y-2">
+                  <Label className="text-sm">Select days</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAYS_OF_WEEK.map((day) => (
+                      <button
+                        key={day.value}
+                        type="button"
+                        onClick={() => handleDayToggle(day.value)}
+                        className={`
+                          px-3 py-1.5 text-sm rounded-md transition-colors
+                          ${selectedDays.includes(day.value)
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background border border-border hover:bg-muted"
+                          }
+                        `}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Duration for recurring tasks */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setRelatedExpanded(prev => !prev)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {startDate || endDate ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                  <span>Set date range (optional)</span>
+                </button>
+                
+                {(startDate || endDate || relatedExpanded) && (
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <Label htmlFor="start-date" className="text-xs text-muted-foreground">
+                        Start
+                      </Label>
+                      <Input
+                        id="start-date"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label htmlFor="end-date" className="text-xs text-muted-foreground">
+                        End
+                      </Label>
+                      <Input
+                        id="end-date"
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Recurring task hint */}
+              <p className="text-xs text-muted-foreground">
+                Changes to recurring tasks will ask which occurrences to update.
+              </p>
+            </div>
+          )}
+
+          {/* 6. Related to (optional) - Collapsible */}
           {relatedGoals.length > 0 && (
             <div>
               <button
                 type="button"
                 onClick={() => setRelatedExpanded(!relatedExpanded)}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                {relatedExpanded ? (
+                {relatedExpanded || selectedGoal ? (
                   <ChevronDown className="h-4 w-4" />
                 ) : (
                   <ChevronRight className="h-4 w-4" />
                 )}
-                <span>Related to (optional)</span>
-                {selectedGoal && (
-                  <span className="ml-1 text-foreground">
+                <span>Link to 90-day plan</span>
+                <span className="text-xs">(optional)</span>
+                {selectedGoal && !relatedExpanded && (
+                  <span className="ml-1 text-foreground font-medium truncate max-w-[150px]">
                     — {selectedGoal.title}
                   </span>
                 )}
               </button>
 
-              {relatedExpanded && (
-                <div className="mt-2 space-y-2">
+              {(relatedExpanded || selectedGoal) && (
+                <div className="mt-3 pl-6">
                   <Select
                     value={goalId || "none"}
                     onValueChange={(val) => setGoalId(val === "none" ? "" : val)}
@@ -481,22 +485,21 @@ const TaskCreateModal = ({
                       })}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Used to organize your weekly plan.
-                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Submit */}
-          <Button
-            onClick={handleSubmit}
-            disabled={saving || !title.trim()}
-            className="w-full"
-          >
-            {saving ? "Creating..." : "Create Task"}
-          </Button>
+          {/* Submit - Sticky at bottom */}
+          <div className="pt-2">
+            <Button
+              onClick={handleSubmit}
+              disabled={saving || !isValid}
+              className="w-full h-11"
+            >
+              {saving ? "Creating..." : "Create Task"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
