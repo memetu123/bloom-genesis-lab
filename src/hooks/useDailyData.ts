@@ -151,7 +151,8 @@ export function useDailyData(
       if (!shouldShow) continue;
 
       const completion = completionByCommitmentId.get(commitment.id);
-      if (completion?.is_detached) continue;
+      // Skip if this occurrence was deleted or moved (detached)
+      if (completion?.is_deleted || completion?.is_detached) continue;
 
       const goal = commitment.goals ?? null;
       const goalTitle = goal?.title ?? null;
@@ -183,9 +184,9 @@ export function useDailyData(
       });
     }
 
-    // Add independent/detached tasks for this date
+    // Add independent/detached tasks for this date (exclude deleted markers)
     const independentTasks = dateCompletions.filter(
-      c => c.task_type === "independent" || c.is_detached
+      c => !c.is_deleted && (c.task_type === "independent" || c.is_detached)
     );
     
     for (const task of independentTasks) {
@@ -263,14 +264,13 @@ export function useDailyData(
           .eq("is_active", true)
           .or("is_deleted.is.null,is_deleted.eq.false"),
         
-        // Fetch completions for entire week for caching
+        // Fetch completions for entire week for caching (include deleted markers for exclusion logic)
         supabase
           .from("commitment_completions")
           .select("*")
           .eq("user_id", user.id)
           .gte("completed_date", weekStartStr)
-          .lte("completed_date", weekEndStr)
-          .or("is_deleted.is.null,is_deleted.eq.false"),
+          .lte("completed_date", weekEndStr),
         
         supabase
           .from("daily_task_instances")
