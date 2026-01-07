@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import type { TaskType, RecurrenceType, DayOfWeek } from "@/types/scheduling";
 import RecurringEditConfirmDialog from "@/components/RecurringEditConfirmDialog";
+import RecurringDeleteConfirmDialog from "@/components/RecurringDeleteConfirmDialog";
 
 /**
  * TaskDetailModal - Modal for viewing/editing task details
@@ -68,7 +69,7 @@ const TaskDetailModal = ({
 }: TaskDetailModalProps) => {
   const { user } = useAuth();
   const { preferences, goals: allGoals, visionsMap } = useAppData();
-  const { convertToRecurring, updateRecurrenceRules, createOccurrenceException, splitRecurringSeries } =
+  const { convertToRecurring, updateRecurrenceRules, createOccurrenceException, splitRecurringSeries, deleteOccurrence, deleteFutureOccurrences, deleteEntireSeries } =
     useTaskScheduling();
 
   const [title, setTitle] = useState("");
@@ -88,6 +89,7 @@ const TaskDetailModal = ({
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [timeError, setTimeError] = useState("");
 
   // Store original values to detect changes
@@ -140,6 +142,7 @@ const TaskDetailModal = ({
       setStartDate("");
       setEndDate("");
       setShowConfirmDialog(false);
+      setShowDeleteDialog(false);
       setOriginalValues(null);
       setTimeError("");
 
@@ -593,37 +596,74 @@ const TaskDetailModal = ({
   };
 
   /**
-   * Handle deleting the task (soft delete)
+   * Handle delete button click
+   * Shows confirmation dialog for recurring tasks, deletes immediately for one-time tasks
    */
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
+    if (!task) return;
+    const isRecurringTask = task.commitmentId !== null && !task.isDetached;
+    
+    if (isRecurringTask) {
+      setShowDeleteDialog(true);
+    } else {
+      handleDeleteNonRecurring();
+    }
+  };
+
+  /**
+   * Delete non-recurring (independent/detached) task immediately
+   */
+  const handleDeleteNonRecurring = async () => {
     if (!user || !task) return;
     setSaving(true);
 
     try {
-      const isRecurringTask = task.commitmentId !== null && !task.isDetached;
+      const parts = task.id.split("-");
+      const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
+      
+      await supabase
+        .from("commitment_completions")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", actualId);
+      
+      toast.success("Event deleted");
+      onUpdate();
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error("Error deleting task:", error);
+      toast.error("Failed to delete task");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-      if (isRecurringTask && task.commitmentId) {
-        // For recurring tasks, soft delete the weekly commitment
-        await supabase
-          .from("weekly_commitments")
-          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-          .eq("id", task.commitmentId);
-        
-        toast.success("Recurring task deleted");
-      } else {
-        // For independent/detached tasks, soft delete the completion record
-        // Independent task IDs are raw UUIDs (5 parts), recurring have format {uuid}-{dateKey} (8 parts)
-        const parts = task.id.split("-");
-        const actualId = parts.length === 5 ? task.id : parts.slice(0, 5).join("-");
-        
-        await supabase
-          .from("commitment_completions")
-          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-          .eq("id", actualId);
-        
-        toast.success("Task deleted");
+  /**
+   * Handle confirmed delete for recurring tasks with scope selection
+   */
+  const handleConfirmedDelete = async (scope: "this" | "future" | "all") => {
+    if (!user || !task || !task.commitmentId) return;
+    setSaving(true);
+
+    try {
+      switch (scope) {
+        case "this":
+          // Delete only this occurrence
+          await deleteOccurrence(task.commitmentId, dateKey);
+          toast.success("Event deleted");
+          break;
+        case "future":
+          // Delete this and all future occurrences
+          await deleteFutureOccurrences(task.commitmentId, dateKey);
+          toast.success("Future events deleted");
+          break;
+        case "all":
+          // Delete the entire series
+          await deleteEntireSeries(task.commitmentId);
+          toast.success("Recurring series deleted");
+          break;
       }
 
+      setShowDeleteDialog(false);
       onUpdate();
       onOpenChange(false);
     } catch (error: any) {
@@ -988,7 +1028,7 @@ const TaskDetailModal = ({
           </Button>
 
           <button
-            onClick={handleDelete}
+            onClick={handleDeleteClick}
             disabled={saving}
             className="w-full flex items-center justify-center gap-1.5 py-1 text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
           >
@@ -1003,6 +1043,14 @@ const TaskDetailModal = ({
         open={showConfirmDialog}
         onOpenChange={setShowConfirmDialog}
         onConfirm={handleConfirmedSave}
+        saving={saving}
+      />
+
+      {/* Confirmation dialog for recurring task deletes */}
+      <RecurringDeleteConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={handleConfirmedDelete}
         saving={saving}
       />
     </Dialog>
