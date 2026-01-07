@@ -650,6 +650,147 @@ export const useTaskScheduling = () => {
     [user]
   );
 
+  /**
+   * Delete a single occurrence of a recurring task.
+   * Creates a soft-deleted exception for that date without affecting other occurrences.
+   */
+  const deleteOccurrence = useCallback(
+    async (commitmentId: string, occurrenceDate: string) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Get the original commitment for default values
+      const { data: commitment, error: fetchError } = await supabase
+        .from("weekly_commitments")
+        .select("*")
+        .eq("id", commitmentId)
+        .single();
+
+      if (fetchError || !commitment) throw fetchError;
+
+      // Check if there's already a completion record for this date
+      const { data: existingCompletion } = await supabase
+        .from("commitment_completions")
+        .select("*")
+        .eq("commitment_id", commitmentId)
+        .eq("completed_date", occurrenceDate)
+        .maybeSingle();
+
+      if (existingCompletion) {
+        // Soft delete the existing completion
+        await supabase
+          .from("commitment_completions")
+          .update({
+            is_deleted: true,
+            deleted_at: new Date().toISOString(),
+            is_detached: true, // Mark as exception so it's excluded from the series
+          })
+          .eq("id", existingCompletion.id);
+      } else {
+        // Create a new completion record marked as deleted (an exclusion exception)
+        await supabase
+          .from("commitment_completions")
+          .insert({
+            user_id: user.id,
+            commitment_id: commitmentId,
+            completed_date: occurrenceDate,
+            title: commitment.title,
+            time_start: commitment.default_time_start,
+            time_end: commitment.default_time_end,
+            is_flexible_time: commitment.flexible_time,
+            is_detached: true,
+            is_deleted: true,
+            deleted_at: new Date().toISOString(),
+            task_type: "recurring",
+            is_completed: false,
+          });
+      }
+    },
+    [user]
+  );
+
+  /**
+   * Delete this and all future occurrences by ending the series.
+   * Sets the end_date to the day before the selected date.
+   */
+  const deleteFutureOccurrences = useCallback(
+    async (commitmentId: string, fromDate: string) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Calculate the day before the selected date
+      const fromDateObj = new Date(fromDate);
+      const dayBefore = new Date(fromDateObj);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      const endDateStr = format(dayBefore, "yyyy-MM-dd");
+
+      // Get the original commitment to check start_date
+      const { data: commitment, error: fetchError } = await supabase
+        .from("weekly_commitments")
+        .select("start_date")
+        .eq("id", commitmentId)
+        .single();
+
+      if (fetchError || !commitment) throw fetchError;
+
+      // If the end date would be before or equal to start date, delete the entire series
+      if (commitment.start_date && endDateStr < commitment.start_date) {
+        await supabase
+          .from("weekly_commitments")
+          .update({
+            is_deleted: true,
+            deleted_at: new Date().toISOString(),
+          })
+          .eq("id", commitmentId);
+      } else {
+        // End the series the day before
+        await supabase
+          .from("weekly_commitments")
+          .update({
+            end_date: endDateStr,
+          })
+          .eq("id", commitmentId);
+      }
+
+      // Also soft-delete any future completion records
+      await supabase
+        .from("commitment_completions")
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
+        .eq("commitment_id", commitmentId)
+        .gte("completed_date", fromDate);
+    },
+    [user]
+  );
+
+  /**
+   * Delete the entire recurring series including all past, present, and future occurrences.
+   */
+  const deleteEntireSeries = useCallback(
+    async (commitmentId: string) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Soft delete the weekly commitment
+      await supabase
+        .from("weekly_commitments")
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
+        .eq("id", commitmentId);
+
+      // Soft delete all completion records
+      await supabase
+        .from("commitment_completions")
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
+        .eq("commitment_id", commitmentId);
+    },
+    [user]
+  );
+
   return {
     createRecurringTask,
     createIndependentTask,
@@ -662,5 +803,8 @@ export const useTaskScheduling = () => {
     convertToIndependent,
     createOccurrenceException,
     splitRecurringSeries,
+    deleteOccurrence,
+    deleteFutureOccurrences,
+    deleteEntireSeries,
   };
 };
