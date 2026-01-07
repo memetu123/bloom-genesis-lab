@@ -146,10 +146,12 @@ const calculateOverlappingLayout = (
   });
   
   // Assign columns within each group
+  // Limit visual compression - max 3 side-by-side, after that they overlap slightly
   const result: TaskWithPosition[] = [];
   
   mergedGroups.forEach(group => {
-    const totalColumns = group.length;
+    // Cap at 3 columns for readability, beyond that tasks will overlap
+    const totalColumns = Math.min(group.length, 3);
     
     // Sort by start time, assign columns
     group
@@ -158,7 +160,7 @@ const calculateOverlappingLayout = (
         result.push({
           task: item.task,
           position: item.position,
-          column: idx,
+          column: idx % totalColumns,
           totalColumns,
         });
       });
@@ -192,29 +194,31 @@ const TaskCard = memo(({
   const isCompact = position.height < 40;
   
   // Calculate horizontal position for overlapping tasks
+  // Add small gap between overlapping tasks for clarity
+  const gapPx = 3;
   const widthPercent = 100 / totalColumns;
   const leftPercent = column * widthPercent;
   
   return (
     <div
       className={cn(
-        "absolute rounded-md px-1.5 transition-all cursor-pointer",
+        "absolute rounded-md px-2 transition-all cursor-pointer",
         "border overflow-hidden",
         task.isCompleted
-          ? "bg-muted/40 border-muted-foreground/10 opacity-60"
-          : "bg-card border-border/50 hover:border-border hover:shadow-sm"
+          ? "bg-muted/50 border-muted-foreground/20"
+          : "bg-card border-border hover:border-foreground/20 hover:shadow-sm"
       )}
       style={{
         top: `${position.top}px`,
-        height: `${Math.max(position.height - 2, 18)}px`,
-        minHeight: "18px",
-        left: `calc(${leftPercent}% + 2px)`,
-        width: `calc(${widthPercent}% - 4px)`,
+        height: `${Math.max(position.height - 2, 20)}px`,
+        minHeight: "20px",
+        left: `calc(${leftPercent}% + ${gapPx}px)`,
+        width: `calc(${widthPercent}% - ${gapPx * 2}px)`,
       }}
       onClick={onClick}
     >
       <div className={cn(
-        "flex items-start gap-1 h-full",
+        "flex items-start gap-1.5 h-full",
         isCompact ? "py-0.5" : "py-1"
       )}>
         <button
@@ -224,14 +228,14 @@ const TaskCard = memo(({
           }}
           className={cn(
             "flex-shrink-0 text-xs leading-none mt-0.5",
-            task.isCompleted ? "text-primary/70" : "text-muted-foreground/50 hover:text-primary"
+            task.isCompleted ? "text-primary" : "text-muted-foreground hover:text-primary"
           )}
         >
           {task.isCompleted ? "●" : "○"}
         </button>
         <span className={cn(
           "text-[11px] leading-tight flex-1 truncate",
-          task.isCompleted && "line-through text-muted-foreground/60",
+          task.isCompleted && "line-through text-muted-foreground",
           !task.isCompleted && "text-foreground"
         )}>
           {task.title}{instanceLabel}
@@ -299,19 +303,19 @@ const TimeGrid = ({
       >
         {/* Time scale - fixed left column */}
         <div 
-          className="sticky left-0 z-10 bg-background border-r border-border"
+          className="sticky left-0 z-10 bg-background border-r border-border/70"
           style={{ width: TIME_SCALE_WIDTH }}
         >
           {/* Empty header cell */}
           <div className="h-10 border-b border-border" />
           
-          {/* Hour labels */}
-          <div className="relative" style={{ height: gridHeight }}>
+          {/* Hour labels - with top padding to prevent overlap */}
+          <div className="relative pt-2" style={{ height: gridHeight }}>
             {hours.map((hour, i) => (
               <div
                 key={hour}
-                className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-muted-foreground"
-                style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
+                style={{ top: i * HOUR_HEIGHT + 8, height: HOUR_HEIGHT }}
               >
                 <span className="-translate-y-1/2">
                   {formatTime(hour, timeFormat)}
@@ -332,16 +336,15 @@ const TimeGrid = ({
           return (
             <div
               key={column.dateKey}
-              className={cn(
-                "flex-1 border-r border-border/50 last:border-r-0",
-                isToday && "bg-primary/[0.03]"
-              )}
+              className="flex-1 border-r border-border/50 last:border-r-0"
               style={{ minWidth: minColumnWidth }}
             >
-              {/* Day header */}
+              {/* Day header - subtle highlight for today */}
               <div className={cn(
-                "h-10 px-2 flex items-center justify-center border-b border-border",
-                isToday && "bg-primary/[0.05]"
+                "h-10 px-2 flex items-center justify-center border-b",
+                isToday 
+                  ? "border-b-2 border-primary bg-primary/[0.02]" 
+                  : "border-border"
               )}>
                 <div className="text-center">
                   <span className={cn(
@@ -352,21 +355,23 @@ const TimeGrid = ({
                   </span>
                   <span className={cn(
                     "text-sm block",
-                    isToday ? "text-primary font-semibold" : "text-foreground/80"
+                    isToday 
+                      ? "text-primary font-bold" 
+                      : "text-foreground"
                   )}>
                     {format(column.date, "d")}
                   </span>
                 </div>
               </div>
               
-              {/* Time grid area */}
-              <div className="relative" style={{ height: gridHeight }}>
-                {/* Hour lines */}
+              {/* Time grid area - with top padding to align with time labels */}
+              <div className="relative pt-2" style={{ height: gridHeight }}>
+                {/* Hour lines - improved visibility */}
                 {hours.map((_, i) => (
                   <div
                     key={i}
-                    className="absolute left-0 right-0 border-t border-border/30"
-                    style={{ top: i * HOUR_HEIGHT }}
+                    className="absolute left-0 right-0 border-t border-border/50"
+                    style={{ top: i * HOUR_HEIGHT + 8 }}
                   />
                 ))}
                 

@@ -279,18 +279,32 @@ const Daily = () => {
     tasks: filteredTasks as TimeGridTask[],
   }], [selectedDate, filteredTasks]);
 
-  // Progress items for left rail
-  const progressItems = useMemo(() => {
-    const items: { id: string; title: string; planned: number; actual: number; goalTitle: string | null }[] = [];
-    
-    filteredTasks.forEach(task => {
-      // For daily view, each task is a "progress item" 
-      // We could group by commitment/goal, but for simplicity show task-level
-    });
-    
-    // For now, return empty - the overall progress is sufficient for daily view
-    return items;
-  }, [filteredTasks]);
+  // Task list for left rail
+  const taskListForRail = useMemo(() => 
+    filteredTasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      isCompleted: task.isCompleted,
+      goalTitle: task.goalTitle || null,
+    })),
+    [filteredTasks]
+  );
+  
+  // Handler for task click from left rail
+  const handleTaskClickFromRail = useCallback((taskId: string) => {
+    const task = filteredTasks.find(t => t.id === taskId);
+    if (task) {
+      handleTaskClick(task);
+    }
+  }, [filteredTasks, handleTaskClick]);
+  
+  // Handler for task toggle from left rail
+  const handleTaskToggleFromRail = useCallback((taskId: string) => {
+    const task = filteredTasks.find(t => t.id === taskId);
+    if (task) {
+      handleToggleComplete(task);
+    }
+  }, [filteredTasks, handleToggleComplete]);
 
   if (loading) {
     return (
@@ -415,7 +429,9 @@ const Daily = () => {
       <CalendarLayout
         totalPlanned={dailyTotal}
         totalActual={dailyCompleted}
-        progressItems={progressItems}
+        taskList={taskListForRail}
+        onTaskClick={handleTaskClickFromRail}
+        onTaskToggle={handleTaskToggleFromRail}
         onAddTask={() => setCreateModalOpen(true)}
         showFocusedOnly={showFocusedOnly}
         onToggleFocus={() => setShowFocusedOnly(!showFocusedOnly)}

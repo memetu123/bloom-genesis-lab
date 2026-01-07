@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import CalendarLeftRail from "./CalendarLeftRail";
+import CalendarLeftRail, { TaskListItem } from "./CalendarLeftRail";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 /**
@@ -24,6 +24,12 @@ interface CalendarLayoutProps {
   totalPlanned: number;
   totalActual: number;
   progressItems?: ProgressItem[];
+  
+  // Task list for daily view
+  taskList?: TaskListItem[];
+  onTaskClick?: (taskId: string) => void;
+  onTaskToggle?: (taskId: string) => void;
+  
   onAddTask: () => void;
   showFocusedOnly: boolean;
   onToggleFocus: () => void;
@@ -41,6 +47,9 @@ const CalendarLayout = ({
   totalPlanned,
   totalActual,
   progressItems = [],
+  taskList = [],
+  onTaskClick,
+  onTaskToggle,
   onAddTask,
   showFocusedOnly,
   onToggleFocus,
@@ -74,6 +83,9 @@ const CalendarLayout = ({
         totalPlanned={totalPlanned}
         totalActual={totalActual}
         progressItems={progressItems}
+        taskList={taskList}
+        onTaskClick={onTaskClick}
+        onTaskToggle={onTaskToggle}
         onAddTask={onAddTask}
         showFocusedOnly={showFocusedOnly}
         onToggleFocus={onToggleFocus}
