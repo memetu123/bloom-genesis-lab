@@ -314,10 +314,15 @@ const Daily = () => {
     [goals]
   );
 
-  // 3-Year goals for filter dropdown
+  // 3-Year goals for filter dropdown (only active, non-deleted, non-archived, non-completed)
   const threeYearGoals = useMemo(() => 
     goals
-      .filter(g => g.goal_type === "three_year" && !g.is_deleted && g.status !== "archived")
+      .filter(g => 
+        g.goal_type === "three_year" && 
+        !g.is_deleted && 
+        g.status !== "archived" && 
+        g.status !== "completed"
+      )
       .map(g => ({ id: g.id, title: g.title })),
     [goals]
   );
@@ -401,15 +406,23 @@ const Daily = () => {
     );
   }
 
-  // Date navigation header content
+  // Date navigation header content with active filter pill
   const headerContent = (
-    <CalendarDateNav
-      dateLabel={formattedDate}
-      onPrev={goToPreviousDay}
-      onNext={goToNextDay}
-      onToday={goToToday}
-      showTodayButton={!isToday}
-    />
+    <div className="flex items-center gap-3">
+      <CalendarDateNav
+        dateLabel={formattedDate}
+        onPrev={goToPreviousDay}
+        onNext={goToNextDay}
+        onToday={goToToday}
+        showTodayButton={!isToday}
+      />
+      {selectedThreeYearGoalTitle && (
+        <ActiveFilterPill
+          goalTitle={selectedThreeYearGoalTitle}
+          onClear={() => setSelectedThreeYearGoalId(null)}
+        />
+      )}
+    </div>
   );
 
   // Mobile: Minimal chrome with week strip
@@ -522,6 +535,9 @@ const Daily = () => {
         onAddTask={() => setCreateModalOpen(true)}
         showFocusedOnly={showFocusedOnly}
         onToggleFocus={() => setShowFocusedOnly(!showFocusedOnly)}
+        threeYearGoals={threeYearGoals}
+        selectedThreeYearGoalId={selectedThreeYearGoalId}
+        onSelectThreeYearGoal={setSelectedThreeYearGoalId}
         headerContent={headerContent}
       >
         <TimeGrid
