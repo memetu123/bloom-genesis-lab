@@ -4,6 +4,8 @@ import { Plus, Target, ChevronRight } from "lucide-react";
 import EditableTitle from "@/components/EditableTitle";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
+import HierarchyBreadcrumb, { BreadcrumbSegment } from "@/components/HierarchyBreadcrumb";
+import GoalTypeBadge from "@/components/GoalTypeBadge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { GoalType } from "@/types/todayoum";
 import { useAppData } from "@/hooks/useAppData";
@@ -43,11 +46,14 @@ interface Commitment {
   is_active: boolean;
 }
 
-interface Breadcrumb {
-  pillar?: string;
-  vision?: string;
-  threeYear?: string;
-  oneYear?: string;
+interface BreadcrumbData {
+  pillarName?: string;
+  visionId?: string;
+  visionTitle?: string;
+  threeYearId?: string;
+  threeYearTitle?: string;
+  oneYearId?: string;
+  oneYearTitle?: string;
 }
 
 const GOAL_TYPE_LABELS: Record<GoalType, string> = {
@@ -71,7 +77,7 @@ const GoalDetail = () => {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [childGoals, setChildGoals] = useState<Goal[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
-  const [breadcrumb, setBreadcrumb] = useState<Breadcrumb>({});
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbData>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -215,8 +221,8 @@ const GoalDetail = () => {
           status: (goalData.status as GoalStatus) || "active"
         } as Goal);
 
-        // Build breadcrumb
-        const bc: Breadcrumb = {};
+        // Build breadcrumb with IDs for navigation
+        const bc: BreadcrumbData = {};
 
         // Get pillar
         const { data: pillar } = await supabase
@@ -224,26 +230,32 @@ const GoalDetail = () => {
           .select("name")
           .eq("id", goalData.pillar_id)
           .maybeSingle();
-        if (pillar) bc.pillar = pillar.name;
+        if (pillar) bc.pillarName = pillar.name;
 
         // Get vision if exists
         if (goalData.life_vision_id) {
           const { data: vision } = await supabase
             .from("life_visions")
-            .select("title")
+            .select("id, title")
             .eq("id", goalData.life_vision_id)
             .maybeSingle();
-          if (vision) bc.vision = vision.title;
+          if (vision) {
+            bc.visionId = vision.id;
+            bc.visionTitle = vision.title;
+          }
         }
 
         // Get parent goals for breadcrumb
         if (goalData.goal_type === "one_year" && goalData.parent_goal_id) {
           const { data: threeYear } = await supabase
             .from("goals")
-            .select("title")
+            .select("id, title")
             .eq("id", goalData.parent_goal_id)
             .maybeSingle();
-          if (threeYear) bc.threeYear = threeYear.title;
+          if (threeYear) {
+            bc.threeYearId = threeYear.id;
+            bc.threeYearTitle = threeYear.title;
+          }
         }
 
         setBreadcrumb(bc);
@@ -488,22 +500,17 @@ const GoalDetail = () => {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         {/* Breadcrumb for new goal */}
-        <div className="text-sm text-muted-foreground mb-4 flex items-center flex-wrap gap-1">
-          <span 
-            className="hover:text-foreground cursor-pointer transition-colors"
-            onClick={() => navigate("/dashboard")}
-          >
-            Dashboard
-          </span>
-          <ChevronRight className="h-3 w-3" />
-          <span 
-            className="hover:text-foreground cursor-pointer transition-colors"
-            onClick={() => navigate(`/vision/${visionData.id}`)}
-          >
-            {visionData.title}
-          </span>
-          <ChevronRight className="h-3 w-3" />
-          <span>New {GOAL_TYPE_LABELS[newGoalType]}</span>
+        <HierarchyBreadcrumb 
+          segments={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: visionData.title, href: `/vision/${visionData.id}` },
+            { label: `New ${GOAL_TYPE_LABELS[newGoalType]}` }
+          ]}
+        />
+
+        {/* Goal type badge for creation */}
+        <div className="mb-4">
+          <GoalTypeBadge goalType={newGoalType} />
         </div>
 
         {/* Create goal form */}
@@ -580,33 +587,42 @@ const GoalDetail = () => {
         />
       )}
 
-      {/* Breadcrumb */}
-      <div className="text-sm text-muted-foreground mb-4 flex items-center flex-wrap gap-1">
-        {breadcrumb.pillar && (
-          <>
-            <span className="text-primary font-medium">{breadcrumb.pillar}</span>
-            <ChevronRight className="h-3 w-3" />
-          </>
+      {/* Breadcrumb - build segments dynamically */}
+      <HierarchyBreadcrumb 
+        segments={(() => {
+          const segments: BreadcrumbSegment[] = [];
+          if (breadcrumb.pillarName) {
+            segments.push({ label: breadcrumb.pillarName, href: "/dashboard" });
+          }
+          if (breadcrumb.visionId && breadcrumb.visionTitle) {
+            segments.push({ label: breadcrumb.visionTitle, href: `/vision/${breadcrumb.visionId}` });
+          }
+          if (breadcrumb.threeYearId && breadcrumb.threeYearTitle) {
+            segments.push({ label: breadcrumb.threeYearTitle, href: `/goal/${breadcrumb.threeYearId}` });
+          }
+          // Current goal title as final segment (not clickable)
+          segments.push({ label: goal.title });
+          return segments;
+        })()}
+      />
+
+      {/* Goal type badge */}
+      <div className="mb-2 flex items-center gap-2">
+        <GoalTypeBadge goalType={goal.goal_type} />
+        {goal.status !== "active" && goal.status !== "not_started" && goal.status !== "in_progress" && (
+          <Badge 
+            variant="outline" 
+            className={`text-xs font-normal px-2 py-0.5 ${
+              goal.status === "completed" 
+                ? "bg-primary/10 text-primary border-primary/20" 
+                : goal.status === "archived"
+                  ? "bg-muted text-muted-foreground border-muted-foreground/20"
+                  : ""
+            }`}
+          >
+            {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
+          </Badge>
         )}
-        {breadcrumb.vision && (
-          <>
-            <span>{breadcrumb.vision}</span>
-            <ChevronRight className="h-3 w-3" />
-          </>
-        )}
-        {breadcrumb.threeYear && (
-          <>
-            <span>{breadcrumb.threeYear}</span>
-            <ChevronRight className="h-3 w-3" />
-          </>
-        )}
-        {breadcrumb.oneYear && (
-          <>
-            <span>{breadcrumb.oneYear}</span>
-            <ChevronRight className="h-3 w-3" />
-          </>
-        )}
-        <span>{GOAL_TYPE_LABELS[goal.goal_type]}</span>
       </div>
 
 
