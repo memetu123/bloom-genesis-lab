@@ -237,7 +237,7 @@ const TaskCard = memo(({
         "absolute rounded-md px-2 transition-all select-none",
         "border overflow-hidden",
         isDragging && "opacity-30",
-        task.isMuted && !task.isCompleted && "opacity-40",
+        task.isMuted && "opacity-40",
         task.isCompleted
           ? "bg-muted/50 border-muted-foreground/20"
           : task.isMuted
@@ -280,7 +280,7 @@ const TaskCard = memo(({
           "text-[11px] leading-tight flex-1 truncate",
           task.isCompleted && "line-through text-muted-foreground",
           !task.isCompleted && !task.isMuted && "text-foreground",
-          task.isMuted && !task.isCompleted && "text-muted-foreground"
+          task.isMuted && "text-muted-foreground"
         )}>
           {task.title}{instanceLabel}
         </span>
@@ -315,7 +315,7 @@ const CompactTaskCard = memo(({
       className={cn(
         "flex items-center gap-2 px-2 rounded-md cursor-pointer transition-colors",
         "border",
-        task.isMuted && !task.isCompleted && "opacity-40",
+        task.isMuted && "opacity-40",
         task.isCompleted
           ? "bg-muted/50 border-muted-foreground/20"
           : task.isMuted
@@ -342,7 +342,7 @@ const CompactTaskCard = memo(({
           "text-xs block truncate",
           task.isCompleted && "line-through text-muted-foreground",
           !task.isCompleted && !task.isMuted && "text-foreground",
-          task.isMuted && !task.isCompleted && "text-muted-foreground"
+          task.isMuted && "text-muted-foreground"
         )}>
           {task.title}{instanceLabel}
         </span>
