@@ -714,8 +714,11 @@ const TimeGrid = ({
     );
   };
   
+  // Padding to offset time labels from grid top
+  const TIME_LABEL_OFFSET = 12;
+  
   return (
-    <div className={cn("flex-1 overflow-auto", className)}>
+    <div className={cn("flex-1 overflow-auto", className)} ref={gridRef}>
       <div 
         className="flex min-w-max relative"
         style={{ minWidth: TIME_SCALE_WIDTH + columns.length * minColumnWidth }}
@@ -723,21 +726,21 @@ const TimeGrid = ({
         {/* Time scale - fixed left column (only in Full mode) */}
         {!isCompactMode && (
           <div 
-            className="sticky left-0 z-10 bg-background border-r border-border/70"
+            className="sticky left-0 z-20 bg-background border-r border-border/70"
             style={{ width: TIME_SCALE_WIDTH }}
           >
-            {/* Empty header cell */}
-            <div className="h-10 border-b border-border" />
+            {/* Empty header cell - sticky with day headers */}
+            <div className="h-10 border-b border-border sticky top-0 z-20 bg-background" />
             
-            {/* Hour labels */}
-            <div className="relative" style={{ height: gridHeight }}>
+            {/* Hour labels with top offset */}
+            <div className="relative" style={{ height: gridHeight + TIME_LABEL_OFFSET, paddingTop: TIME_LABEL_OFFSET }}>
               {hours.map((hour, i) => (
                 <div
                   key={hour}
-                  className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[11px] text-foreground/60 font-medium"
-                  style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                  className="absolute left-0 right-0 flex items-center justify-end pr-2 text-[11px] text-foreground/60 font-medium"
+                  style={{ top: i * HOUR_HEIGHT + TIME_LABEL_OFFSET, height: HOUR_HEIGHT }}
                 >
-                  <span className="-translate-y-1/2">
+                  <span>
                     {formatTime(hour, timeFormat)}
                   </span>
                 </div>
@@ -758,9 +761,9 @@ const TimeGrid = ({
                 className="flex-1 border-r border-border/50 last:border-r-0"
                 style={{ minWidth: minColumnWidth }}
               >
-                {/* Day header */}
+                {/* Day header - sticky at top */}
                 <div className={cn(
-                  "h-10 px-2 flex items-center justify-center border-b",
+                  "h-10 px-2 flex items-center justify-center border-b sticky top-0 z-10 bg-background",
                   isToday 
                     ? "border-b-2 border-primary bg-primary/[0.02]" 
                     : "border-border"
@@ -783,13 +786,15 @@ const TimeGrid = ({
                   </div>
                 </div>
                 
-                {/* Column content */}
+                {/* Column content with top offset for time alignment */}
                 {isCompactMode ? (
                   <div className="p-2" style={{ minHeight: maxCompactHeight }}>
                     {renderCompactColumn(column)}
                   </div>
                 ) : (
-                  renderFullColumn(column)
+                  <div style={{ paddingTop: TIME_LABEL_OFFSET }}>
+                    {renderFullColumn(column)}
+                  </div>
                 )}
               </div>
             );
