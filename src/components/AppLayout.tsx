@@ -65,7 +65,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col">
       {/* Top Navigation */}
       <header className="border-b border-border sticky top-0 bg-background z-50 shrink-0">
         <div className="container mx-auto px-4">
@@ -167,7 +167,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       </header>
 
       {/* Page Content - flex-1 for calendar views to fill height */}
-      <main className="flex-1 overflow-hidden">{children}</main>
+      <main className="flex-1 overflow-hidden min-h-0">{children}</main>
     </div>
   );
 };
