@@ -20,7 +20,8 @@ import Goals from "./pages/Goals";
 import GoalDetail from "./pages/GoalDetail";
 import Daily from "./pages/Daily";
 import Schedule from "./pages/Schedule";
-import RecentlyDeleted from "./pages/RecentlyDeleted";
+import Archived from "./pages/Archived";
+import DeletedItems from "./pages/DeletedItems";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -57,7 +58,8 @@ const App = () => (
                   <Route path="/weekly" element={<ProtectedRoute><AppLayout><MobileWeeklyRedirect /></AppLayout></ProtectedRoute>} />
                   <Route path="/daily" element={<ProtectedRoute><AppLayout><Daily /></AppLayout></ProtectedRoute>} />
                   <Route path="/schedule" element={<ProtectedRoute><AppLayout><Schedule /></AppLayout></ProtectedRoute>} />
-                  <Route path="/recently-deleted" element={<ProtectedRoute><AppLayout><RecentlyDeleted /></AppLayout></ProtectedRoute>} />
+                  <Route path="/archived" element={<ProtectedRoute><AppLayout><Archived /></AppLayout></ProtectedRoute>} />
+                  <Route path="/deleted" element={<ProtectedRoute><AppLayout><DeletedItems /></AppLayout></ProtectedRoute>} />
                   <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
                   
