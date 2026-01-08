@@ -328,10 +328,15 @@ const Weekly = () => {
     [goals]
   );
 
-  // 3-Year goals for filter dropdown
+  // 3-Year goals for filter dropdown (only active, non-deleted, non-archived, non-completed)
   const threeYearGoals = useMemo(() => 
     goals
-      .filter(g => g.goal_type === "three_year" && !g.is_deleted && g.status !== "archived")
+      .filter(g => 
+        g.goal_type === "three_year" && 
+        !g.is_deleted && 
+        g.status !== "archived" && 
+        g.status !== "completed"
+      )
       .map(g => ({ id: g.id, title: g.title })),
     [goals]
   );
