@@ -165,6 +165,87 @@ const Weekly = () => {
     }
   }, [user, currentWeekStart, updateTaskCompletion]);
 
+  // Handle task drop (drag and drop to reschedule)
+  const handleTaskDrop = useCallback(async (
+    task: TimeGridTask,
+    sourceDate: Date,
+    targetDate: Date,
+    newTimeStart: string,
+    newTimeEnd: string
+  ) => {
+    if (!user) return;
+    
+    const sourceDateKey = format(sourceDate, "yyyy-MM-dd");
+    const targetDateKey = format(targetDate, "yyyy-MM-dd");
+    const dateChanged = sourceDateKey !== targetDateKey;
+    
+    // For recurring tasks that change date, show scope dialog
+    if (task.taskType === "recurring" && task.commitmentId && dateChanged) {
+      setPendingDrop({ task, sourceDate, targetDate, newTimeStart, newTimeEnd });
+      setDragScopeDialogOpen(true);
+      return;
+    }
+    
+    try {
+      if (task.taskType === "independent") {
+        // Update independent task directly
+        await supabase
+          .from("commitment_completions")
+          .update({
+            completed_date: targetDateKey,
+            time_start: newTimeStart,
+            time_end: newTimeEnd,
+          })
+          .eq("id", task.id);
+      } else if (task.commitmentId) {
+        // For recurring task time-only change, create occurrence exception
+        await createOccurrenceException(
+          task.commitmentId,
+          sourceDateKey,
+          { timeStart: newTimeStart, timeEnd: newTimeEnd }
+        );
+      }
+      
+      toast.success("Task rescheduled");
+      refetch();
+    } catch (error) {
+      console.error("Error rescheduling task:", error);
+      toast.error("Failed to reschedule task");
+    }
+  }, [user, createOccurrenceException, refetch]);
+
+  // Handle drag scope dialog confirm
+  const handleDragScopeConfirm = useCallback(async (scope: "this" | "all") => {
+    if (!pendingDrop || !user) return;
+    
+    const { task, sourceDate, targetDate, newTimeStart, newTimeEnd } = pendingDrop;
+    const sourceDateKey = format(sourceDate, "yyyy-MM-dd");
+    const targetDateKey = format(targetDate, "yyyy-MM-dd");
+    
+    try {
+      if (scope === "this" && task.commitmentId) {
+        // Create exception for this occurrence only
+        await createOccurrenceException(
+          task.commitmentId,
+          sourceDateKey,
+          { timeStart: newTimeStart, timeEnd: newTimeEnd, newDate: targetDateKey }
+        );
+      } else if (scope === "all" && task.commitmentId) {
+        // Update the default time for all occurrences
+        await updateInstanceTime(task.commitmentId, sourceDateKey, newTimeStart, newTimeEnd);
+      }
+      
+      toast.success("Task rescheduled");
+      refetch();
+    } catch (error) {
+      console.error("Error rescheduling task:", error);
+      toast.error("Failed to reschedule task");
+    } finally {
+      setPendingDrop(null);
+      setDragScopeDialogOpen(false);
+    }
+  }, [pendingDrop, user, createOccurrenceException, updateInstanceTime, refetch]);
+
   const goToPreviousWeek = useCallback(() => 
     setCurrentWeekStart(prev => subWeeks(prev, 1)), []);
   const goToNextWeek = useCallback(() => 
@@ -342,6 +423,7 @@ const Weekly = () => {
           columns={timeGridColumns}
           onTaskClick={handleTaskClick}
           onToggleComplete={handleToggleComplete}
+          onTaskDrop={handleTaskDrop}
           timeFormat={preferences.timeFormat}
           minColumnWidth={140}
         />
@@ -364,6 +446,15 @@ const Weekly = () => {
         task={selectedTask}
         date={selectedTaskDate}
         onUpdate={refetch}
+      />
+
+      {/* Drag scope dialog for recurring tasks */}
+      <TaskDragScopeDialog
+        open={dragScopeDialogOpen}
+        onOpenChange={setDragScopeDialogOpen}
+        onConfirm={handleDragScopeConfirm}
+        sourceDate={pendingDrop ? format(pendingDrop.sourceDate, "yyyy-MM-dd") : ""}
+        targetDate={pendingDrop ? format(pendingDrop.targetDate, "yyyy-MM-dd") : ""}
       />
     </>
   );

@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useDailyData, DailyTask } from "@/hooks/useDailyData";
 import { supabase } from "@/integrations/supabase/client";
+import { useTaskScheduling } from "@/hooks/useTaskScheduling";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek } from "date-fns";
 import { formatDateWithDay } from "@/lib/formatPreferences";
@@ -104,6 +105,7 @@ const Daily = () => {
   const { preferences, goals } = useAppData();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
   const isMobile = useIsMobile();
+  const { createOccurrenceException } = useTaskScheduling();
   
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
@@ -225,6 +227,43 @@ const Daily = () => {
       updateTaskCompletion(task.id, !newCompleted);
     }
   }, [user, dateKey, updateTaskCompletion]);
+
+  // Handle task drop (drag and drop to reschedule)
+  const handleTaskDrop = useCallback(async (
+    task: DailyTask | TimeGridTask,
+    _sourceDate: Date,
+    _targetDate: Date,
+    newTimeStart: string,
+    newTimeEnd: string
+  ) => {
+    if (!user) return;
+    
+    try {
+      if (task.taskType === "independent") {
+        // Update independent task time directly
+        await supabase
+          .from("commitment_completions")
+          .update({
+            time_start: newTimeStart,
+            time_end: newTimeEnd,
+          })
+          .eq("id", task.id);
+      } else if ((task as DailyTask).commitmentId) {
+        // Create occurrence exception for recurring task
+        await createOccurrenceException(
+          (task as DailyTask).commitmentId!,
+          dateKey,
+          { timeStart: newTimeStart, timeEnd: newTimeEnd }
+        );
+      }
+      
+      toast.success("Task time updated");
+      refetch();
+    } catch (error) {
+      console.error("Error updating task time:", error);
+      toast.error("Failed to update task");
+    }
+  }, [user, dateKey, createOccurrenceException, refetch]);
 
   const goToPreviousDay = useCallback(() => {
     const newDate = subDays(selectedDate, 1);
@@ -441,6 +480,7 @@ const Daily = () => {
           columns={timeGridColumns}
           onTaskClick={(task) => handleTaskClick(task)}
           onToggleComplete={(task) => handleToggleComplete(task)}
+          onTaskDrop={handleTaskDrop}
           timeFormat={preferences.timeFormat}
           minColumnWidth={400}
           className="max-w-3xl mx-auto"
