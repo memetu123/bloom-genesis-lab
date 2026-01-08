@@ -314,26 +314,19 @@ const Daily = () => {
     [goals]
   );
 
-  // 3-Year goals for filter dropdown (only active, non-deleted, non-archived, non-completed)
-  const threeYearGoals = useMemo(() => 
-    goals
-      .filter(g => 
-        g.goal_type === "three_year" && 
-        !g.is_deleted && 
-        g.status !== "archived" && 
-        g.status !== "completed"
-      )
-      .map(g => ({ id: g.id, title: g.title })),
-    [goals]
-  );
-
   // Build hierarchy map: 3-Year Goal ID → Set of 90-Day Plan IDs
   const threeYearTo90DayMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
     const oneYearGoals = goals.filter(g => g.goal_type === "one_year");
     const ninetyDayGoals = goals.filter(g => g.goal_type === "ninety_day");
+    const threeYearGoalsList = goals.filter(g => 
+      g.goal_type === "three_year" && 
+      !g.is_deleted && 
+      g.status !== "archived" && 
+      g.status !== "completed"
+    );
     
-    threeYearGoals.forEach(threeYear => {
+    threeYearGoalsList.forEach(threeYear => {
       const descendant90Days = new Set<string>();
       const childOneYears = oneYearGoals.filter(g => g.parent_goal_id === threeYear.id);
       childOneYears.forEach(oneYear => {
@@ -344,7 +337,32 @@ const Daily = () => {
       map.set(threeYear.id, descendant90Days);
     });
     return map;
-  }, [goals, threeYearGoals]);
+  }, [goals]);
+
+  // 3-Year goals for filter dropdown (only those with active tasks on the schedule)
+  const threeYearGoals = useMemo(() => {
+    // Get all 90-day goal IDs that have tasks visible on the schedule
+    const active90DayIds = new Set(
+      tasks
+        .filter(t => t.goalId)
+        .map(t => t.goalId!)
+    );
+    
+    // Filter 3-Year goals to only those with active tasks
+    return goals
+      .filter(g => 
+        g.goal_type === "three_year" && 
+        !g.is_deleted && 
+        g.status !== "archived" && 
+        g.status !== "completed"
+      )
+      .filter(threeYear => {
+        const descendant90Days = threeYearTo90DayMap.get(threeYear.id);
+        if (!descendant90Days || descendant90Days.size === 0) return false;
+        return Array.from(descendant90Days).some(id => active90DayIds.has(id));
+      })
+      .map(g => ({ id: g.id, title: g.title }));
+  }, [goals, tasks, threeYearTo90DayMap]);
 
   const selectedThreeYearGoalTitle = useMemo(() => {
     if (!selectedThreeYearGoalId) return null;
