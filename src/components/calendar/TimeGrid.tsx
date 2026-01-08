@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useCallback, useRef } from "react";
+import { memo, useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { format, isSameDay, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/formatPreferences";
@@ -555,37 +555,21 @@ const TimeGrid = ({
   }, [dragInfo, dropTarget, onTaskDrop]);
   
   // Set up global mouse/touch listeners for dragging
-  useState(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.addEventListener('touchmove', handleMouseMove);
-      document.addEventListener('touchend', handleMouseUp);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('touchmove', handleMouseMove);
-        document.removeEventListener('touchend', handleMouseUp);
-      };
-    }
-  });
-  
-  // Use effect for drag listeners
-  const dragListenersRef = useRef<boolean>(false);
-  if (isDragging && !dragListenersRef.current) {
+  useEffect(() => {
+    if (!isDragging) return;
+    
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('touchmove', handleMouseMove, { passive: false });
     document.addEventListener('touchend', handleMouseUp);
-    dragListenersRef.current = true;
-  } else if (!isDragging && dragListenersRef.current) {
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-    document.removeEventListener('touchmove', handleMouseMove);
-    document.removeEventListener('touchend', handleMouseUp);
-    dragListenersRef.current = false;
-  }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleMouseMove);
+      document.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
   
   // Render compact mode column content
   const renderCompactColumn = (column: DayColumn) => {
