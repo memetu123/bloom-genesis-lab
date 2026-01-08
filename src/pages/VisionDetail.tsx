@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Target, ChevronRight, Star } from "lucide-react";
+import { Plus, Target, Star, ChevronRight } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import EditableTitle from "@/components/EditableTitle";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
+import HierarchyBreadcrumb from "@/components/HierarchyBreadcrumb";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 /**
@@ -333,20 +335,32 @@ const VisionDetail = () => {
 
       {/* Breadcrumb */}
       {pillar && (
-        <div className="text-sm text-muted-foreground mb-4 flex items-center gap-1">
-          <span className="text-primary font-medium">{pillar.name}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span>Vision</span>
-          {vision.status !== "active" && (
-            <>
-              <ChevronRight className="h-3 w-3" />
-              <span className={vision.status === "completed" ? "text-primary" : "text-muted-foreground"}>
-                {vision.status.charAt(0).toUpperCase() + vision.status.slice(1)}
-              </span>
-            </>
-          )}
-        </div>
+        <HierarchyBreadcrumb 
+          segments={[
+            { label: pillar.name, href: "/dashboard" },
+            { label: "Vision" }
+          ]}
+        />
       )}
+
+      {/* Vision type badge */}
+      <div className="mb-2">
+        <Badge variant="outline" className="text-xs font-normal px-2 py-0.5 bg-accent/50 text-accent-foreground border-accent">
+          Vision
+        </Badge>
+        {vision.status !== "active" && (
+          <Badge 
+            variant="outline" 
+            className={`text-xs font-normal px-2 py-0.5 ml-2 ${
+              vision.status === "completed" 
+                ? "bg-primary/10 text-primary border-primary/20" 
+                : "bg-muted text-muted-foreground border-muted-foreground/20"
+            }`}
+          >
+            {vision.status.charAt(0).toUpperCase() + vision.status.slice(1)}
+          </Badge>
+        )}
+      </div>
 
       {/* Vision info */}
       <div className="mb-8">
