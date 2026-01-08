@@ -219,7 +219,10 @@ const TaskCreateModal = ({
   };
 
   const selectedGoal = goalId ? relatedGoals.find((g) => g.id === goalId) : null;
-  const isValid = title.trim() && timeStart && timeEnd && (!repeats || recurrenceType !== "weekly" || selectedDays.length > 0);
+  
+  // Validate: title, time, days (if weekly), and date is required for all tasks
+  const hasRequiredDate = repeats ? !!startDate : !!scheduledDate;
+  const isValid = title.trim() && timeStart && timeEnd && hasRequiredDate && (!repeats || recurrenceType !== "weekly" || selectedDays.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -285,17 +288,20 @@ const TaskCreateModal = ({
             )}
           </div>
 
-          {/* 3. Date - Only for one-time tasks */}
+          {/* 3. Date - Required for one-time tasks */}
           {!repeats && (
             <div className="space-y-2">
-              <Label htmlFor="scheduled-date" className="text-sm font-medium">Date</Label>
+              <Label htmlFor="scheduled-date" className="text-sm font-medium">Date <span className="text-destructive">*</span></Label>
               <Input
                 id="scheduled-date"
                 type="date"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
-                className="h-10"
+                className={`h-10 ${!scheduledDate ? "border-muted-foreground/30" : ""}`}
               />
+              {!scheduledDate && (
+                <p className="text-xs text-muted-foreground">Please select a date</p>
+              )}
             </div>
           )}
 
@@ -381,48 +387,34 @@ const TaskCreateModal = ({
                 </div>
               )}
 
-              {/* Duration for recurring tasks */}
+              {/* Start date - Required for recurring tasks */}
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setRelatedExpanded(prev => !prev)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {startDate || endDate ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
-                  )}
-                  <span>Set date range (optional)</span>
-                </button>
-                
-                {(startDate || endDate || relatedExpanded) && (
-                  <div className="flex gap-2 items-center">
-                    <div className="flex-1">
-                      <Label htmlFor="start-date" className="text-xs text-muted-foreground">
-                        Start
-                      </Label>
-                      <Input
-                        id="start-date"
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <Label htmlFor="end-date" className="text-xs text-muted-foreground">
-                        End
-                      </Label>
-                      <Input
-                        id="end-date"
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="h-9"
-                      />
-                    </div>
+                <Label className="text-sm font-medium">Start date <span className="text-destructive">*</span></Label>
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className={`h-9 ${!startDate ? "border-muted-foreground/30" : ""}`}
+                    />
                   </div>
+                  <div className="flex-1">
+                    <Label htmlFor="end-date" className="text-xs text-muted-foreground mb-1 block">
+                      End (optional)
+                    </Label>
+                    <Input
+                      id="end-date"
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                {!startDate && (
+                  <p className="text-xs text-muted-foreground">Please select a start date</p>
                 )}
               </div>
 
@@ -447,7 +439,6 @@ const TaskCreateModal = ({
                   <ChevronRight className="h-4 w-4" />
                 )}
                 <span>Link to 90-day plan</span>
-                <span className="text-xs">(optional)</span>
                 {selectedGoal && !relatedExpanded && (
                   <span className="ml-1 text-foreground font-medium truncate max-w-[150px]">
                     — {selectedGoal.title}

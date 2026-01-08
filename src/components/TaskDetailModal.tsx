@@ -535,6 +535,12 @@ const TaskDetailModal = ({
       return;
     }
     
+    // Validate scheduled date is required
+    if (!scheduledDate) {
+      toast.error("Please select a scheduled date");
+      return;
+    }
+    
     const isRecurring = task.commitmentId !== null && !task.isDetached;
     
     // If it's a recurring task with shared attribute changes, show confirmation
@@ -1038,11 +1044,11 @@ const TaskDetailModal = ({
             )}
           </div>
 
-          {/* Scheduled Date - For all tasks (allows moving individual occurrences) */}
+          {/* Scheduled Date - Required for all tasks */}
           <div className="space-y-2">
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground/40 font-normal flex items-center gap-1">
               <Calendar className="h-3 w-3 opacity-30" />
-              Scheduled date
+              Scheduled date <span className="text-destructive">*</span>
             </span>
 
             <div className="flex gap-3 items-end">
@@ -1052,16 +1058,19 @@ const TaskDetailModal = ({
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  className="h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  className={`h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20 ${!scheduledDate ? "border-muted-foreground/30" : ""}`}
                 />
               </div>
             </div>
-            {isDetached && (
+            {!scheduledDate && (
+              <p className="text-[10px] text-muted-foreground">Please select a date</p>
+            )}
+            {isDetached && scheduledDate && (
               <p className="text-[10px] text-muted-foreground/60">
                 This occurrence is detached from the recurring series
               </p>
             )}
-            {isRecurring && !isDetached && scheduledDate !== dateKey && (
+            {isRecurring && !isDetached && scheduledDate && scheduledDate !== dateKey && (
               <p className="text-[10px] text-muted-foreground/60">
                 Changing the date will only affect this occurrence
               </p>
@@ -1123,7 +1132,7 @@ const TaskDetailModal = ({
                     <ChevronRight className="h-3.5 w-3.5" />
                   )}
                 </span>
-                <span className="shrink-0">Related to (optional)</span>
+                <span className="shrink-0">Related to 90-day plan</span>
                 {goalId && !relatedExpanded && (
                   <span className="ml-1 text-foreground text-xs truncate min-w-0 flex-1">
                     — {relatedGoals.find(g => g.id === goalId)?.title || "..."}
