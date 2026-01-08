@@ -1017,7 +1017,21 @@ const TaskDetailModal = ({
                   type="time"
                   value={timeStart}
                   onChange={(e) => {
-                    setTimeStart(e.target.value);
+                    const newStart = e.target.value;
+                    // Preserve duration: adjust end time when start time changes
+                    if (timeStart && timeEnd && newStart) {
+                      const [oldStartH, oldStartM] = timeStart.split(':').map(Number);
+                      const [oldEndH, oldEndM] = timeEnd.split(':').map(Number);
+                      const [newStartH, newStartM] = newStart.split(':').map(Number);
+                      const durationMins = (oldEndH * 60 + oldEndM) - (oldStartH * 60 + oldStartM);
+                      if (durationMins > 0) {
+                        const newEndMins = (newStartH * 60 + newStartM) + durationMins;
+                        const newEndH = Math.floor(newEndMins / 60) % 24;
+                        const newEndM = newEndMins % 60;
+                        setTimeEnd(`${String(newEndH).padStart(2, '0')}:${String(newEndM).padStart(2, '0')}`);
+                      }
+                    }
+                    setTimeStart(newStart);
                     setTimeError("");
                   }}
                   className={`h-9 text-sm border-border/50 rounded-lg focus:border-primary/60 focus:ring-1 focus:ring-primary/20 ${timeError && !timeStart ? "border-destructive" : ""}`}
