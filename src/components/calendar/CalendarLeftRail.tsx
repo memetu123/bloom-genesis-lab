@@ -148,6 +148,9 @@ const CalendarLeftRail = ({
       
       {/* Progress Section - Scrollable */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
+        {/* Children content (3-Year filter) - at top */}
+        {children}
+        
         {/* Overall progress */}
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
@@ -322,9 +325,6 @@ const CalendarLeftRail = ({
             </div>
           </div>
         )}
-        
-        {/* Additional children content */}
-        {children}
       </div>
     </aside>
   );

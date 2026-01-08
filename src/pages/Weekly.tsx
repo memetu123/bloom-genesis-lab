@@ -6,6 +6,7 @@ import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useWeeklyData, DayTask } from "@/hooks/useWeeklyData";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useThreeYearGoalFilter } from "@/components/calendar/ThreeYearGoalFilterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -13,6 +14,7 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays } from "dat
 import { formatWeekRange } from "@/lib/formatPreferences";
 import CalendarLayout from "@/components/calendar/CalendarLayout";
 import CalendarDateNav from "@/components/calendar/CalendarDateNav";
+import ActiveFilterPill from "@/components/calendar/ActiveFilterPill";
 import TimeGrid, { TimeGridTask } from "@/components/calendar/TimeGrid";
 import MobileWeekList from "@/components/weekly/MobileWeekList";
 import TaskDetailModal from "@/components/TaskDetailModal";
@@ -33,6 +35,7 @@ const Weekly = () => {
   const { preferences, goals, visionsMap } = useAppData();
   const isMobile = useIsMobile();
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
+  const { selectedGoalId: selectedThreeYearGoalId, setSelectedGoalId: setSelectedThreeYearGoalId } = useThreeYearGoalFilter();
   
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => 
     startOfWeek(new Date(), { weekStartsOn })
@@ -325,18 +328,107 @@ const Weekly = () => {
     [goals]
   );
 
-  // Build columns for TimeGrid
+  // 3-Year goals for filter dropdown
+  const threeYearGoals = useMemo(() => 
+    goals
+      .filter(g => g.goal_type === "three_year" && !g.is_deleted && g.status !== "archived")
+      .map(g => ({ id: g.id, title: g.title })),
+    [goals]
+  );
+
+  // Build hierarchy map: 3-Year Goal ID → Set of 90-Day Plan IDs
+  const threeYearTo90DayMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    
+    // Get all goals by type
+    const oneYearGoals = goals.filter(g => g.goal_type === "one_year");
+    const ninetyDayGoals = goals.filter(g => g.goal_type === "ninety_day");
+    
+    // For each 3-year goal, find its descendants
+    threeYearGoals.forEach(threeYear => {
+      const descendant90Days = new Set<string>();
+      
+      // Find 1-year goals under this 3-year
+      const childOneYears = oneYearGoals.filter(g => g.parent_goal_id === threeYear.id);
+      
+      // Find 90-day plans under each 1-year
+      childOneYears.forEach(oneYear => {
+        ninetyDayGoals
+          .filter(g => g.parent_goal_id === oneYear.id)
+          .forEach(ninety => descendant90Days.add(ninety.id));
+      });
+      
+      map.set(threeYear.id, descendant90Days);
+    });
+    
+    return map;
+  }, [goals, threeYearGoals]);
+
+  // Get selected 3-Year goal title for filter pill
+  const selectedThreeYearGoalTitle = useMemo(() => {
+    if (!selectedThreeYearGoalId) return null;
+    return threeYearGoals.find(g => g.id === selectedThreeYearGoalId)?.title || null;
+  }, [selectedThreeYearGoalId, threeYearGoals]);
+
+  // Build columns for TimeGrid with muting logic
   const timeGridColumns = useMemo(() => {
+    const allowed90DayIds = selectedThreeYearGoalId 
+      ? threeYearTo90DayMap.get(selectedThreeYearGoalId) 
+      : null;
+    
     return Array.from({ length: 7 }, (_, i) => {
       const date = addDays(currentWeekStart, i);
       const dateKey = format(date, "yyyy-MM-dd");
+      const dayTasks = filteredTasksByDate[dateKey] || [];
+      
+      // Apply muting based on 3-Year filter
+      const tasksWithMuting: TimeGridTask[] = dayTasks.map(task => ({
+        ...task,
+        isMuted: allowed90DayIds !== null && task.goalId 
+          ? !allowed90DayIds.has(task.goalId) 
+          : false,
+      }));
+      
       return {
         date,
         dateKey,
-        tasks: (filteredTasksByDate[dateKey] || []) as TimeGridTask[],
+        tasks: tasksWithMuting,
       };
     });
-  }, [currentWeekStart, filteredTasksByDate]);
+  }, [currentWeekStart, filteredTasksByDate, selectedThreeYearGoalId, threeYearTo90DayMap]);
+
+  // Filtered progress for left rail (when 3-Year filter is active)
+  const filteredProgressItems = useMemo(() => {
+    if (!selectedThreeYearGoalId) return progressItems;
+    
+    const allowed90DayIds = threeYearTo90DayMap.get(selectedThreeYearGoalId);
+    if (!allowed90DayIds) return progressItems;
+    
+    // Filter commitments to only those under selected 3-Year goal
+    return progressItems.filter(item => {
+      const commitment = filteredCommitments.find(c => c.id === item.id);
+      if (!commitment?.goal_id) return false;
+      return allowed90DayIds.has(commitment.goal_id);
+    });
+  }, [progressItems, selectedThreeYearGoalId, threeYearTo90DayMap, filteredCommitments]);
+
+  // Filtered progress totals
+  const filteredWeeklyProgress = useMemo(() => {
+    if (!selectedThreeYearGoalId) return weeklyProgress;
+    
+    const allowed90DayIds = threeYearTo90DayMap.get(selectedThreeYearGoalId);
+    if (!allowed90DayIds) return weeklyProgress;
+    
+    return Object.values(filteredTasksByDate).reduce(
+      (acc, tasks) => {
+        const filteredTasks = tasks.filter(t => t.goalId && allowed90DayIds.has(t.goalId));
+        const completed = filteredTasks.filter(t => t.isCompleted).length;
+        const total = filteredTasks.length;
+        return { completed: acc.completed + completed, total: acc.total + total };
+      },
+      { completed: 0, total: 0 }
+    );
+  }, [selectedThreeYearGoalId, threeYearTo90DayMap, filteredTasksByDate, weeklyProgress]);
 
   if (loading) {
     return (
@@ -346,15 +438,23 @@ const Weekly = () => {
     );
   }
 
-  // Date navigation header content
+  // Date navigation header content with active filter pill
   const headerContent = (
-    <CalendarDateNav
-      dateLabel={weekRange}
-      onPrev={goToPreviousWeek}
-      onNext={goToNextWeek}
-      onToday={goToCurrentWeek}
-      showTodayButton={!isCurrentWeek}
-    />
+    <div className="flex items-center gap-3">
+      <CalendarDateNav
+        dateLabel={weekRange}
+        onPrev={goToPreviousWeek}
+        onNext={goToNextWeek}
+        onToday={goToCurrentWeek}
+        showTodayButton={!isCurrentWeek}
+      />
+      {selectedThreeYearGoalTitle && (
+        <ActiveFilterPill
+          goalTitle={selectedThreeYearGoalTitle}
+          onClear={() => setSelectedThreeYearGoalId(null)}
+        />
+      )}
+    </div>
   );
 
   // Mobile view
@@ -411,12 +511,15 @@ const Weekly = () => {
   return (
     <>
       <CalendarLayout
-        totalPlanned={weeklyProgress.total}
-        totalActual={weeklyProgress.completed}
-        progressItems={progressItems}
+        totalPlanned={filteredWeeklyProgress.total}
+        totalActual={filteredWeeklyProgress.completed}
+        progressItems={filteredProgressItems}
         onAddTask={() => setCreateModalOpen(true)}
         showFocusedOnly={showFocusedOnly}
         onToggleFocus={() => setShowFocusedOnly(!showFocusedOnly)}
+        threeYearGoals={threeYearGoals}
+        selectedThreeYearGoalId={selectedThreeYearGoalId}
+        onSelectThreeYearGoal={setSelectedThreeYearGoalId}
         headerContent={headerContent}
       >
         <TimeGrid
