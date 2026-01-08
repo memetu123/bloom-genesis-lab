@@ -6,11 +6,13 @@ import { useAppData, getWeekStartsOn } from "@/hooks/useAppData";
 import { useDailyData, DailyTask } from "@/hooks/useDailyData";
 import { supabase } from "@/integrations/supabase/client";
 import { useTaskScheduling } from "@/hooks/useTaskScheduling";
+import { useThreeYearGoalFilter } from "@/components/calendar/ThreeYearGoalFilterContext";
 import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, startOfWeek } from "date-fns";
 import { formatDateWithDay } from "@/lib/formatPreferences";
 import CalendarLayout from "@/components/calendar/CalendarLayout";
 import CalendarDateNav from "@/components/calendar/CalendarDateNav";
+import ActiveFilterPill from "@/components/calendar/ActiveFilterPill";
 import TimeGrid, { TimeGridTask } from "@/components/calendar/TimeGrid";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import TaskCreateModal from "@/components/TaskCreateModal";
@@ -106,6 +108,7 @@ const Daily = () => {
   const weekStartsOn = getWeekStartsOn(preferences.startOfWeek);
   const isMobile = useIsMobile();
   const { createOccurrenceException } = useTaskScheduling();
+  const { selectedGoalId: selectedThreeYearGoalId, setSelectedGoalId: setSelectedThreeYearGoalId } = useThreeYearGoalFilter();
   
   const [showFocusedOnly, setShowFocusedOnly] = useState(false);
   const [selectedTask, setSelectedTask] = useState<DailyTask | null>(null);
@@ -311,12 +314,57 @@ const Daily = () => {
     [goals]
   );
 
-  // Build single column for TimeGrid
-  const timeGridColumns = useMemo(() => [{
-    date: selectedDate,
-    dateKey: format(selectedDate, "yyyy-MM-dd"),
-    tasks: filteredTasks as TimeGridTask[],
-  }], [selectedDate, filteredTasks]);
+  // 3-Year goals for filter dropdown
+  const threeYearGoals = useMemo(() => 
+    goals
+      .filter(g => g.goal_type === "three_year" && !g.is_deleted && g.status !== "archived")
+      .map(g => ({ id: g.id, title: g.title })),
+    [goals]
+  );
+
+  // Build hierarchy map: 3-Year Goal ID → Set of 90-Day Plan IDs
+  const threeYearTo90DayMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const oneYearGoals = goals.filter(g => g.goal_type === "one_year");
+    const ninetyDayGoals = goals.filter(g => g.goal_type === "ninety_day");
+    
+    threeYearGoals.forEach(threeYear => {
+      const descendant90Days = new Set<string>();
+      const childOneYears = oneYearGoals.filter(g => g.parent_goal_id === threeYear.id);
+      childOneYears.forEach(oneYear => {
+        ninetyDayGoals
+          .filter(g => g.parent_goal_id === oneYear.id)
+          .forEach(ninety => descendant90Days.add(ninety.id));
+      });
+      map.set(threeYear.id, descendant90Days);
+    });
+    return map;
+  }, [goals, threeYearGoals]);
+
+  const selectedThreeYearGoalTitle = useMemo(() => {
+    if (!selectedThreeYearGoalId) return null;
+    return threeYearGoals.find(g => g.id === selectedThreeYearGoalId)?.title || null;
+  }, [selectedThreeYearGoalId, threeYearGoals]);
+
+  // Build single column for TimeGrid with muting
+  const timeGridColumns = useMemo(() => {
+    const allowed90DayIds = selectedThreeYearGoalId 
+      ? threeYearTo90DayMap.get(selectedThreeYearGoalId) 
+      : null;
+    
+    const tasksWithMuting: TimeGridTask[] = filteredTasks.map(task => ({
+      ...task,
+      isMuted: allowed90DayIds !== null && task.goalId 
+        ? !allowed90DayIds.has(task.goalId) 
+        : false,
+    }));
+    
+    return [{
+      date: selectedDate,
+      dateKey: format(selectedDate, "yyyy-MM-dd"),
+      tasks: tasksWithMuting,
+    }];
+  }, [selectedDate, filteredTasks, selectedThreeYearGoalId, threeYearTo90DayMap]);
 
   // Task list for left rail
   const taskListForRail = useMemo(() => 

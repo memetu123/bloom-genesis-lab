@@ -1,13 +1,14 @@
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import CalendarLeftRail, { TaskListItem } from "./CalendarLeftRail";
+import ThreeYearGoalFilter from "./ThreeYearGoalFilter";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 /**
  * CalendarLayout - Shared layout for Weekly and Daily calendar views
  * 
  * Structure:
- * - Left Rail: Progress section + action buttons (desktop only for now)
+ * - Left Rail: 3-Year filter + Progress section + action buttons (desktop only for now)
  * - Main Canvas: Calendar grid starting at top, no extra padding
  */
 
@@ -17,6 +18,11 @@ interface ProgressItem {
   planned: number;
   actual: number;
   goalTitle?: string | null;
+}
+
+interface ThreeYearGoal {
+  id: string;
+  title: string;
 }
 
 interface CalendarLayoutProps {
@@ -33,6 +39,11 @@ interface CalendarLayoutProps {
   onAddTask: () => void;
   showFocusedOnly: boolean;
   onToggleFocus: () => void;
+  
+  // 3-Year Goal filter
+  threeYearGoals?: ThreeYearGoal[];
+  selectedThreeYearGoalId?: string | null;
+  onSelectThreeYearGoal?: (goalId: string | null) => void;
   
   // Main content
   children: ReactNode;
@@ -53,6 +64,9 @@ const CalendarLayout = ({
   onAddTask,
   showFocusedOnly,
   onToggleFocus,
+  threeYearGoals = [],
+  selectedThreeYearGoalId,
+  onSelectThreeYearGoal,
   children,
   headerContent,
   className,
@@ -89,7 +103,17 @@ const CalendarLayout = ({
         onAddTask={onAddTask}
         showFocusedOnly={showFocusedOnly}
         onToggleFocus={onToggleFocus}
-      />
+      >
+        {/* 3-Year Goal Filter */}
+        {threeYearGoals.length > 0 && onSelectThreeYearGoal && (
+          <ThreeYearGoalFilter
+            goals={threeYearGoals}
+            selectedGoalId={selectedThreeYearGoalId || null}
+            onSelectGoal={onSelectThreeYearGoal}
+            className="mb-4"
+          />
+        )}
+      </CalendarLeftRail>
       
       {/* Main Canvas */}
       <div className="flex-1 flex flex-col overflow-hidden">

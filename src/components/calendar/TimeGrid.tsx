@@ -29,6 +29,7 @@ export interface TimeGridTask {
   totalInstances?: number;
   isDetached?: boolean;
   goalId?: string | null;
+  isMuted?: boolean; // For 3-Year goal filter - visually de-emphasized
 }
 
 interface DayColumn {
@@ -236,9 +237,12 @@ const TaskCard = memo(({
         "absolute rounded-md px-2 transition-all select-none",
         "border overflow-hidden",
         isDragging && "opacity-30",
+        task.isMuted && !task.isCompleted && "opacity-40",
         task.isCompleted
           ? "bg-muted/50 border-muted-foreground/20"
-          : "bg-card border-border hover:border-foreground/20 hover:shadow-sm cursor-grab active:cursor-grabbing"
+          : task.isMuted
+            ? "bg-muted/30 border-border/50"
+            : "bg-card border-border hover:border-foreground/20 hover:shadow-sm cursor-grab active:cursor-grabbing"
       )}
       style={{
         top: `${position.top}px`,
@@ -275,7 +279,8 @@ const TaskCard = memo(({
         <span className={cn(
           "text-[11px] leading-tight flex-1 truncate",
           task.isCompleted && "line-through text-muted-foreground",
-          !task.isCompleted && "text-foreground"
+          !task.isCompleted && !task.isMuted && "text-foreground",
+          task.isMuted && !task.isCompleted && "text-muted-foreground"
         )}>
           {task.title}{instanceLabel}
         </span>
@@ -310,9 +315,12 @@ const CompactTaskCard = memo(({
       className={cn(
         "flex items-center gap-2 px-2 rounded-md cursor-pointer transition-colors",
         "border",
+        task.isMuted && !task.isCompleted && "opacity-40",
         task.isCompleted
           ? "bg-muted/50 border-muted-foreground/20"
-          : "bg-card border-border hover:border-foreground/20 hover:bg-muted/30"
+          : task.isMuted
+            ? "bg-muted/30 border-border/50"
+            : "bg-card border-border hover:border-foreground/20 hover:bg-muted/30"
       )}
       style={{ height: COMPACT_TASK_HEIGHT }}
       onClick={onClick}
@@ -333,7 +341,8 @@ const CompactTaskCard = memo(({
         <span className={cn(
           "text-xs block truncate",
           task.isCompleted && "line-through text-muted-foreground",
-          !task.isCompleted && "text-foreground"
+          !task.isCompleted && !task.isMuted && "text-foreground",
+          task.isMuted && !task.isCompleted && "text-muted-foreground"
         )}>
           {task.title}{instanceLabel}
         </span>
