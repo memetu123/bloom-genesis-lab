@@ -42,11 +42,11 @@ const HierarchyBreadcrumb = ({ segments, className }: HierarchyBreadcrumbProps) 
               className={cn(
                 "transition-colors",
                 // Distant ancestors: smallest and lightest
-                isDistantAncestor && "text-xs text-muted-foreground/70",
+                isDistantAncestor && "text-xs text-muted-foreground/60",
                 // Immediate parent: slightly larger and more prominent
-                isImmediateParent && "text-sm text-muted-foreground font-medium",
-                // Current (last, non-clickable): just text, no emphasis needed
-                isLast && !isClickable && "text-sm text-muted-foreground",
+                isImmediateParent && "text-sm text-muted-foreground",
+                // Current (last, non-clickable): most prominent - this is the current page
+                isLast && !isClickable && "text-sm text-foreground font-medium",
                 // Last but clickable (rare case): treat as immediate parent
                 isLast && isClickable && "text-sm text-muted-foreground font-medium",
                 // Clickable styling

@@ -108,8 +108,10 @@ const GoalDetail = () => {
   const [createDescription, setCreateDescription] = useState("");
   const [creatingGoal, setCreatingGoal] = useState(false);
   const [visionData, setVisionData] = useState<{ id: string; title: string; pillar_id: string } | null>(null);
+  const [newGoalPillarName, setNewGoalPillarName] = useState<string | null>(null);
+  const [parentGoalData, setParentGoalData] = useState<{ id: string; title: string; goal_type: GoalType } | null>(null);
 
-  // Fetch vision data for new goal creation
+  // Fetch vision, pillar, and parent goal data for new goal creation
   useEffect(() => {
     if (!isNewGoal || !newGoalVisionId || !user) {
       if (isNewGoal && !newGoalVisionId) {
@@ -119,8 +121,9 @@ const GoalDetail = () => {
       return;
     }
 
-    const fetchVisionData = async () => {
+    const fetchNewGoalData = async () => {
       try {
+        // Fetch vision
         const { data: vision, error } = await supabase
           .from("life_visions")
           .select("id, title, pillar_id")
@@ -136,15 +139,38 @@ const GoalDetail = () => {
         }
 
         setVisionData(vision);
+
+        // Fetch pillar name
+        const { data: pillar } = await supabase
+          .from("pillars")
+          .select("name")
+          .eq("id", vision.pillar_id)
+          .maybeSingle();
+        
+        if (pillar) setNewGoalPillarName(pillar.name);
+
+        // Fetch parent goal if exists
+        if (newGoalParentId) {
+          const { data: parentGoal } = await supabase
+            .from("goals")
+            .select("id, title, goal_type")
+            .eq("id", newGoalParentId)
+            .maybeSingle();
+          
+          if (parentGoal) {
+            setParentGoalData(parentGoal as { id: string; title: string; goal_type: GoalType });
+          }
+        }
+
         setLoading(false);
       } catch (error) {
-        console.error("Error fetching vision:", error);
-        toast.error("Failed to load vision data");
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load data");
         navigate("/dashboard");
       }
     };
 
-    fetchVisionData();
+    fetchNewGoalData();
   }, [isNewGoal, newGoalVisionId, user, navigate]);
 
   // Handle creating a new goal
@@ -499,13 +525,29 @@ const GoalDetail = () => {
   if (isNewGoal && visionData && newGoalType) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Breadcrumb for new goal */}
+        {/* Breadcrumb for new goal - full hierarchy without Dashboard */}
         <HierarchyBreadcrumb 
-          segments={[
-            { label: "Dashboard", href: "/dashboard" },
-            { label: visionData.title, href: `/vision/${visionData.id}` },
-            { label: `New ${GOAL_TYPE_LABELS[newGoalType]}` }
-          ]}
+          segments={(() => {
+            const segments: BreadcrumbSegment[] = [];
+            
+            // Pillar (always first, if available)
+            if (newGoalPillarName) {
+              segments.push({ label: newGoalPillarName, href: "/dashboard" });
+            }
+            
+            // Vision (always present for goal creation)
+            segments.push({ label: visionData.title, href: `/vision/${visionData.id}` });
+            
+            // Parent goal (for 1-Year under 3-Year, or 90-Day under 1-Year)
+            if (parentGoalData) {
+              segments.push({ label: parentGoalData.title, href: `/goal/${parentGoalData.id}` });
+            }
+            
+            // Current creation context (non-clickable, most prominent)
+            segments.push({ label: `New ${GOAL_TYPE_LABELS[newGoalType]}` });
+            
+            return segments;
+          })()}
         />
 
         {/* Goal type badge for creation */}
