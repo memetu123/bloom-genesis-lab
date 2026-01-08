@@ -91,41 +91,43 @@ const CalendarLayout = ({
   
   // Desktop/Tablet: Left rail + main canvas
   return (
-    <div className={cn("flex flex-1 min-h-0", className)}>
-      {/* Left Rail */}
-      <CalendarLeftRail
-        totalPlanned={totalPlanned}
-        totalActual={totalActual}
-        progressItems={progressItems}
-        taskList={taskList}
-        onTaskClick={onTaskClick}
-        onTaskToggle={onTaskToggle}
-        onAddTask={onAddTask}
-        showFocusedOnly={showFocusedOnly}
-        onToggleFocus={onToggleFocus}
-      >
-        {/* 3-Year Goal Filter */}
-        {threeYearGoals.length > 0 && onSelectThreeYearGoal && (
-          <ThreeYearGoalFilter
-            goals={threeYearGoals}
-            selectedGoalId={selectedThreeYearGoalId || null}
-            onSelectGoal={onSelectThreeYearGoal}
-            className="mb-4"
-          />
-        )}
-      </CalendarLeftRail>
+    <div className={cn("flex flex-1 min-h-0 overflow-hidden", className)}>
+      {/* Left Rail - sticky, does not scroll horizontally */}
+      <div className="shrink-0 sticky left-0 z-30 h-full">
+        <CalendarLeftRail
+          totalPlanned={totalPlanned}
+          totalActual={totalActual}
+          progressItems={progressItems}
+          taskList={taskList}
+          onTaskClick={onTaskClick}
+          onTaskToggle={onTaskToggle}
+          onAddTask={onAddTask}
+          showFocusedOnly={showFocusedOnly}
+          onToggleFocus={onToggleFocus}
+        >
+          {/* 3-Year Goal Filter */}
+          {threeYearGoals.length > 0 && onSelectThreeYearGoal && (
+            <ThreeYearGoalFilter
+              goals={threeYearGoals}
+              selectedGoalId={selectedThreeYearGoalId || null}
+              onSelectGoal={onSelectThreeYearGoal}
+              className="mb-4"
+            />
+          )}
+        </CalendarLeftRail>
+      </div>
       
-      {/* Main Canvas */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Optional header */}
+      {/* Main Canvas - scrollable content area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Optional header - sticky at top */}
         {headerContent && (
-          <div className="shrink-0 border-b border-border px-4 py-2">
+          <div className="shrink-0 border-b border-border px-4 py-2 sticky top-0 z-20 bg-background">
             {headerContent}
           </div>
         )}
         
-        {/* Calendar content - starts at top */}
-        <div className="flex-1 overflow-hidden min-h-0">
+        {/* Calendar content - scrollable */}
+        <div className="flex-1 overflow-auto min-h-0">
           {children}
         </div>
       </div>
