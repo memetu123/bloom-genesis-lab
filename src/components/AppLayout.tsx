@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { CalendarDays, User, Settings, Trash2, LogOut, Compass } from "lucide-react";
+import { CalendarDays, User, Settings, Trash2, Archive, LogOut, Compass } from "lucide-react";
 import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -121,7 +121,12 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     <Settings className="h-4 w-4 mr-2" />
                     Settings
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/recently-deleted")} className="cursor-pointer">
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/archived")} className="cursor-pointer">
+                    <Archive className="h-4 w-4 mr-2" />
+                    Archived
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/deleted")} className="cursor-pointer">
                     <Trash2 className="h-4 w-4 mr-2" />
                     Deleted items
                   </DropdownMenuItem>
