@@ -127,7 +127,7 @@ const CalendarLayout = ({
         )}
         
         {/* Calendar content (TimeGrid handles its own vertical scroll) */}
-        <div className="flex-1 overflow-hidden min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0 flex">
           {children}
         </div>
       </div>
