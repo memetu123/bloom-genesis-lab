@@ -104,7 +104,7 @@ const CalendarLeftRail = ({
   return (
     <aside className={cn(
       "w-56 shrink-0 border-r border-border bg-sidebar-background",
-      "flex flex-col h-full",
+      "flex flex-col min-h-0",
       className
     )}>
       {/* Icon Actions - Sticky at top */}

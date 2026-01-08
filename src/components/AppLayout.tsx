@@ -167,7 +167,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       </header>
 
       {/* Page Content - flex-1 for calendar views to fill height */}
-      <main className="flex-1 overflow-auto min-h-0">{children}</main>
+      <main className="flex-1 overflow-hidden min-h-0">{children}</main>
     </div>
   );
 };
