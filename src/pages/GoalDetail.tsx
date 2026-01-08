@@ -587,7 +587,7 @@ const GoalDetail = () => {
         />
       )}
 
-      {/* Breadcrumb - build segments dynamically */}
+      {/* Breadcrumb - shows ancestor hierarchy only (no current item) */}
       <HierarchyBreadcrumb 
         segments={(() => {
           const segments: BreadcrumbSegment[] = [];
@@ -600,8 +600,6 @@ const GoalDetail = () => {
           if (breadcrumb.threeYearId && breadcrumb.threeYearTitle) {
             segments.push({ label: breadcrumb.threeYearTitle, href: `/goal/${breadcrumb.threeYearId}` });
           }
-          // Current goal title as final segment (not clickable)
-          segments.push({ label: goal.title });
           return segments;
         })()}
       />
