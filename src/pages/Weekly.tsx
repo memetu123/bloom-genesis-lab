@@ -533,7 +533,7 @@ const Weekly = () => {
 
   // Desktop/Tablet: New CalendarLayout with TimeGrid
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="h-full overflow-hidden flex flex-col">
       <CalendarLayout
         totalPlanned={filteredWeeklyProgress.total}
         totalActual={filteredWeeklyProgress.completed}

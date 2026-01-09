@@ -543,7 +543,7 @@ const Daily = () => {
 
   // Desktop/Tablet: New CalendarLayout with single-column TimeGrid
   return (
-    <>
+    <div className="h-full overflow-hidden flex flex-col">
       <CalendarLayout
         totalPlanned={dailyTotal}
         totalActual={dailyCompleted}
@@ -586,7 +586,7 @@ const Daily = () => {
         date={selectedDate}
         onUpdate={refetch}
       />
-    </>
+    </div>
   );
 };
 
