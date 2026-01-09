@@ -6,6 +6,7 @@ import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
 import HierarchyBreadcrumb, { BreadcrumbSegment } from "@/components/HierarchyBreadcrumb";
 import GoalTypeBadge from "@/components/GoalTypeBadge";
+import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,10 @@ const GoalDetail = () => {
   // Edit form state
   const [editDescription, setEditDescription] = useState("");
   const [editStatus, setEditStatus] = useState<GoalStatus>("active");
+  
+  // Advanced completion dialog state
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [hasActiveChildren, setHasActiveChildren] = useState(false);
 
   // Check if this is a "new goal" creation flow
   const isNewGoal = id === "new";
@@ -297,6 +302,24 @@ const GoalDetail = () => {
           .order("created_at", { ascending: true });
 
         setChildGoals((childGoalsData || []) as Goal[]);
+        
+        // Check for any active child goals or tasks under this goal
+        let hasChildren = false;
+        
+        // Check child goals
+        const { count: childGoalCount } = await supabase
+          .from("goals")
+          .select("id", { count: "exact", head: true })
+          .eq("parent_goal_id", id)
+          .eq("user_id", user.id)
+          .eq("is_deleted", false)
+          .in("status", ["active", "not_started", "in_progress"]);
+        
+        if ((childGoalCount || 0) > 0) {
+          hasChildren = true;
+        }
+        
+        setHasActiveChildren(hasChildren);
       } catch (error: any) {
         console.error("Error fetching goal:", error);
         toast.error("Failed to load goal");
@@ -375,7 +398,16 @@ const GoalDetail = () => {
   };
 
   // Status actions
-  const handleComplete = async () => {
+  const handleCompleteClick = () => {
+    if (!goal) return;
+    if (hasActiveChildren) {
+      setCompletionDialogOpen(true);
+    } else {
+      handleDirectComplete();
+    }
+  };
+
+  const handleDirectComplete = async () => {
     if (!goal) return;
     try {
       const { error } = await supabase
@@ -387,6 +419,52 @@ const GoalDetail = () => {
       toast.success("Goal marked as complete");
     } catch (error) {
       toast.error("Failed to update status");
+    }
+  };
+
+  const handleAdvancedComplete = async ({
+    goalIds,
+    taskIds,
+    completeParent,
+  }: {
+    goalIds: string[];
+    taskIds: string[];
+    completeParent: boolean;
+  }) => {
+    if (!goal) return;
+
+    try {
+      if (completeParent) {
+        const { error } = await supabase
+          .from("goals")
+          .update({ status: "completed" })
+          .eq("id", goal.id);
+        if (error) throw error;
+        setGoal(prev => prev ? { ...prev, status: "completed" } : prev);
+      }
+
+      if (goalIds.length > 0) {
+        const { error: goalsError } = await supabase
+          .from("goals")
+          .update({ status: "completed" })
+          .in("id", goalIds);
+        if (goalsError) throw goalsError;
+      }
+
+      if (taskIds.length > 0) {
+        const { error: tasksError } = await supabase
+          .from("weekly_commitments")
+          .update({ is_active: false })
+          .in("id", taskIds);
+        if (tasksError) throw tasksError;
+      }
+
+      const totalCompleted = 1 + goalIds.length + taskIds.length;
+      toast.success(`Completed ${totalCompleted} item${totalCompleted > 1 ? "s" : ""}`);
+    } catch (error) {
+      console.error("Error completing:", error);
+      toast.error("Failed to complete items");
+      throw error;
     }
   };
 
@@ -682,7 +760,7 @@ const GoalDetail = () => {
           />
           <ItemActions
             status={displayStatus as "active" | "completed" | "archived"}
-            onComplete={displayStatus === "active" ? handleComplete : undefined}
+            onComplete={displayStatus === "active" ? handleCompleteClick : undefined}
             onArchive={displayStatus !== "archived" ? handleArchive : undefined}
             onRestore={displayStatus === "archived" ? handleRestore : undefined}
             onReactivate={displayStatus === "completed" ? handleReactivate : undefined}
@@ -876,6 +954,17 @@ const GoalDetail = () => {
         >
           ← Go back
         </button>
+        
+      {/* Advanced Completion Dialog */}
+      <AdvancedCompletionDialog
+        open={completionDialogOpen}
+        onOpenChange={setCompletionDialogOpen}
+        itemType="goal"
+        itemId={goal.id}
+        itemTitle={goal.title}
+        goalType={goal.goal_type}
+        onConfirm={handleAdvancedComplete}
+      />
     </div>
   );
 };
