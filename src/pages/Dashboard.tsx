@@ -588,6 +588,22 @@ const Dashboard = () => {
     }
   };
 
+  // Handle reactivating a completed goal
+  const handleReactivateGoal = async (goalId: string, goalTitle: string) => {
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({ status: "active" })
+        .eq("id", goalId);
+
+      if (error) throw error;
+      refetchGoals();
+      toast.success(`"${goalTitle}" reactivated`);
+    } catch (err) {
+      toast.error("Failed to reactivate goal");
+    }
+  };
+
   // Handle deleting a goal (soft delete)
   const handleDeleteGoal = async (goalId: string, goalTitle: string) => {
     try {
@@ -687,14 +703,25 @@ const Dashboard = () => {
               >
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCompleteGoal(goal.id, goal.title);
-                }}
-              >
-                Mark complete
-              </DropdownMenuItem>
+              {goal.status === "completed" ? (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleReactivateGoal(goal.id, goal.title);
+                  }}
+                >
+                  Reactivate
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCompleteGoal(goal.id, goal.title);
+                  }}
+                >
+                  Mark complete
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
