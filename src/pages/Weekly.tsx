@@ -456,7 +456,7 @@ const Weekly = () => {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
@@ -533,7 +533,7 @@ const Weekly = () => {
 
   // Desktop/Tablet: New CalendarLayout with TimeGrid
   return (
-    <>
+    <div className="flex flex-col flex-1 min-h-0">
       <CalendarLayout
         totalPlanned={filteredWeeklyProgress.total}
         totalActual={filteredWeeklyProgress.completed}
@@ -583,7 +583,7 @@ const Weekly = () => {
         sourceDate={pendingDrop ? format(pendingDrop.sourceDate, "yyyy-MM-dd") : ""}
         targetDate={pendingDrop ? format(pendingDrop.targetDate, "yyyy-MM-dd") : ""}
       />
-    </>
+    </div>
   );
 };
 
