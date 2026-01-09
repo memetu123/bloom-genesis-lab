@@ -6,6 +6,7 @@ import EditableTitle from "@/components/EditableTitle";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
 import HierarchyBreadcrumb from "@/components/HierarchyBreadcrumb";
+import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,10 @@ const VisionDetail = () => {
   // Edit form state
   const [editDescription, setEditDescription] = useState("");
   const [editStatus, setEditStatus] = useState<VisionStatus>("active");
+  
+  // Advanced completion dialog state
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [hasActiveChildren, setHasActiveChildren] = useState(false);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -116,6 +121,17 @@ const VisionDetail = () => {
 
         if (goalsError) throw goalsError;
         setThreeYearGoals(goalsData || []);
+        
+        // Check for any active child goals under this vision
+        const { count } = await supabase
+          .from("goals")
+          .select("id", { count: "exact", head: true })
+          .eq("life_vision_id", id)
+          .eq("user_id", user.id)
+          .eq("is_deleted", false)
+          .in("status", ["active", "not_started", "in_progress"]);
+        
+        setHasActiveChildren((count || 0) > 0);
       } catch (error: any) {
         console.error("Error fetching vision:", error);
         toast.error("Failed to load vision");
@@ -187,7 +203,18 @@ const VisionDetail = () => {
   };
 
   // Status actions
-  const handleComplete = async () => {
+  const handleCompleteClick = () => {
+    if (!vision) return;
+    // If there are active children, show the advanced completion dialog
+    if (hasActiveChildren) {
+      setCompletionDialogOpen(true);
+    } else {
+      // No children, complete directly
+      handleDirectComplete();
+    }
+  };
+
+  const handleDirectComplete = async () => {
     if (!vision) return;
     try {
       const { error } = await supabase
@@ -199,6 +226,55 @@ const VisionDetail = () => {
       toast.success("Vision marked as complete");
     } catch (error) {
       toast.error("Failed to update status");
+    }
+  };
+
+  const handleAdvancedComplete = async ({
+    goalIds,
+    taskIds,
+    completeParent,
+  }: {
+    goalIds: string[];
+    taskIds: string[];
+    completeParent: boolean;
+  }) => {
+    if (!vision) return;
+
+    try {
+      // Complete the vision itself
+      if (completeParent) {
+        const { error } = await supabase
+          .from("life_visions")
+          .update({ status: "completed" })
+          .eq("id", vision.id);
+        if (error) throw error;
+        setVision(prev => prev ? { ...prev, status: "completed" } : prev);
+      }
+
+      // Complete selected goals
+      if (goalIds.length > 0) {
+        const { error: goalsError } = await supabase
+          .from("goals")
+          .update({ status: "completed" })
+          .in("id", goalIds);
+        if (goalsError) throw goalsError;
+      }
+
+      // Deactivate selected tasks (tasks don't have "completed" status, they have is_active)
+      if (taskIds.length > 0) {
+        const { error: tasksError } = await supabase
+          .from("weekly_commitments")
+          .update({ is_active: false })
+          .in("id", taskIds);
+        if (tasksError) throw tasksError;
+      }
+
+      const totalCompleted = 1 + goalIds.length + taskIds.length;
+      toast.success(`Completed ${totalCompleted} item${totalCompleted > 1 ? "s" : ""}`);
+    } catch (error) {
+      console.error("Error completing:", error);
+      toast.error("Failed to complete items");
+      throw error;
     }
   };
 
@@ -392,7 +468,7 @@ const VisionDetail = () => {
           </button>
           <ItemActions
             status={vision.status}
-            onComplete={vision.status === "active" ? handleComplete : undefined}
+            onComplete={vision.status === "active" ? handleCompleteClick : undefined}
             onArchive={vision.status !== "archived" ? handleArchive : undefined}
             onRestore={vision.status === "archived" ? handleRestore : undefined}
             onReactivate={vision.status === "completed" ? handleReactivate : undefined}
@@ -536,6 +612,16 @@ const VisionDetail = () => {
             ))}
           </div>
         )}
+        
+      {/* Advanced Completion Dialog */}
+      <AdvancedCompletionDialog
+        open={completionDialogOpen}
+        onOpenChange={setCompletionDialogOpen}
+        itemType="vision"
+        itemId={vision.id}
+        itemTitle={vision.title}
+        onConfirm={handleAdvancedComplete}
+      />
     </div>
   );
 };
