@@ -306,8 +306,8 @@ const GoalDetail = () => {
         // Check for any active child goals or tasks under this goal
         let hasChildren = false;
         
-        // Check child goals
-        const { count: childGoalCount } = await supabase
+        // For 3-year and 1-year goals, check child goals and their descendants
+        const { count: directActiveCount } = await supabase
           .from("goals")
           .select("id", { count: "exact", head: true })
           .eq("parent_goal_id", id)
@@ -315,8 +315,48 @@ const GoalDetail = () => {
           .eq("is_deleted", false)
           .in("status", ["active", "not_started", "in_progress"]);
         
-        if ((childGoalCount || 0) > 0) {
+        if ((directActiveCount || 0) > 0) {
           hasChildren = true;
+        } else {
+          // Check for active descendants (grandchildren goals or tasks)
+          const { data: allChildGoals } = await supabase
+            .from("goals")
+            .select("id, goal_type")
+            .eq("parent_goal_id", id)
+            .eq("user_id", user.id)
+            .eq("is_deleted", false);
+          
+          if (allChildGoals && allChildGoals.length > 0) {
+            for (const child of allChildGoals) {
+              if (child.goal_type === "ninety_day") {
+                // Check for active tasks under this 90-day plan
+                const { count: taskCount } = await supabase
+                  .from("weekly_commitments")
+                  .select("id", { count: "exact", head: true })
+                  .eq("goal_id", child.id)
+                  .eq("is_active", true);
+                
+                if ((taskCount || 0) > 0) {
+                  hasChildren = true;
+                  break;
+                }
+              } else {
+                // Check for active grandchild goals
+                const { count: grandchildCount } = await supabase
+                  .from("goals")
+                  .select("id", { count: "exact", head: true })
+                  .eq("parent_goal_id", child.id)
+                  .eq("user_id", user.id)
+                  .eq("is_deleted", false)
+                  .in("status", ["active", "not_started", "in_progress"]);
+                
+                if ((grandchildCount || 0) > 0) {
+                  hasChildren = true;
+                  break;
+                }
+              }
+            }
+          }
         }
         
         setHasActiveChildren(hasChildren);
