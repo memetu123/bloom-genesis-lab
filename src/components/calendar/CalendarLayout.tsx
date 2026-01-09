@@ -118,7 +118,7 @@ const CalendarLayout = ({
       </CalendarLeftRail>
       
       {/* Main Canvas */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Optional header (fixed; not part of scroll container) */}
         {headerContent && (
           <div className="shrink-0 border-b border-border px-4 py-2">
@@ -127,7 +127,7 @@ const CalendarLayout = ({
         )}
         
         {/* Calendar content (TimeGrid handles its own vertical scroll) */}
-        <div className="flex-1 overflow-hidden min-h-0 flex">
+        <div className="flex-1 min-h-0 flex">
           {children}
         </div>
       </div>
