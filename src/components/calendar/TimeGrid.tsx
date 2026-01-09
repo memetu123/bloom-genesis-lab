@@ -718,7 +718,7 @@ const TimeGrid = ({
   const TIME_LABEL_OFFSET = 12;
   
   return (
-    <div className={cn("flex-1 min-h-0 h-full overflow-auto", className)} ref={gridRef}>
+    <div className={cn("flex-1 min-h-0 overflow-auto", className)} ref={gridRef}>
       <div 
         className="flex min-w-max relative"
         style={{ minWidth: TIME_SCALE_WIDTH + columns.length * minColumnWidth }}
