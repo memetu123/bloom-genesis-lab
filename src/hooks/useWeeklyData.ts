@@ -351,7 +351,8 @@ export function useWeeklyData(
             id: task.id,
             commitmentId: task.is_detached ? task.commitment_id : null,
             title: task.title || "Untitled Task",
-            isCompleted: taskInstance?.is_completed ?? false,
+            // Use commitment_completions.is_completed as primary source, fallback to daily_task_instances
+            isCompleted: task.is_completed ?? taskInstance?.is_completed ?? false,
             timeStart: task.time_start,
             timeEnd: task.time_end,
             taskType: "independent",

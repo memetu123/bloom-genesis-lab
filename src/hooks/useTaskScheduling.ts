@@ -610,9 +610,10 @@ export const useTaskScheduling = () => {
             });
         }
       } else {
-        // NOT MOVING DATE - just updating attributes for this occurrence
+        // NOT MOVING DATE - just updating time/title for this occurrence
+        // Keep the task as part of the recurring series (don't detach it)
         if (existingCompletion) {
-          // Update existing completion with overrides
+          // Update existing completion with time overrides, preserve is_completed status
           await supabase
             .from("commitment_completions")
             .update({
@@ -620,12 +621,11 @@ export const useTaskScheduling = () => {
               time_start: updates.timeStart !== undefined ? updates.timeStart : existingCompletion.time_start,
               time_end: updates.timeEnd !== undefined ? updates.timeEnd : existingCompletion.time_end,
               is_flexible_time: updates.timeStart !== undefined ? !updates.timeStart : existingCompletion.is_flexible_time,
-              is_detached: true, // Mark as exception
-              task_type: "independent",
+              // Do NOT set is_detached or task_type - keep task as part of recurring series
             })
             .eq("id", existingCompletion.id);
         } else {
-          // Create new completion record as an exception
+          // Create new completion record with time override (still part of series)
           await supabase
             .from("commitment_completions")
             .insert({
@@ -636,8 +636,8 @@ export const useTaskScheduling = () => {
               time_start: updates.timeStart !== undefined ? updates.timeStart : commitment.default_time_start,
               time_end: updates.timeEnd !== undefined ? updates.timeEnd : commitment.default_time_end,
               is_flexible_time: updates.timeStart !== undefined ? !updates.timeStart : commitment.flexible_time,
-              is_detached: true,
-              task_type: "independent",
+              is_detached: false, // Keep as part of recurring series
+              task_type: "recurring", // Keep as recurring
               is_completed: false,
             });
         }
