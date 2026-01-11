@@ -205,7 +205,8 @@ export function useDailyData(
         title: task.title || "Untitled Task",
         timeStart: task.time_start,
         timeEnd: task.time_end,
-        isCompleted: taskInstance?.is_completed ?? false,
+        // Use commitment_completions.is_completed as primary source, fallback to daily_task_instances
+        isCompleted: task.is_completed ?? taskInstance?.is_completed ?? false,
         taskType: "independent",
         goalId: detachedGoalId,
         goalTitle: detachedGoal?.title ?? null,
