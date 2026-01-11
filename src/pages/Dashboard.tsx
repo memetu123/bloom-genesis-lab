@@ -380,7 +380,7 @@ const Dashboard = () => {
           onClick: async () => {
             await supabase
               .from("life_visions")
-              .update({ status: "active", archived_at: null })
+              .update({ status: "active", archived_at: null, completed_at: null })
               .eq("id", visionId);
             refetchVisions();
           }
@@ -649,7 +649,7 @@ const Dashboard = () => {
         // Direct complete - no active descendants
         const { error } = await supabase
           .from("goals")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: new Date().toISOString() })
           .eq("id", goalId);
 
         if (error) throw error;
@@ -661,7 +661,7 @@ const Dashboard = () => {
             onClick: async () => {
               await supabase
                 .from("goals")
-                .update({ status: "active" })
+                .update({ status: "active", completed_at: null })
                 .eq("id", goalId);
               refetchGoals();
             }
@@ -688,10 +688,11 @@ const Dashboard = () => {
     
     try {
       // Complete the parent goal
+      const completedAt = new Date().toISOString();
       if (completeParent) {
         await supabase
           .from("goals")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: completedAt })
           .eq("id", goalForCompletion.id);
       }
       
@@ -699,7 +700,7 @@ const Dashboard = () => {
       if (goalIds.length > 0) {
         await supabase
           .from("goals")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: completedAt })
           .in("id", goalIds);
       }
       
@@ -726,7 +727,7 @@ const Dashboard = () => {
     try {
       const { error } = await supabase
         .from("goals")
-        .update({ status: "active" })
+        .update({ status: "active", completed_at: null })
         .eq("id", goalId);
 
       if (error) throw error;

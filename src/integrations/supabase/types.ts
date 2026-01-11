@@ -120,6 +120,7 @@ export type Database = {
       goals: {
         Row: {
           archived_at: string | null
+          completed_at: string | null
           created_at: string | null
           deleted_at: string | null
           description: string | null
@@ -139,6 +140,7 @@ export type Database = {
         }
         Insert: {
           archived_at?: string | null
+          completed_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -158,6 +160,7 @@ export type Database = {
         }
         Update: {
           archived_at?: string | null
+          completed_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -202,6 +205,7 @@ export type Database = {
       life_visions: {
         Row: {
           archived_at: string | null
+          completed_at: string | null
           created_at: string | null
           deleted_at: string | null
           description: string | null
@@ -216,6 +220,7 @@ export type Database = {
         }
         Insert: {
           archived_at?: string | null
+          completed_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null
@@ -230,6 +235,7 @@ export type Database = {
         }
         Update: {
           archived_at?: string | null
+          completed_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
           description?: string | null

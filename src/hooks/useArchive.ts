@@ -89,7 +89,7 @@ export const useArchive = () => {
     try {
       const { error } = await supabase
         .from(table)
-        .update({ status: "active", archived_at: null })
+        .update({ status: "active", archived_at: null, completed_at: null })
         .eq("id", id);
 
       if (error) throw error;
