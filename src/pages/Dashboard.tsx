@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
+import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
+import type { GoalType } from "@/types/todayoum";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
@@ -88,6 +90,14 @@ const Dashboard = () => {
   // Mobile action sheet state
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [mobileSheetVision, setMobileSheetVision] = useState<VisionWithHierarchy | null>(null);
+  
+  // Advanced completion dialog state
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [goalForCompletion, setGoalForCompletion] = useState<{
+    id: string;
+    title: string;
+    goalType: GoalType;
+  } | null>(null);
   
 
   // Build hierarchical goal tree: 3yr → 1yr → 90d with activity derivation
@@ -559,32 +569,155 @@ const Dashboard = () => {
     }
   };
 
-  // Handle completing a goal
-  const handleCompleteGoal = async (goalId: string, goalTitle: string) => {
-    try {
-      const { error } = await supabase
+  // Check if a goal has active descendants (child goals or tasks)
+  const checkForActiveDescendants = async (goalId: string, goalType: GoalType): Promise<boolean> => {
+    if (!user) return false;
+    
+    if (goalType === "ninety_day") {
+      // Check for active tasks under this 90-day plan
+      const { count } = await supabase
+        .from("weekly_commitments")
+        .select("id", { count: "exact", head: true })
+        .eq("goal_id", goalId)
+        .eq("user_id", user.id)
+        .eq("is_deleted", false)
+        .eq("is_active", true);
+      return (count || 0) > 0;
+    }
+    
+    if (goalType === "one_year") {
+      // Check for active 90-day children
+      const { data: childGoals } = await supabase
         .from("goals")
-        .update({ status: "completed" })
-        .eq("id", goalId);
-
-      if (error) throw error;
-      refetchGoals();
+        .select("id")
+        .eq("parent_goal_id", goalId)
+        .eq("goal_type", "ninety_day")
+        .eq("user_id", user.id)
+        .eq("is_deleted", false)
+        .in("status", ["active", "not_started", "in_progress"]);
       
-      toast(`"${goalTitle}" marked complete`, {
-        action: {
-          label: "Undo",
-          onClick: async () => {
-            await supabase
-              .from("goals")
-              .update({ status: "active" })
-              .eq("id", goalId);
-            refetchGoals();
-          }
-        },
-        duration: 5000
-      });
+      if ((childGoals?.length || 0) > 0) return true;
+      
+      // Also check for tasks in any 90-day descendants
+      for (const child of childGoals || []) {
+        const { count } = await supabase
+          .from("weekly_commitments")
+          .select("id", { count: "exact", head: true })
+          .eq("goal_id", child.id)
+          .eq("user_id", user.id)
+          .eq("is_deleted", false)
+          .eq("is_active", true);
+        if ((count || 0) > 0) return true;
+      }
+      return false;
+    }
+    
+    if (goalType === "three_year") {
+      // Check for active 1-year children
+      const { data: oneYearChildren } = await supabase
+        .from("goals")
+        .select("id")
+        .eq("parent_goal_id", goalId)
+        .eq("goal_type", "one_year")
+        .eq("user_id", user.id)
+        .eq("is_deleted", false)
+        .in("status", ["active", "not_started", "in_progress"]);
+      
+      if ((oneYearChildren?.length || 0) > 0) return true;
+      
+      // Recursively check each 1-year goal
+      for (const oneYear of oneYearChildren || []) {
+        const hasChildren = await checkForActiveDescendants(oneYear.id, "one_year");
+        if (hasChildren) return true;
+      }
+      return false;
+    }
+    
+    return false;
+  };
+
+  // Handle completing a goal - checks for active descendants first
+  const handleCompleteGoal = async (goalId: string, goalTitle: string, goalType: GoalType) => {
+    try {
+      const hasActiveDescendants = await checkForActiveDescendants(goalId, goalType);
+      
+      if (hasActiveDescendants) {
+        // Show advanced completion dialog
+        setGoalForCompletion({ id: goalId, title: goalTitle, goalType });
+        setCompletionDialogOpen(true);
+      } else {
+        // Direct complete - no active descendants
+        const { error } = await supabase
+          .from("goals")
+          .update({ status: "completed" })
+          .eq("id", goalId);
+
+        if (error) throw error;
+        refetchGoals();
+        
+        toast(`"${goalTitle}" marked complete`, {
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              await supabase
+                .from("goals")
+                .update({ status: "active" })
+                .eq("id", goalId);
+              refetchGoals();
+            }
+          },
+          duration: 5000
+        });
+      }
     } catch (err) {
       toast.error("Failed to complete goal");
+    }
+  };
+  
+  // Handle advanced completion from dialog
+  const handleAdvancedComplete = async ({
+    goalIds,
+    taskIds,
+    completeParent,
+  }: {
+    goalIds: string[];
+    taskIds: string[];
+    completeParent: boolean;
+  }) => {
+    if (!goalForCompletion) return;
+    
+    try {
+      // Complete the parent goal
+      if (completeParent) {
+        await supabase
+          .from("goals")
+          .update({ status: "completed" })
+          .eq("id", goalForCompletion.id);
+      }
+      
+      // Complete selected child goals
+      if (goalIds.length > 0) {
+        await supabase
+          .from("goals")
+          .update({ status: "completed" })
+          .in("id", goalIds);
+      }
+      
+      // Deactivate selected tasks
+      if (taskIds.length > 0) {
+        await supabase
+          .from("weekly_commitments")
+          .update({ is_active: false })
+          .in("id", taskIds);
+      }
+      
+      refetchGoals();
+      refetchCommitments();
+      
+      const totalItems = 1 + goalIds.length + taskIds.length;
+      toast.success(`Completed ${totalItems} item${totalItems > 1 ? "s" : ""}`);
+    } catch (err) {
+      toast.error("Failed to complete items");
     }
   };
 
@@ -716,7 +849,7 @@ const Dashboard = () => {
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleCompleteGoal(goal.id, goal.title);
+                    handleCompleteGoal(goal.id, goal.title, goal.goal_type as GoalType);
                   }}
                 >
                   Mark complete
@@ -1604,6 +1737,17 @@ const Dashboard = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ========== ADVANCED COMPLETION DIALOG ========== */}
+      <AdvancedCompletionDialog
+        open={completionDialogOpen}
+        onOpenChange={setCompletionDialogOpen}
+        itemType="goal"
+        itemId={goalForCompletion?.id || ""}
+        itemTitle={goalForCompletion?.title || ""}
+        goalType={goalForCompletion?.goalType}
+        onConfirm={handleAdvancedComplete}
+      />
     </div>
   );
 };
