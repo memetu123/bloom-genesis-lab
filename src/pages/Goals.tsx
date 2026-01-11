@@ -175,10 +175,18 @@ const Goals = () => {
     );
 
     try {
-      const updateData: { status: "active" | "completed" | "archived"; archived_at: string | null } = { 
+      const updateData: { 
+        status: "active" | "completed" | "archived"; 
+        archived_at: string | null;
+        completed_at: string | null;
+      } = { 
         status: newStatus,
-        archived_at: newStatus === "archived" ? new Date().toISOString() : null
+        archived_at: newStatus === "archived" ? new Date().toISOString() : null,
+        completed_at: newStatus === "completed" ? new Date().toISOString() : (newStatus === "active" ? null : undefined as any)
       };
+      
+      // Clean up undefined to avoid sending to DB
+      if (updateData.completed_at === undefined) delete (updateData as any).completed_at;
       
       const { error } = await supabase
         .from("goals")
@@ -194,7 +202,7 @@ const Goals = () => {
             onClick: async () => {
               await supabase
                 .from("goals")
-                .update({ status: previousStatus as "active" | "completed" | "archived", archived_at: null })
+                .update({ status: previousStatus as "active" | "completed" | "archived", archived_at: null, completed_at: null })
                 .eq("id", goalId);
               setLocalGoals(prev =>
                 prev.map(g => g.id === goalId ? { ...g, status: previousStatus as "active" | "completed" | "archived" } : g)

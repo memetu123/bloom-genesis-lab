@@ -302,6 +302,7 @@ const DeletedItems = () => {
               deleted_at: null,
               status: "active",
               archived_at: null,
+              completed_at: null,
             })
             .eq("id", parent.id);
         }

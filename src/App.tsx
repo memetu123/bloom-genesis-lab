@@ -22,6 +22,7 @@ import GoalDetail from "./pages/GoalDetail";
 import Daily from "./pages/Daily";
 import Schedule from "./pages/Schedule";
 import Archived from "./pages/Archived";
+import Completed from "./pages/Completed";
 import DeletedItems from "./pages/DeletedItems";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
@@ -61,6 +62,7 @@ const App = () => (
                     <Route path="/daily" element={<ProtectedRoute><AppLayout><Daily /></AppLayout></ProtectedRoute>} />
                     <Route path="/schedule" element={<ProtectedRoute><AppLayout><Schedule /></AppLayout></ProtectedRoute>} />
                     <Route path="/archived" element={<ProtectedRoute><AppLayout><Archived /></AppLayout></ProtectedRoute>} />
+                    <Route path="/completed" element={<ProtectedRoute><AppLayout><Completed /></AppLayout></ProtectedRoute>} />
                     <Route path="/deleted" element={<ProtectedRoute><AppLayout><DeletedItems /></AppLayout></ProtectedRoute>} />
                     <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
                     <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />

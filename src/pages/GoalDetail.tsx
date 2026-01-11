@@ -452,10 +452,10 @@ const GoalDetail = () => {
     try {
       const { error } = await supabase
         .from("goals")
-        .update({ status: "completed" })
+        .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", goal.id);
       if (error) throw error;
-      setGoal(prev => prev ? { ...prev, status: "completed" } : prev);
+      setGoal(prev => prev ? { ...prev, status: "completed", completed_at: new Date().toISOString() } : prev);
       toast.success("Goal marked as complete");
     } catch (error) {
       toast.error("Failed to update status");
@@ -474,19 +474,20 @@ const GoalDetail = () => {
     if (!goal) return;
 
     try {
+      const completedAt = new Date().toISOString();
       if (completeParent) {
         const { error } = await supabase
           .from("goals")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: completedAt })
           .eq("id", goal.id);
         if (error) throw error;
-        setGoal(prev => prev ? { ...prev, status: "completed" } : prev);
+        setGoal(prev => prev ? { ...prev, status: "completed", completed_at: completedAt } : prev);
       }
 
       if (goalIds.length > 0) {
         const { error: goalsError } = await supabase
           .from("goals")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: completedAt })
           .in("id", goalIds);
         if (goalsError) throw goalsError;
       }
@@ -543,10 +544,10 @@ const GoalDetail = () => {
     try {
       const { error } = await supabase
         .from("goals")
-        .update({ status: "active" })
+        .update({ status: "active", completed_at: null })
         .eq("id", goal.id);
       if (error) throw error;
-      setGoal(prev => prev ? { ...prev, status: "active" } : prev);
+      setGoal(prev => prev ? { ...prev, status: "active", completed_at: null } : prev);
       toast.success("Goal restored to active");
     } catch (error) {
       toast.error("Failed to restore");
@@ -558,10 +559,10 @@ const GoalDetail = () => {
     try {
       const { error } = await supabase
         .from("goals")
-        .update({ status: "active" })
+        .update({ status: "active", completed_at: null })
         .eq("id", goal.id);
       if (error) throw error;
-      setGoal(prev => prev ? { ...prev, status: "active" } : prev);
+      setGoal(prev => prev ? { ...prev, status: "active", completed_at: null } : prev);
       toast.success("Goal reactivated");
     } catch (error) {
       toast.error("Failed to reactivate");

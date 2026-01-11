@@ -219,10 +219,10 @@ const VisionDetail = () => {
     try {
       const { error } = await supabase
         .from("life_visions")
-        .update({ status: "completed" })
+        .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", vision.id);
       if (error) throw error;
-      setVision(prev => prev ? { ...prev, status: "completed" } : prev);
+      setVision(prev => prev ? { ...prev, status: "completed", completed_at: new Date().toISOString() } : prev);
       toast.success("Vision marked as complete");
     } catch (error) {
       toast.error("Failed to update status");
@@ -241,21 +241,22 @@ const VisionDetail = () => {
     if (!vision) return;
 
     try {
+      const completedAt = new Date().toISOString();
       // Complete the vision itself
       if (completeParent) {
         const { error } = await supabase
           .from("life_visions")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: completedAt })
           .eq("id", vision.id);
         if (error) throw error;
-        setVision(prev => prev ? { ...prev, status: "completed" } : prev);
+        setVision(prev => prev ? { ...prev, status: "completed", completed_at: completedAt } : prev);
       }
 
       // Complete selected goals
       if (goalIds.length > 0) {
         const { error: goalsError } = await supabase
           .from("goals")
-          .update({ status: "completed" })
+          .update({ status: "completed", completed_at: completedAt })
           .in("id", goalIds);
         if (goalsError) throw goalsError;
       }
@@ -298,10 +299,10 @@ const VisionDetail = () => {
     try {
       const { error } = await supabase
         .from("life_visions")
-        .update({ status: "active" })
+        .update({ status: "active", completed_at: null })
         .eq("id", vision.id);
       if (error) throw error;
-      setVision(prev => prev ? { ...prev, status: "active" } : prev);
+      setVision(prev => prev ? { ...prev, status: "active", completed_at: null } : prev);
       toast.success("Vision restored to active");
     } catch (error) {
       toast.error("Failed to restore");
@@ -313,10 +314,10 @@ const VisionDetail = () => {
     try {
       const { error } = await supabase
         .from("life_visions")
-        .update({ status: "active" })
+        .update({ status: "active", completed_at: null })
         .eq("id", vision.id);
       if (error) throw error;
-      setVision(prev => prev ? { ...prev, status: "active" } : prev);
+      setVision(prev => prev ? { ...prev, status: "active", completed_at: null } : prev);
       toast.success("Vision reactivated");
     } catch (error) {
       toast.error("Failed to reactivate");

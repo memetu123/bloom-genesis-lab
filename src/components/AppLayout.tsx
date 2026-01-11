@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { CalendarDays, User, Settings, Trash2, Archive, LogOut, Compass } from "lucide-react";
+import { CalendarDays, User, Settings, Trash2, Archive, LogOut, Compass, CheckCircle } from "lucide-react";
 import NorthStarIcon from "@/components/icons/NorthStarIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -122,6 +122,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/completed")} className="cursor-pointer">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Completed
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/archived")} className="cursor-pointer">
                     <Archive className="h-4 w-4 mr-2" />
                     Archived

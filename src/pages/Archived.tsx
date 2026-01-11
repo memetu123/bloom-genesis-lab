@@ -280,6 +280,7 @@ const Archived = () => {
               deleted_at: null,
               status: "active",
               archived_at: null,
+              completed_at: null,
             })
             .eq("id", parent.id);
         }
@@ -288,7 +289,7 @@ const Archived = () => {
       // Restore the item
       const { error } = await supabase
         .from(tableMap[item.type])
-        .update({ status: "active", archived_at: null })
+        .update({ status: "active", archived_at: null, completed_at: null })
         .eq("id", item.id);
 
       if (error) throw error;
