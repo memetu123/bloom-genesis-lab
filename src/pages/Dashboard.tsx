@@ -159,7 +159,7 @@ const Dashboard = () => {
     const focused = visions.filter(v => v.is_focus && v.status === "active");
 
     return focused.map(vision => {
-      const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived" && !g.is_deleted);
+      const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived" && g.status !== "completed" && !g.is_deleted);
 
       return {
         id: vision.id,
@@ -176,7 +176,7 @@ const Dashboard = () => {
     return visions
       .filter(v => !v.is_focus && v.status === "active")
       .map(vision => {
-        const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived" && !g.is_deleted);
+        const visionGoals = goals.filter(g => g.life_vision_id === vision.id && g.status !== "archived" && g.status !== "completed" && !g.is_deleted);
         return {
           id: vision.id,
           title: vision.title,
