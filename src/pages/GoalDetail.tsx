@@ -7,6 +7,7 @@ import UndoToast from "@/components/UndoToast";
 import HierarchyBreadcrumb, { BreadcrumbSegment } from "@/components/HierarchyBreadcrumb";
 import GoalTypeBadge from "@/components/GoalTypeBadge";
 import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
+import EditGoalDialog from "@/components/EditGoalDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -93,10 +94,6 @@ const GoalDetail = () => {
   // Undo state
   const [undoItem, setUndoItem] = useState<{ id: string } | null>(null);
   const [showUndo, setShowUndo] = useState(false);
-  
-  // Edit form state
-  const [editDescription, setEditDescription] = useState("");
-  const [editStatus, setEditStatus] = useState<GoalStatus>("active");
   
   // Advanced completion dialog state
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
@@ -601,35 +598,16 @@ const GoalDetail = () => {
 
   const openEditDialog = () => {
     if (!goal) return;
-    setEditDescription(goal.description || "");
-    setEditStatus(goal.status);
     setEditDialogOpen(true);
   };
 
-  const handleSaveEdit = async () => {
-    if (!goal) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("goals")
-        .update({ 
-          description: editDescription.trim() || null,
-          status: editStatus 
-        })
-        .eq("id", goal.id);
-      if (error) throw error;
-      setGoal(prev => prev ? { 
-        ...prev, 
-        description: editDescription.trim() || null,
-        status: editStatus 
-      } : prev);
-      setEditDialogOpen(false);
-      toast.success("Goal updated");
-    } catch (error) {
-      toast.error("Failed to update goal");
-    } finally {
-      setSaving(false);
-    }
+  const handleGoalSaved = (updatedGoal: { id: string; title: string; description: string | null; status: GoalStatus }) => {
+    setGoal(prev => prev ? { 
+      ...prev, 
+      title: updatedGoal.title,
+      description: updatedGoal.description,
+      status: updatedGoal.status 
+    } : prev);
   };
 
   if (loading) {
@@ -815,42 +793,12 @@ const GoalDetail = () => {
       </div>
 
       {/* Edit Goal Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Goal</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Describe your goal..."
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-status">Status</Label>
-              <Select value={editStatus} onValueChange={(v) => setEditStatus(v as GoalStatus)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleSaveEdit} disabled={saving} className="w-full">
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EditGoalDialog
+        goal={goal}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSaved={handleGoalSaved}
+      />
 
         {/* Children section */}
         <div className="mb-6 flex items-center justify-between">
