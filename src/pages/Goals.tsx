@@ -19,6 +19,7 @@ import StatusFilter, { StatusFilterValue } from "@/components/StatusFilter";
 import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
 import ProgressIndicator from "@/components/ProgressIndicator";
+import EditGoalDialog from "@/components/EditGoalDialog";
 import { useSoftDelete } from "@/hooks/useSoftDelete";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 
@@ -71,6 +72,10 @@ const Goals = () => {
   const [selectedVisionId, setSelectedVisionId] = useState("");
   const [selectedGoalType, setSelectedGoalType] = useState<GoalType>("three_year");
   const [saving, setSaving] = useState(false);
+
+  // Edit goal dialog state
+  const [editGoalDialogOpen, setEditGoalDialogOpen] = useState(false);
+  const [goalForEdit, setGoalForEdit] = useState<GoalWithRelations | null>(null);
 
   // Handle focusId from search
   const focusId = searchParams.get("focusId");
@@ -427,6 +432,10 @@ const Goals = () => {
                         {/* Actions */}
                         <ItemActions
                           status={goal.status === "not_started" ? "active" : (goal.status as "active" | "completed" | "archived")}
+                          onEdit={() => {
+                            setGoalForEdit(goal);
+                            setEditGoalDialogOpen(true);
+                          }}
                           onComplete={() => updateStatus(goal.id, "completed")}
                           onArchive={() => updateStatus(goal.id, "archived")}
                           onReactivate={() => updateStatus(goal.id, "active")}
@@ -561,6 +570,20 @@ const Goals = () => {
           onClose={() => {}}
         />
       )}
+
+      {/* Edit goal dialog */}
+      <EditGoalDialog
+        goal={goalForEdit}
+        open={editGoalDialogOpen}
+        onOpenChange={setEditGoalDialogOpen}
+        onSaved={(updatedGoal) => {
+          setLocalGoals(prev => prev.map(g => 
+            g.id === updatedGoal.id 
+              ? { ...g, title: updatedGoal.title, description: updatedGoal.description, status: updatedGoal.status } 
+              : g
+          ));
+        }}
+      />
     </div>
   );
 };

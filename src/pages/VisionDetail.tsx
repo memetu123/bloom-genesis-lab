@@ -7,6 +7,7 @@ import ItemActions from "@/components/ItemActions";
 import UndoToast from "@/components/UndoToast";
 import HierarchyBreadcrumb from "@/components/HierarchyBreadcrumb";
 import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
+import EditVisionDialog from "@/components/EditVisionDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -67,10 +67,6 @@ const VisionDetail = () => {
   // Undo state
   const [undoItem, setUndoItem] = useState<{ id: string; type: "vision" | "goal" } | null>(null);
   const [showUndo, setShowUndo] = useState(false);
-  
-  // Edit form state
-  const [editDescription, setEditDescription] = useState("");
-  const [editStatus, setEditStatus] = useState<VisionStatus>("active");
   
   // Advanced completion dialog state
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
@@ -358,35 +354,16 @@ const VisionDetail = () => {
 
   const openEditDialog = () => {
     if (!vision) return;
-    setEditDescription(vision.description || "");
-    setEditStatus(vision.status);
     setEditDialogOpen(true);
   };
 
-  const handleSaveEdit = async () => {
-    if (!vision) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("life_visions")
-        .update({ 
-          description: editDescription.trim() || null,
-          status: editStatus 
-        })
-        .eq("id", vision.id);
-      if (error) throw error;
-      setVision(prev => prev ? { 
-        ...prev, 
-        description: editDescription.trim() || null,
-        status: editStatus 
-      } : prev);
-      setEditDialogOpen(false);
-      toast.success("Vision updated");
-    } catch (error) {
-      toast.error("Failed to update vision");
-    } finally {
-      setSaving(false);
-    }
+  const handleVisionSaved = (updatedVision: { id: string; title: string; description: string | null; status: VisionStatus }) => {
+    setVision(prev => prev ? { 
+      ...prev, 
+      title: updatedVision.title,
+      description: updatedVision.description,
+      status: updatedVision.status 
+    } : prev);
   };
 
   if (loading) {
@@ -483,41 +460,12 @@ const VisionDetail = () => {
       </div>
 
       {/* Edit Vision Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Vision</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Describe your vision..."
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-status">Status</Label>
-              <Select value={editStatus} onValueChange={(v) => setEditStatus(v as VisionStatus)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleSaveEdit} disabled={saving} className="w-full">
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EditVisionDialog
+        vision={vision}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSaved={handleVisionSaved}
+      />
 
         {/* 3-Year Goals section */}
         <div className="mb-6 flex items-center justify-between">

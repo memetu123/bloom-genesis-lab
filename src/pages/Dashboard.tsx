@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
 import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
+import EditGoalDialog from "@/components/EditGoalDialog";
 import type { GoalType } from "@/types/todayoum";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,9 @@ const Dashboard = () => {
     goalType: GoalType;
   } | null>(null);
   
+  // Edit goal dialog state
+  const [editGoalDialogOpen, setEditGoalDialogOpen] = useState(false);
+  const [goalForEdit, setGoalForEdit] = useState<GoalWithChildren | null>(null);
 
   // Build hierarchical goal tree: 3yr → 1yr → 90d with activity derivation
   const buildGoalTree = (visionGoals: GlobalGoal[]): GoalWithChildren[] => {
@@ -832,7 +836,8 @@ const Dashboard = () => {
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/goal/${goal.id}`);
+                  setGoalForEdit(goal);
+                  setEditGoalDialogOpen(true);
                 }}
               >
                 Edit
@@ -1748,6 +1753,16 @@ const Dashboard = () => {
         itemTitle={goalForCompletion?.title || ""}
         goalType={goalForCompletion?.goalType}
         onConfirm={handleAdvancedComplete}
+      />
+
+      {/* ========== EDIT GOAL DIALOG ========== */}
+      <EditGoalDialog
+        goal={goalForEdit}
+        open={editGoalDialogOpen}
+        onOpenChange={setEditGoalDialogOpen}
+        onSaved={() => {
+          refetchGoals();
+        }}
       />
     </div>
   );
