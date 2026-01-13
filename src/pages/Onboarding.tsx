@@ -76,7 +76,9 @@ const Onboarding = () => {
           user_id: user.id,
           pillar_id: focusPillar.id,
           title: data.vision.title,
-          description: data.vision.description || null
+          description: data.vision.description || null,
+          is_focus: true,
+          status: "active"
         })
         .select()
         .single();
