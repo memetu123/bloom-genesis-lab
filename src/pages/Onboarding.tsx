@@ -169,6 +169,9 @@ const Onboarding = () => {
       // Refresh global cache so new data appears immediately
       await refetchAll();
       
+      // Small delay to ensure state propagation before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       toast.success(isPlanningGuide ? "Plan added successfully!" : "Your life plan is ready!");
       navigate("/dashboard");
     } catch (error: any) {
