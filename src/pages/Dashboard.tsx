@@ -1474,8 +1474,8 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <p className="text-muted-foreground text-center">Loading...</p>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
       </div>
     );
   }

@@ -373,8 +373,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const refetchAll = useCallback(async () => {
+    // Wait for any in-progress fetch to settle
+    if (isFetchingRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // Reset refs to force a fresh fetch
     didFetchRef.current = false;
     isFetchingRef.current = false;
+    userIdRef.current = null;
+    
+    // Wait for the fetch to fully complete
     await fetchAllData();
   }, [fetchAllData]);
 
