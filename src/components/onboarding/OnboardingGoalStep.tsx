@@ -65,11 +65,15 @@ export function OnboardingGoalStep({
   const [aiExample, setAiExample] = useState<string | null>(null);
   const [isLoadingExample, setIsLoadingExample] = useState(false);
   const config = GOAL_CONFIG[goalType];
+  
+  // Progressive disclosure for optional description (only for 1-year goals)
+  const [showDescription, setShowDescription] = useState(!!goal?.description);
 
   // Reset form when goalType changes
   useEffect(() => {
     setTitle(goal?.title || "");
     setDescription(goal?.description || "");
+    setShowDescription(!!goal?.description);
   }, [goalType, goal]);
 
   // Function to fetch AI-generated example
@@ -172,18 +176,44 @@ export function OnboardingGoalStep({
             <p className="text-xs text-muted-foreground">{config.helpText}</p>
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="goalDescription" className="text-sm font-medium text-foreground">
-              How will you know you've achieved it? (optional)
-            </label>
-            <Textarea
-              id="goalDescription"
-              placeholder="Describe what success looks like..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
+          {/* Progressive disclosure for optional description - only for 1-year goals */}
+          {goalType === "one_year" ? (
+            !showDescription ? (
+              <button
+                type="button"
+                onClick={() => setShowDescription(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Add success criteria (optional)
+              </button>
+            ) : (
+              <div className="space-y-2 animate-fade-in">
+                <label htmlFor="goalDescription" className="text-sm font-medium text-foreground">
+                  How will you know you've achieved it?
+                </label>
+                <Textarea
+                  id="goalDescription"
+                  placeholder="Describe what success looks like..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )
+          ) : (
+            <div className="space-y-2">
+              <label htmlFor="goalDescription" className="text-sm font-medium text-foreground">
+                How will you know you've achieved it? (optional)
+              </label>
+              <Textarea
+                id="goalDescription"
+                placeholder="Describe what success looks like..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+          )}
         </div>
 
         {/* Continue button */}

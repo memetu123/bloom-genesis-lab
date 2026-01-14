@@ -50,6 +50,9 @@ export function OnboardingVisionStep({
   // Coach state - simple prompt cycling
   const [showCoach, setShowCoach] = useState(false);
   const [promptIndex, setPromptIndex] = useState(0);
+  
+  // Progressive disclosure for optional description
+  const [showDescription, setShowDescription] = useState(!!vision?.description);
 
   // Function to fetch AI-generated example
   const fetchExample = useCallback(async () => {
@@ -209,18 +212,29 @@ export function OnboardingVisionStep({
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <label htmlFor="visionDescription" className="text-sm font-medium text-foreground">
-                Why is this important to you? (optional)
-              </label>
-              <Textarea
-                id="visionDescription"
-                placeholder="What will achieving this vision mean for your life?"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
-            </div>
+            {/* Progressive disclosure for optional description */}
+            {!showDescription ? (
+              <button
+                type="button"
+                onClick={() => setShowDescription(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Add personal meaning (optional)
+              </button>
+            ) : (
+              <div className="space-y-1.5 animate-fade-in">
+                <label htmlFor="visionDescription" className="text-sm font-medium text-foreground">
+                  Why is this important to you?
+                </label>
+                <Textarea
+                  id="visionDescription"
+                  placeholder="What will achieving this vision mean for your life?"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
           </div>
         )}
 
