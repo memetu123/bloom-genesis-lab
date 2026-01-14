@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "lucide-react";
 import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
 import EditGoalDialog from "@/components/EditGoalDialog";
+import EditVisionDialog from "@/components/EditVisionDialog";
 import type { GoalType } from "@/types/todayoum";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,8 @@ interface GoalWithChildren extends GlobalGoal {
 interface VisionWithHierarchy {
   id: string;
   title: string;
+  description?: string | null;
+  status: string;
   pillar_name: string;
   is_focus: boolean;
   threeYearWithChildren: GoalWithChildren[];
@@ -103,6 +106,10 @@ const Dashboard = () => {
   // Edit goal dialog state
   const [editGoalDialogOpen, setEditGoalDialogOpen] = useState(false);
   const [goalForEdit, setGoalForEdit] = useState<GoalWithChildren | null>(null);
+
+  // Edit vision dialog state
+  const [editVisionDialogOpen, setEditVisionDialogOpen] = useState(false);
+  const [visionForEdit, setVisionForEdit] = useState<VisionWithHierarchy | null>(null);
 
   // Build hierarchical goal tree: 3yr → 1yr → 90d with activity derivation
   const buildGoalTree = (visionGoals: GlobalGoal[]): GoalWithChildren[] => {
@@ -168,6 +175,8 @@ const Dashboard = () => {
       return {
         id: vision.id,
         title: vision.title,
+        description: vision.description,
+        status: vision.status || "active",
         pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
         is_focus: true,
         threeYearWithChildren: buildGoalTree(visionGoals),
@@ -184,6 +193,8 @@ const Dashboard = () => {
         return {
           id: vision.id,
           title: vision.title,
+          description: vision.description,
+          status: vision.status || "active",
           pillar_name: pillarsMap.get(vision.pillar_id)?.name || "",
           is_focus: false,
           threeYearWithChildren: buildGoalTree(visionGoals),
@@ -1042,7 +1053,11 @@ const Dashboard = () => {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {/* Section 2: Edit */}
-                  <DropdownMenuItem onClick={() => navigate(`/vision/${vision.id}`)}>
+                  <DropdownMenuItem onClick={(e) => {
+                    e.stopPropagation();
+                    setVisionForEdit(vision);
+                    setEditVisionDialogOpen(true);
+                  }}>
                     Edit vision
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -1644,7 +1659,10 @@ const Dashboard = () => {
             <button
               onClick={() => {
                 setMobileSheetOpen(false);
-                if (mobileSheetVision) navigate(`/vision/${mobileSheetVision.id}`);
+                if (mobileSheetVision) {
+                  setVisionForEdit(mobileSheetVision);
+                  setEditVisionDialogOpen(true);
+                }
               }}
               className="w-full text-left px-4 py-3 text-sm hover:bg-muted rounded-md transition-colors"
             >
@@ -1762,6 +1780,16 @@ const Dashboard = () => {
         onOpenChange={setEditGoalDialogOpen}
         onSaved={() => {
           refetchGoals();
+        }}
+      />
+
+      {/* ========== EDIT VISION DIALOG ========== */}
+      <EditVisionDialog
+        vision={visionForEdit}
+        open={editVisionDialogOpen}
+        onOpenChange={setEditVisionDialogOpen}
+        onSaved={() => {
+          refetchVisions();
         }}
       />
     </div>
