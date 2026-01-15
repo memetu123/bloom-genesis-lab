@@ -176,34 +176,19 @@ export function OnboardingGoalStep({
             <p className="text-xs text-muted-foreground">{config.helpText}</p>
           </div>
 
-          {/* Progressive disclosure for optional description - only for 1-year goals */}
-          {goalType === "one_year" ? (
-            !showDescription ? (
-              <button
-                type="button"
-                onClick={() => setShowDescription(true)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Add success criteria (optional)
-              </button>
-            ) : (
-              <div className="space-y-2 animate-fade-in">
-                <label htmlFor="goalDescription" className="text-sm font-medium text-foreground">
-                  How will you know you've achieved it?
-                </label>
-                <Textarea
-                  id="goalDescription"
-                  placeholder="Describe what success looks like..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            )
+          {/* Progressive disclosure for optional description - all goal types */}
+          {!showDescription ? (
+            <button
+              type="button"
+              onClick={() => setShowDescription(true)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Add success criteria (optional)
+            </button>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 animate-fade-in">
               <label htmlFor="goalDescription" className="text-sm font-medium text-foreground">
-                How will you know you've achieved it? (optional)
+                How will you know you've achieved it?
               </label>
               <Textarea
                 id="goalDescription"
