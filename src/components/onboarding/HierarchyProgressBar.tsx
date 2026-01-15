@@ -16,7 +16,7 @@ const HIERARCHY_STEPS = [
   { step: 3, label: "3-Year" },
   { step: 4, label: "1-Year" },
   { step: 5, label: "90-Day" },
-  { step: 6, label: "Weekly" },
+  { step: 6, label: "Tasks" },
 ];
 
 export function HierarchyProgressBar({ currentStep }: HierarchyProgressBarProps) {
