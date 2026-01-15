@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Plus, X, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { OnboardingLayout } from "./OnboardingLayout";
 import { DayOfWeek, OnboardingCommitment } from "@/types/todayoum";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * OnboardingCommitmentsStep - Step 6: Define weekly commitments
@@ -46,6 +47,41 @@ export function OnboardingCommitmentsStep({
   const [newDays, setNewDays] = useState<DayOfWeek[]>(['mon', 'wed', 'fri']);
   const [newTimeStart, setNewTimeStart] = useState("");
   const [newTimeEnd, setNewTimeEnd] = useState("");
+  const [aiExample, setAiExample] = useState<string | null>(null);
+  const [isLoadingExample, setIsLoadingExample] = useState(false);
+
+  // Function to fetch AI-generated example
+  const fetchExample = useCallback(async () => {
+    setIsLoadingExample(true);
+    setAiExample(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-commitment-example", {
+        body: {
+          pillarName,
+          ninetyDayGoal
+        }
+      });
+
+      if (error) {
+        console.error("Error fetching AI example:", error);
+        return;
+      }
+
+      if (data?.example) {
+        setAiExample(data.example);
+      }
+    } catch (err) {
+      console.error("Failed to fetch AI example:", err);
+    } finally {
+      setIsLoadingExample(false);
+    }
+  }, [pillarName, ninetyDayGoal]);
+
+  // Fetch example on mount
+  useEffect(() => {
+    fetchExample();
+  }, [fetchExample]);
 
   const toggleDay = (day: DayOfWeek) => {
     setNewDays(prev => 
@@ -142,12 +178,29 @@ export function OnboardingCommitmentsStep({
           <div className="space-y-4">
             {/* Title */}
             <div className="space-y-2">
-              <label htmlFor="commitmentTitle" className="text-sm font-medium text-foreground">
-                New commitment
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="commitmentTitle" className="text-sm font-medium text-foreground">
+                  New commitment
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={fetchExample}
+                  disabled={isLoadingExample}
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {isLoadingExample ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                  )}
+                  New example
+                </Button>
+              </div>
               <Input
                 id="commitmentTitle"
-                placeholder="e.g., Study Spanish vocabulary"
+                placeholder={isLoadingExample ? "Generating example..." : aiExample ? `e.g., ${aiExample}` : "e.g., Study Spanish vocabulary"}
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
               />
