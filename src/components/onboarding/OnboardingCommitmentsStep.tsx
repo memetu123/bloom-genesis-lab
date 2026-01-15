@@ -56,14 +56,14 @@ export function OnboardingCommitmentsStep({
   };
 
   const addCommitment = () => {
-    if (newTitle.trim() && newDays.length > 0 && commitments.length < 5) {
+    if (newTitle.trim() && newDays.length > 0 && newTimeStart && newTimeEnd && commitments.length < 5) {
       onSetCommitments([
         ...commitments,
         { 
           title: newTitle.trim(), 
           daysOfWeek: newDays,
-          timeStart: newTimeStart || undefined,
-          timeEnd: newTimeEnd || undefined,
+          timeStart: newTimeStart,
+          timeEnd: newTimeEnd,
         }
       ]);
       // Reset form
@@ -184,10 +184,10 @@ export function OnboardingCommitmentsStep({
               </p>
             </div>
 
-            {/* Time (optional) */}
+            {/* Time */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">
-                Time <span className="text-muted-foreground font-normal">(optional)</span>
+                Time
               </label>
               <div className="flex items-center gap-2">
                 <Input
@@ -212,7 +212,7 @@ export function OnboardingCommitmentsStep({
             <Button
               variant="outline"
               onClick={addCommitment}
-              disabled={!newTitle.trim() || newDays.length === 0}
+              disabled={!newTitle.trim() || newDays.length === 0 || !newTimeStart || !newTimeEnd}
               className="w-full"
             >
               <Plus className="h-4 w-4 mr-2" />
