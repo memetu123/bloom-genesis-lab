@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
+    // Verify authentication using getClaims (validates JWT signature without requiring active session)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       console.error("No authorization header provided");
@@ -22,37 +22,24 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const token = authHeader.slice("Bearer ".length);
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!
+    );
 
-    // Verify the JWT by calling the auth endpoint directly (avoids edge-runtime session quirks)
-    const userResp = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: anonKey,
-      },
-    });
-
-    if (!userResp.ok) {
-      const t = await userResp.text();
-      console.error("Invalid token:", t);
+    // getClaims validates JWT signature and expiration without requiring session to exist
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims?.sub) {
+      console.error("Invalid token:", claimsError?.message || "missing claims");
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const user = await userResp.json();
-    const userId = user?.id;
-    if (!userId) {
-      console.error("Invalid token: missing user id");
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    const userId = claimsData.claims.sub;
     console.log("Authenticated user:", userId);
 
     const { goalType, pillarName, parentGoalTitle, visionTitle } = await req.json();
