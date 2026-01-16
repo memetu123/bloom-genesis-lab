@@ -8,7 +8,7 @@ import { DayOfWeek, OnboardingCommitment } from "@/types/todayoum";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * OnboardingCommitmentsStep - Step 6: Define weekly commitments
+ * OnboardingCommitmentsStep - Step 6: Define weekly tasks
  * User creates 1-3 habits with specific days and optional times
  */
 
@@ -51,6 +51,9 @@ export function OnboardingCommitmentsStep({
   const [isLoadingExample, setIsLoadingExample] = useState(false);
   // Track if AI examples failed (for graceful fallback)
   const [exampleFailed, setExampleFailed] = useState(false);
+
+  // Check if form is valid (all mandatory fields filled)
+  const isFormValid = newTitle.trim() && newDays.length > 0 && newTimeStart && newTimeEnd;
 
   // Function to fetch AI-generated example (non-blocking - failures are silent)
   const fetchExample = useCallback(async () => {
@@ -96,8 +99,8 @@ export function OnboardingCommitmentsStep({
     );
   };
 
-  const addCommitment = () => {
-    if (newTitle.trim() && newDays.length > 0 && newTimeStart && newTimeEnd && commitments.length < 5) {
+  const addTask = () => {
+    if (isFormValid && commitments.length < 5) {
       onSetCommitments([
         ...commitments,
         { 
@@ -115,7 +118,7 @@ export function OnboardingCommitmentsStep({
     }
   };
 
-  const removeCommitment = (index: number) => {
+  const removeTask = (index: number) => {
     onSetCommitments(commitments.filter((_, i) => i !== index));
   };
 
@@ -135,7 +138,7 @@ export function OnboardingCommitmentsStep({
     <OnboardingLayout
       step={6}
       totalSteps={6}
-      title="Set weekly commitments"
+      title="Set weekly tasks"
       subtitle="What small, repeatable actions will move you toward your goal? Add 1-3 habits."
       onBack={onBack}
       onExit={onExit}
@@ -149,25 +152,25 @@ export function OnboardingCommitmentsStep({
           <p className="text-sm text-foreground font-medium">{ninetyDayGoal}</p>
         </div>
 
-        {/* Existing commitments */}
+        {/* Existing tasks */}
         {commitments.length > 0 && (
           <div className="space-y-2">
-            {commitments.map((commitment, index) => (
+            {commitments.map((task, index) => (
               <Card key={index}>
                 <CardContent className="p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{commitment.title}</p>
+                    <p className="text-sm font-medium text-foreground">{task.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDays(commitment.daysOfWeek)}
-                      {formatTime(commitment.timeStart, commitment.timeEnd) && (
-                        <span> • {formatTime(commitment.timeStart, commitment.timeEnd)}</span>
+                      {formatDays(task.daysOfWeek)}
+                      {formatTime(task.timeStart, task.timeEnd) && (
+                        <span> • {formatTime(task.timeStart, task.timeEnd)}</span>
                       )}
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => removeCommitment(index)}
+                    onClick={() => removeTask(index)}
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
                   >
                     <X className="h-4 w-4" />
@@ -178,14 +181,14 @@ export function OnboardingCommitmentsStep({
           </div>
         )}
 
-        {/* Add new commitment */}
+        {/* Add new task */}
         {commitments.length < 5 && (
           <div className="space-y-4">
             {/* Title */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label htmlFor="commitmentTitle" className="text-sm font-medium text-foreground">
-                  New commitment
+                <label htmlFor="taskTitle" className="text-sm font-medium text-foreground">
+                  New task
                 </label>
                 <Button
                   type="button"
@@ -204,7 +207,7 @@ export function OnboardingCommitmentsStep({
                 </Button>
               </div>
               <Input
-                id="commitmentTitle"
+                id="taskTitle"
                 placeholder={isLoadingExample ? "Generating example..." : aiExample ? `e.g., ${aiExample}` : "e.g., Study Spanish vocabulary"}
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
@@ -266,23 +269,29 @@ export function OnboardingCommitmentsStep({
               </div>
             </div>
 
-            {/* Add button */}
-            <Button
-              variant="outline"
-              onClick={addCommitment}
-              disabled={!newTitle.trim() || newDays.length === 0 || !newTimeStart || !newTimeEnd}
-              className="w-full"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add commitment
-            </Button>
+            {/* Add button - enhanced when form is valid */}
+            <div className="flex justify-center">
+              <Button
+                variant={isFormValid ? "default" : "outline"}
+                onClick={addTask}
+                disabled={!isFormValid}
+                className={`max-w-xs transition-all ${
+                  isFormValid 
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md" 
+                    : ""
+                }`}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add task
+              </Button>
+            </div>
           </div>
         )}
 
         {/* Complete button */}
         <div className="flex items-center justify-between pt-4">
           <span className="text-sm text-muted-foreground">
-            {commitments.length} commitment{commitments.length !== 1 ? "s" : ""} added
+            {commitments.length} task{commitments.length !== 1 ? "s" : ""} added
           </span>
           <Button onClick={onComplete} disabled={commitments.length === 0 || loading}>
             {loading ? "Saving..." : "Complete setup"}
