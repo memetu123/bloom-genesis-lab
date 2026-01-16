@@ -19,28 +19,46 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
 
-  // Fetch user preferences on mount
+  // Fetch user preferences on mount, fallback to profiles table for signup name
   useEffect(() => {
-    const fetchPreferences = async () => {
+    const fetchDisplayName = async () => {
       if (!user) return;
 
-      const { data, error } = await supabase
+      // First try user_preferences
+      const { data: prefData, error: prefError } = await supabase
         .from("user_preferences")
         .select("display_name")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching preferences:", error);
+      if (prefError && prefError.code !== "PGRST116") {
+        console.error("Error fetching preferences:", prefError);
       }
 
-      if (data) {
-        setDisplayName(data.display_name || "");
+      if (prefData?.display_name) {
+        setDisplayName(prefData.display_name);
+        setLoading(false);
+        return;
+      }
+
+      // Fallback to profiles table (set during signup via trigger)
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Error fetching profile:", profileError);
+      }
+
+      if (profileData?.display_name) {
+        setDisplayName(profileData.display_name);
       }
       setLoading(false);
     };
 
-    fetchPreferences();
+    fetchDisplayName();
   }, [user]);
 
   // Save display name
