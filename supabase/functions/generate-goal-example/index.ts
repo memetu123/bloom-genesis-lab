@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,24 +22,37 @@ serve(async (req) => {
       });
     }
 
-    // Initialize client with the caller JWT, then validate via signing keys
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const token = authHeader.slice("Bearer ".length);
 
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+    // Verify the JWT by calling the auth endpoint directly (avoids edge-runtime session quirks)
+    const userResp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: anonKey,
+      },
+    });
 
-    if (userError || !userData?.user) {
-      console.error("Invalid token:", userError?.message);
+    if (!userResp.ok) {
+      const t = await userResp.text();
+      console.error("Invalid token:", t);
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = userData.user.id;
+    const user = await userResp.json();
+    const userId = user?.id;
+    if (!userId) {
+      console.error("Invalid token: missing user id");
+      return new Response(JSON.stringify({ error: "Invalid token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log("Authenticated user:", userId);
 
     const { goalType, pillarName, parentGoalTitle, visionTitle } = await req.json();
