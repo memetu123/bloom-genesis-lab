@@ -1,10 +1,13 @@
 project_id = "khxatfkrkiwkbqhbovgv"
 
 [functions.generate-goal-example]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-vision-example]
-verify_jwt = true
+verify_jwt = false
+
+[functions.generate-commitment-example]
+verify_jwt = false
 
 [functions.coach-vision-phrasing]
-verify_jwt = true
+verify_jwt = false
