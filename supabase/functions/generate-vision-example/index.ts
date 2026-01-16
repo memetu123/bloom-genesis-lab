@@ -1,10 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.2.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Cache JWKS to avoid fetching on every request
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const JWKS = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
+
+async function verifyToken(token: string): Promise<{ userId: string } | { error: string }> {
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: `${SUPABASE_URL}/auth/v1`,
+      audience: "authenticated",
+    });
+    
+    if (!payload.sub) {
+      return { error: "Token missing sub claim" };
+    }
+    
+    return { userId: payload.sub };
+  } catch (err) {
+    console.error("JWT verification failed:", err);
+    return { error: err instanceof Error ? err.message : "Token verification failed" };
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,36 +34,27 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication using getClaims (validates JWT signature without requiring active session)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       console.error("No authorization header provided");
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ error: "Unauthorized", code: "AUTH_MISSING_HEADER" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const token = authHeader.slice("Bearer ".length);
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // getClaims validates JWT signature and expiration without requiring session to exist
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    const result = await verifyToken(token);
     
-    if (claimsError || !claimsData?.claims?.sub) {
-      console.error("Invalid token:", claimsError?.message || "missing claims");
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
+    if ("error" in result) {
+      console.error("Token verification failed:", result.error);
+      return new Response(JSON.stringify({ error: "Invalid token", code: "AUTH_INVALID_TOKEN" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claimsData.claims.sub;
-    console.log("Authenticated user:", userId);
+    console.log("Authenticated user:", result.userId);
 
     const { pillarName } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -77,13 +90,13 @@ Return ONLY the vision text, nothing else. Example format: "Become a confident p
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded", code: "RATE_LIMIT" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required" }), {
+        return new Response(JSON.stringify({ error: "Payment required", code: "PAYMENT_REQUIRED" }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
