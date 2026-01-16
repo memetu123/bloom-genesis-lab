@@ -49,11 +49,14 @@ export function OnboardingCommitmentsStep({
   const [newTimeEnd, setNewTimeEnd] = useState("");
   const [aiExample, setAiExample] = useState<string | null>(null);
   const [isLoadingExample, setIsLoadingExample] = useState(false);
+  // Track if AI examples failed (for graceful fallback)
+  const [exampleFailed, setExampleFailed] = useState(false);
 
-  // Function to fetch AI-generated example
+  // Function to fetch AI-generated example (non-blocking - failures are silent)
   const fetchExample = useCallback(async () => {
     setIsLoadingExample(true);
     setAiExample(null);
+    setExampleFailed(false);
     
     try {
       const { data, error } = await supabase.functions.invoke("generate-commitment-example", {
@@ -65,6 +68,7 @@ export function OnboardingCommitmentsStep({
 
       if (error) {
         console.error("Error fetching AI example:", error);
+        setExampleFailed(true);
         return;
       }
 
@@ -73,6 +77,7 @@ export function OnboardingCommitmentsStep({
       }
     } catch (err) {
       console.error("Failed to fetch AI example:", err);
+      setExampleFailed(true);
     } finally {
       setIsLoadingExample(false);
     }
