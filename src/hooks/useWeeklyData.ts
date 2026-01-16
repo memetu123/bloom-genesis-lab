@@ -166,12 +166,15 @@ export function useWeeklyData(
           .eq("period_start_date", weekStartStr),
         
         // All completions for this week (include deleted markers for exclusion logic)
+        // ORDER BY updated_at DESC ensures newest record wins if duplicates exist
         supabase
           .from("commitment_completions")
           .select("*")
           .eq("user_id", user.id)
           .gte("completed_date", weekStartStr)
-          .lte("completed_date", weekEndStr),
+          .lte("completed_date", weekEndStr)
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false, nullsFirst: false }),
         
         // Task instances for completion tracking
         supabase
@@ -196,11 +199,16 @@ export function useWeeklyData(
       );
 
       // Completions by commitment-date key
+      // Since results are ordered by updated_at DESC, first seen = newest
+      // Only store first (newest) non-deleted completion per key
       const completionMap = new Map<string, any>();
       for (const completion of allCompletions) {
         if (completion.commitment_id) {
           const key = `${completion.commitment_id}-${completion.completed_date}`;
-          completionMap.set(key, completion);
+          // Only store if no entry exists yet (first = newest due to ORDER BY)
+          if (!completionMap.has(key)) {
+            completionMap.set(key, completion);
+          }
         }
       }
 

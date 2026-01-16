@@ -119,16 +119,24 @@ const Weekly = () => {
         }
       } else {
         const dayTask = task as DayTask;
-        // Handle recurring task completion
-        if (task.isCompleted) {
-          // Uncompleting: delete the completion record
+        // Handle recurring task completion using UPSERT pattern
+        // This prevents conflicts with time rescheduling which creates records with is_completed: false
+        const { data: existingRecord } = await supabase
+          .from("commitment_completions")
+          .select("id, is_completed")
+          .eq("commitment_id", dayTask.commitmentId)
+          .eq("completed_date", dateKey)
+          .or("is_deleted.is.null,is_deleted.eq.false")
+          .maybeSingle();
+
+        if (existingRecord) {
+          // Record exists (possibly from time rescheduling) - UPDATE it
           await supabase
             .from("commitment_completions")
-            .delete()
-            .eq("commitment_id", dayTask.commitmentId)
-            .eq("completed_date", dateKey);
-        } else {
-          // Completing: insert new completion record
+            .update({ is_completed: newCompleted })
+            .eq("id", existingRecord.id);
+        } else if (newCompleted) {
+          // No existing record and completing - INSERT new
           await supabase
             .from("commitment_completions")
             .insert({
@@ -136,6 +144,7 @@ const Weekly = () => {
               commitment_id: dayTask.commitmentId,
               completed_date: dateKey,
               instance_number: dayTask.instanceNumber || 1,
+              is_completed: true,
             });
         }
 
