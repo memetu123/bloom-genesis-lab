@@ -13,33 +13,34 @@ serve(async (req) => {
 
   try {
     // Verify authentication
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
       console.error("No authorization header provided");
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Initialize Supabase client and verify the token
+    // Initialize client with the caller JWT, then validate via signing keys
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error("Invalid token:", authError?.message);
-      return new Response(JSON.stringify({ error: 'Invalid token' }), {
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+
+    if (userError || !userData?.user) {
+      console.error("Invalid token:", userError?.message);
+      return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("Authenticated user:", user.id);
+    const userId = userData.user.id;
+    console.log("Authenticated user:", userId);
 
     const { pillarName, ninetyDayGoal } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
