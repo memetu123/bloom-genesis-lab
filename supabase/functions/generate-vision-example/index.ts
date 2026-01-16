@@ -25,7 +25,8 @@ serve(async (req) => {
     const token = authHeader.slice("Bearer ".length);
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
     );
 
     // getClaims validates JWT signature and expiration without requiring session to exist
