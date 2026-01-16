@@ -1,32 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.2.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Cache JWKS to avoid fetching on every request
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const JWKS = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
-
-async function verifyToken(token: string): Promise<{ userId: string } | { error: string }> {
-  try {
-    const { payload } = await jwtVerify(token, JWKS, {
-      issuer: `${SUPABASE_URL}/auth/v1`,
-      audience: "authenticated",
-    });
-    
-    if (!payload.sub) {
-      return { error: "Token missing sub claim" };
-    }
-    
-    return { userId: payload.sub };
-  } catch (err) {
-    console.error("JWT verification failed:", err);
-    return { error: err instanceof Error ? err.message : "Token verification failed" };
-  }
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -43,18 +21,23 @@ serve(async (req) => {
       });
     }
 
-    const token = authHeader.slice("Bearer ".length);
-    const result = await verifyToken(token);
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    if ("error" in result) {
-      console.error("Token verification failed:", result.error);
+    if (authError || !user) {
+      console.error("Auth verification failed:", authError?.message);
       return new Response(JSON.stringify({ error: "Invalid token", code: "AUTH_INVALID_TOKEN" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("Authenticated user:", result.userId);
+    console.log("Authenticated user:", user.id);
 
     const { pillarName } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
