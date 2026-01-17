@@ -4,7 +4,8 @@ import { Star, ChevronDown, MoreHorizontal, ArrowRight, Plus, Pencil } from "luc
 import AdvancedCompletionDialog from "@/components/AdvancedCompletionDialog";
 import EditGoalDialog from "@/components/EditGoalDialog";
 import EditVisionDialog from "@/components/EditVisionDialog";
-import type { GoalType } from "@/types/todayoum";
+import type { GoalType, SUGGESTED_PILLARS } from "@/types/todayoum";
+import { SUGGESTED_PILLARS as DEFAULT_PILLARS } from "@/types/todayoum";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAppData, Goal as GlobalGoal } from "@/hooks/useAppData";
@@ -63,7 +64,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals, refetchCommitments, preferences, refetchPreferences } = useAppData();
+  const { visions, goals, pillars, pillarsMap, goalsWithActiveTasks, loading, refetchVisions, refetchGoals, refetchCommitments, refetchPillars, preferences, refetchPreferences } = useAppData();
   const [otherVisionsExpanded, setOtherVisionsExpanded] = useState(false);
 
   // Orientation line state
@@ -90,6 +91,8 @@ const Dashboard = () => {
   const [newDescription, setNewDescription] = useState("");
   const [selectedPillarId, setSelectedPillarId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isCreatingPillar, setIsCreatingPillar] = useState(false);
+  const [newPillarName, setNewPillarName] = useState("");
 
   // Mobile action sheet state
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
@@ -344,6 +347,55 @@ const Dashboard = () => {
       refetchVisions();
     } catch (err) {
       toast.error("Failed to update focus");
+    }
+  };
+
+  // Get default pillar names for comparison
+  const defaultPillarNames = useMemo(() => 
+    new Set(DEFAULT_PILLARS.map(p => p.name)), 
+    []
+  );
+
+  // Split pillars into user's selected pillars and other default pillars
+  const { userPillars, otherPillars } = useMemo(() => {
+    const userPillars = pillars.filter(p => !defaultPillarNames.has(p.name) || pillars.some(up => up.name === p.name));
+    const otherDefaultNames = DEFAULT_PILLARS
+      .filter(dp => !pillars.some(p => p.name === dp.name))
+      .map(dp => dp.name);
+    return { 
+      userPillars: pillars, // User's actual pillars
+      otherPillars: DEFAULT_PILLARS.filter(dp => !pillars.some(p => p.name === dp.name)) 
+    };
+  }, [pillars, defaultPillarNames]);
+
+  const handleCreatePillarInline = async () => {
+    if (!user || !newPillarName.trim()) return;
+    setSaving(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from("pillars")
+        .insert({
+          user_id: user.id,
+          name: newPillarName.trim(),
+          description: null,
+          sort_order: pillars.length,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await refetchPillars();
+      setSelectedPillarId(data.id);
+      setNewPillarName("");
+      setIsCreatingPillar(false);
+      toast.success("Pillar created");
+    } catch (error) {
+      console.error("Error creating pillar:", error);
+      toast.error("Failed to create pillar");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1695,7 +1747,13 @@ const Dashboard = () => {
       </Sheet>
 
       {/* ========== ADD VISION DIALOG ========== */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+      <Dialog open={addDialogOpen} onOpenChange={(open) => {
+        setAddDialogOpen(open);
+        if (!open) {
+          setIsCreatingPillar(false);
+          setNewPillarName("");
+        }
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="sr-only">Add Vision</DialogTitle>
@@ -1708,27 +1766,148 @@ const Dashboard = () => {
                 id="vision-title"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Who do you want to become?"
+                placeholder="What kind of life do you want to build in this area?"
                 className="text-lg font-medium border-2 focus:border-primary h-12"
                 autoFocus
               />
             </div>
 
-            {/* 2. Pillar - Required context */}
+            {/* 2. Pillar - Required context with sections */}
             <div className="space-y-2">
               <Label htmlFor="pillar" className="text-sm font-medium">Life area</Label>
-              <Select value={selectedPillarId} onValueChange={setSelectedPillarId}>
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Select a pillar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pillars.map(pillar => (
-                    <SelectItem key={pillar.id} value={pillar.id}>
-                      {pillar.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              
+              {isCreatingPillar ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newPillarName}
+                      onChange={(e) => setNewPillarName(e.target.value)}
+                      placeholder="Enter pillar name..."
+                      className="h-10 flex-1"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newPillarName.trim()) {
+                          e.preventDefault();
+                          handleCreatePillarInline();
+                        }
+                        if (e.key === "Escape") {
+                          setIsCreatingPillar(false);
+                          setNewPillarName("");
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleCreatePillarInline}
+                      disabled={!newPillarName.trim() || saving}
+                      className="h-10 px-4"
+                    >
+                      {saving ? "..." : "Add"}
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingPillar(false);
+                      setNewPillarName("");
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <Select 
+                  value={selectedPillarId} 
+                  onValueChange={async (value) => {
+                    // If selecting an "other" pillar, create it first
+                    if (value.startsWith("create-")) {
+                      const pillarName = value.replace("create-", "");
+                      const pillarData = DEFAULT_PILLARS.find(p => p.name === pillarName);
+                      if (!user || !pillarData) return;
+                      
+                      setSaving(true);
+                      try {
+                        const { data, error } = await supabase
+                          .from("pillars")
+                          .insert({
+                            user_id: user.id,
+                            name: pillarData.name,
+                            description: pillarData.description,
+                            sort_order: pillars.length,
+                          })
+                          .select()
+                          .single();
+
+                        if (error) throw error;
+                        await refetchPillars();
+                        setSelectedPillarId(data.id);
+                      } catch (error) {
+                        console.error("Error creating pillar:", error);
+                        toast.error("Failed to create pillar");
+                      } finally {
+                        setSaving(false);
+                      }
+                    } else {
+                      setSelectedPillarId(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select a pillar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* User's pillars section */}
+                    {pillars.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                          Your pillars
+                        </div>
+                        {pillars.map(pillar => (
+                          <SelectItem key={pillar.id} value={pillar.id}>
+                            {pillar.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    
+                    {/* Other default pillars (not yet added by user) */}
+                    {otherPillars.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground mt-2 border-t pt-2">
+                          Other pillars
+                        </div>
+                        {otherPillars.map((pillar, idx) => (
+                          <SelectItem 
+                            key={`other-${idx}`} 
+                            value={`create-${pillar.name}`}
+                            className="text-muted-foreground"
+                          >
+                            {pillar.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    
+                    {/* Create new pillar option */}
+                    <div className="border-t mt-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsCreatingPillar(true);
+                        }}
+                        className="w-full px-2 py-1.5 text-sm text-left text-primary hover:bg-accent rounded-sm flex items-center gap-2"
+                      >
+                        <Plus size={14} />
+                        Create new pillar
+                      </button>
+                    </div>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* 3. Description - Optional, collapsed by default */}
